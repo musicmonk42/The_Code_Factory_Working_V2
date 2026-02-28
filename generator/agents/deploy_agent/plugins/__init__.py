@@ -194,16 +194,35 @@ except ImportError:
             context: Dict[str, Any],
             previous_configs: Dict[str, Any],
         ) -> Dict[str, Any]:
-            raise NotImplementedError
+            import logging
+            logging.getLogger(__name__).warning(
+                "TargetPlugin.generate_config called on fallback stub — deploy_agent module not installed."
+            )
+            return {
+                "warning": "Deploy agent plugin not available. Install generator.agents.deploy_agent to enable deployment.",
+                "target_files": target_files,
+            }
 
         async def validate_config(self, config: Dict[str, Any]) -> Dict[str, Any]:
-            raise NotImplementedError
+            return {
+                "valid": False,
+                "errors": [
+                    "Deploy agent plugin not available. Install generator.agents.deploy_agent to enable deployment."
+                ],
+            }
 
         async def simulate_deployment(self, config: Dict[str, Any]) -> Dict[str, Any]:
-            raise NotImplementedError
+            return {
+                "success": False,
+                "message": "Deploy simulation unavailable — deploy_agent module not installed",
+            }
 
         async def rollback(self, config: Dict[str, Any]) -> bool:
-            raise NotImplementedError
+            import logging
+            logging.getLogger(__name__).warning(
+                "TargetPlugin.rollback called on fallback stub — deploy_agent module not installed."
+            )
+            return False
 
         def health_check(self) -> bool:
             return True

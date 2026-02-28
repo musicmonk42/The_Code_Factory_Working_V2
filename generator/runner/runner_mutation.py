@@ -113,6 +113,13 @@ except ImportError:
         return func
 
 
+try:
+    import aiohttp as _aiohttp
+    HAS_AIOHTTP = True
+except ImportError:
+    _aiohttp = None
+    HAS_AIOHTTP = False
+
 # FIX: Correctly import metrics from runner.runner_metrics if available
 # Assuming the metrics module itself is safe to import, and 'prom' is the prometheus_client
 from .runner_metrics import (
@@ -778,8 +785,47 @@ async def mutation_test(
             strategy = "targeted"
 
     if strategy == "ai-guided":
-        logger.info("Using AI-guided mutation strategy (conceptual).")
-        pass
+        logger.info("Using AI-guided mutation strategy.")
+        try:
+            from generator.clarifier.clarifier_llm import LLMProvider
+            _llm = LLMProvider() if not getattr(LLMProvider, '__abstractmethods__', None) else None
+        except Exception:
+            _llm = None
+        if _llm is None:
+            # Try GrokLLM
+            try:
+                from generator.clarifier.clarifier_llm import GrokLLM
+                _llm = GrokLLM()
+            except Exception:
+                _llm = None
+        if _llm is not None:
+            try:
+                _code_snippets = "\n\n".join(
+                    f"# File: {p}\n{open(p).read()[:500]}" if Path(p).exists() else f"# {p}"
+                    for p in (code_files or [])[:5]
+                )
+                _prompt = (
+                    f"You are a mutation testing expert. Analyze the following source files "
+                    f"and identify the top 5 file paths and function names most likely to "
+                    f"have bugs or insufficient test coverage. Respond with a JSON list of "
+                    f"objects with keys 'file' and 'function'.\n\n{_code_snippets}"
+                )
+                _response = await _llm.generate(_prompt)
+                import json as _json
+                _targets = _json.loads(_response) if isinstance(_response, str) else _response
+                if isinstance(_targets, list) and _targets:
+                    _target_files = {str(t.get("file", "")) for t in _targets if isinstance(t, dict)}
+                    if _target_files and code_files:
+                        _filtered = [f for f in code_files if any(t in str(f) for t in _target_files if t)]
+                        if _filtered:
+                            code_files = _filtered
+                            logger.info(f"AI-guided strategy filtered to {len(code_files)} target files.")
+            except Exception as _ai_err:
+                logger.warning(f"AI-guided strategy LLM analysis failed: {_ai_err}. Falling back to 'targeted' strategy.")
+                strategy = "targeted"
+        else:
+            logger.warning("AI-guided strategy: LLM unavailable. Falling back to 'targeted' strategy.")
+            strategy = "targeted"
 
     # --- Setup mutator-specific configuration files ---
     if span and span.is_recording():
@@ -838,17 +884,49 @@ async def mutation_test(
         if distributed and getattr(config, "distributed", False):
             if span and span.is_recording():
                 span.add_event("Sending mutation task to distributed runner")
-            logger.info(
-                f"Sending mutation task to distributed runner for language '{language}'."
-            )
-            await asyncio.sleep(1)  # Simulate network delay
-            raw_result = {
-                "stdout": '{"totalMutants": 10, "killed": 5, "survived": 5}',
-                "stderr": "",
-                "returncode": 0,
-                "report_file_content": '{"files": {"dummy.js": {"mutants": [{"status": "Killed"}, {"status": "Survived"}]}}, "totals": {"mutants": 2, "killed": 1, "survived": 1}}',
-            }
-            logger.warning("Distributed mutation is conceptual: Mocking results.")
+            _endpoint = getattr(config, "distributed_endpoint", None)
+            if not _endpoint or not HAS_AIOHTTP:
+                if not _endpoint:
+                    logger.warning(
+                        "Distributed mutation: no distributed_endpoint configured. "
+                        "Falling back to local single-process execution."
+                    )
+                else:
+                    logger.warning(
+                        "Distributed mutation: aiohttp not available. "
+                        "Falling back to local single-process execution."
+                    )
+                raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
+            else:
+                logger.info(
+                    f"Sending mutation task to distributed runner at '{_endpoint}' for language '{language}'."
+                )
+                try:
+                    _task_payload = {
+                        "language": language,
+                        "tool_name": tool_name,
+                        "strategy": strategy,
+                        "params": mutation_run_params,
+                        "files": {
+                            str(p): p.read_text(errors="replace")
+                            for p in temp_dir.rglob("*")
+                            if p.is_file() and p.stat().st_size < 1_000_000
+                        },
+                    }
+                    async with _aiohttp.ClientSession() as _session:
+                        async with _session.post(
+                            _endpoint,
+                            json=_task_payload,
+                            timeout=_aiohttp.ClientTimeout(total=getattr(config, "mutation_timeout", 300)),
+                        ) as _resp:
+                            _resp.raise_for_status()
+                            raw_result = await _resp.json()
+                except Exception as _dist_err:
+                    logger.warning(
+                        f"Distributed mutation runner failed: {_dist_err}. "
+                        "Falling back to local single-process execution."
+                    )
+                    raw_result = await mutator_info["run"](temp_dir, strategy, mutation_run_params)
         # FIX: Replaced config.get() with getattr()
         elif parallel and getattr(config, "parallel_workers", 1) > 1:
             if span and span.is_recording():

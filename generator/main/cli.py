@@ -991,11 +991,23 @@ def plugin_list():
     else:
         console.print("[dim]No agents/plugins currently registered.[/dim]")
 
-    console.print(
-        "\n[bold yellow]Available for Installation (Conceptual from known sources):[/bold yellow]"
-    )
-    console.print("- [dim]example_nlp_plugin[/dim] (Provides advanced NLP extraction)")
-    console.print("- [dim]aws_deploy_plugin[/dim] (Enables deployment to AWS)")
+    plugin_dir = os.getenv("PLUGIN_DIR", str(Path(__file__).parent.parent / "plugins"))
+    console.print(f"\n[bold yellow]Available in plugin directory ({plugin_dir}):[/bold yellow]")
+    try:
+        from generator.agents.deploy_agent.plugins import discover_plugins
+        found = discover_plugins()
+        if found:
+            for pname, manifest in found.items():
+                version = manifest.get("version", "unknown")
+                description = manifest.get("description", "")
+                line = f"- [cyan]{pname}[/cyan] (v{version})"
+                if description:
+                    line += f" — {description}"
+                console.print(line)
+        else:
+            console.print("[dim]No additional plugins found in plugin directory.[/dim]")
+    except Exception as _e:
+        console.print(f"[dim]Could not scan plugin directory: {_e}[/dim]")
 
 
 @plugin.command(name="install", help="Install a new plugin by name or path.")
@@ -1005,7 +1017,7 @@ def plugin_list():
 @click.option(
     "--verify-signature",
     is_flag=True,
-    help="Verify digital signature of the plugin package. Not yet implemented; raises an error when used.",
+    help="Verify digital signature of the plugin package using Ed25519 manifest verification.",
 )
 async def plugin_install(plugin_identifier, verify_signature):
     console.print(
@@ -1014,11 +1026,50 @@ async def plugin_install(plugin_identifier, verify_signature):
 
     try:
         if verify_signature:
-            raise NotImplementedError(
-                "Plugin signature verification is not yet implemented. "
-                "This feature is planned for a future release. "
-                "Re-run without --verify-signature to install without verification."
-            )
+            public_key_path = os.getenv("PLUGIN_VERIFY_PUBLIC_KEY")
+            if not public_key_path:
+                console.print(
+                    "[red]Cannot verify plugin signature: PLUGIN_VERIFY_PUBLIC_KEY environment "
+                    "variable is not set. Set it to the path of your Ed25519 public key or "
+                    "re-run without --verify-signature.[/red]"
+                )
+                return
+            manifest_path = None
+            plugin_path = Path(plugin_identifier)
+            candidates = [
+                plugin_path.parent / "plugin_manifest.json",
+                plugin_path.with_suffix(".manifest.json"),
+                Path("plugin_manifest.json"),
+            ]
+            for candidate in candidates:
+                if candidate.exists():
+                    manifest_path = candidate
+                    break
+            if not manifest_path:
+                console.print(
+                    "[red]Cannot verify plugin signature: no plugin_manifest.json found "
+                    "alongside the plugin or in the current directory.[/red]"
+                )
+                return
+            try:
+                from generator.scripts.generate_plugin_manifest import verify_signature as _verify_sig
+                import json as _json
+                manifest_bytes = manifest_path.read_bytes()
+                doc = _json.loads(manifest_bytes)
+                signature_b64 = doc.get("signature")
+                if not signature_b64:
+                    console.print(
+                        "[red]Plugin manifest does not contain a signature. "
+                        "Re-sign the manifest before installing.[/red]"
+                    )
+                    return
+                _verify_sig(manifest_bytes, signature_b64, public_key_path)
+                console.print("[green]Plugin signature verified successfully.[/green]")
+            except Exception as _sig_err:
+                console.print(
+                    f"[red]Plugin signature verification failed: {_sig_err}[/red]"
+                )
+                return
 
         # Assume plugin_identifier is a Python module name or path to a .py file for hot-loading
         if Path(plugin_identifier).suffix == ".py" and Path(plugin_identifier).exists():

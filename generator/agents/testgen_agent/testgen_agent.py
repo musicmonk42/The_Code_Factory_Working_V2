@@ -1680,28 +1680,79 @@ def test_{file_stem}_syntax_error_documentation():
                                     f"[TESTGEN] {language} generator failed for {file_path}: {_exc}",
                                     extra={"run_id": run_id},
                                 )
-                    # Fallback minimal stub
-                    basic_tests[test_file_path] = (
-                        f"// Tests for {file_path}\n"
-                        f"describe('{file_stem}', () => {{\n"
-                        f"  it('should be implemented', () => {{\n"
-                        f"    // TODO: Add tests for {file_path}\n"
-                        f"  }});\n"
-                        f"}});\n"
+                    # Fallback: parse exported functions and generate real test stubs
+                    _js_exports = re.findall(
+                        r"(?:export\s+(?:default\s+)?(?:async\s+)?function\s+(\w+)|"
+                        r"export\s+const\s+(\w+)\s*=\s*(?:async\s+)?(?:function|\())",
+                        code_content,
                     )
+                    _func_names = [g[0] or g[1] for g in _js_exports if g[0] or g[1]]
+                    if _func_names:
+                        _import_path = f"../{file_path}" if not file_path.startswith("..") else file_path
+                        _test_lines = [
+                            f"// Tests for {file_path}",
+                            f"import {{ {', '.join(_func_names)} }} from '{_import_path}';",
+                            "",
+                            f"describe('{file_stem}', () => {{",
+                        ]
+                        for fn in _func_names:
+                            _test_lines += [
+                                f"  describe('{fn}', () => {{",
+                                f"    it('should be defined', () => {{",
+                                f"      expect({fn}).toBeDefined();",
+                                f"    }});",
+                                f"    it('should not throw on empty/null input', () => {{",
+                                f"      expect(() => {fn}(null)).not.toThrow();",
+                                f"    }});",
+                                f"  }});",
+                            ]
+                        _test_lines.append("});")
+                        basic_tests[test_file_path] = "\n".join(_test_lines) + "\n"
+                    else:
+                        basic_tests[test_file_path] = (
+                            f"// Tests for {file_path}\n"
+                            f"describe('{file_stem}', () => {{\n"
+                            f"  it('module loads without errors', () => {{\n"
+                            f"    const mod = require('../{file_path}');\n"
+                            f"    expect(mod).toBeDefined();\n"
+                            f"  }});\n"
+                            f"}});\n"
+                        )
 
                 elif language == "java":
                     class_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Unknown"
                     test_file_path = f"src/test/java/{class_name}Test.java"
+                    _java_methods = re.findall(
+                        r"public\s+(?:static\s+)?(?:\w+\s+)?(\w+)\s*\([^)]*\)\s*(?:throws\s+\w+\s*)?\{",
+                        code_content,
+                    )
+                    _java_methods = [m for m in _java_methods if m not in ("class", "interface", "enum", class_name)]
+                    _test_methods = ""
+                    for method in (_java_methods or ["placeholder"]):
+                        _camel = method[0].upper() + method[1:] if method else "Placeholder"
+                        if method == "placeholder":
+                            _test_methods += (
+                                f"\n    @Test\n"
+                                f"    void testInstantiation() {{\n"
+                                f"        {class_name} instance = new {class_name}();\n"
+                                f"        assertNotNull(instance);\n"
+                                f"    }}\n"
+                            )
+                        else:
+                            _test_methods += (
+                                f"\n    @Test\n"
+                                f"    void test{_camel}NotNull() {{\n"
+                                f"        {class_name} instance = new {class_name}();\n"
+                                f"        assertNotNull(instance);\n"
+                                f"        // Call {method} and assert basic contract\n"
+                                f"        assertDoesNotThrow(() -> instance.{method}());\n"
+                                f"    }}\n"
+                            )
                     basic_tests[test_file_path] = (
                         f"import org.junit.jupiter.api.Test;\n"
                         f"import static org.junit.jupiter.api.Assertions.*;\n\n"
-                        f"class {class_name}Test {{\n\n"
-                        f"    @Test\n"
-                        f"    void testPlaceholder() {{\n"
-                        f"        // TODO: Add tests for {file_path}\n"
-                        f"        assertTrue(true);\n"
-                        f"    }}\n"
+                        f"class {class_name}Test {{\n"
+                        f"{_test_methods}"
                         f"}}\n"
                     )
 
@@ -1714,15 +1765,33 @@ def test_{file_stem}_syntax_error_documentation():
                         else f"{file_stem}_test.go"
                     )
                     package_name = parent.replace("/", "_").replace("-", "_") if parent and parent != "." else "main"
-                    func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Placeholder"
-                    basic_tests[test_file_path] = (
-                        f"package {package_name}\n\n"
-                        f"import \"testing\"\n\n"
-                        f"func Test{func_name}(t *testing.T) {{\n"
-                        f"\t// TODO: Add tests for {file_path}\n"
-                        f"\tt.Log(\"placeholder test\")\n"
-                        f"}}\n"
-                    )
+                    _go_funcs = re.findall(r"^func\s+([A-Z]\w*)\s*\(", code_content, re.MULTILINE)
+                    if _go_funcs:
+                        _go_test_body = ""
+                        for fn in _go_funcs:
+                            _go_test_body += (
+                                f"\nfunc Test{fn}(t *testing.T) {{\n"
+                                f"\tresult := {fn}()\n"
+                                f"\tif result == nil {{\n"
+                                f'\t\tt.Errorf("{fn}() returned nil")\n'
+                                f"\t}}\n"
+                                f"}}\n"
+                            )
+                        basic_tests[test_file_path] = (
+                            f"package {package_name}\n\n"
+                            f"import \"testing\"\n"
+                            f"{_go_test_body}"
+                        )
+                    else:
+                        func_name = (file_stem[0].upper() + file_stem[1:]) if file_stem else "Module"
+                        basic_tests[test_file_path] = (
+                            f"package {package_name}\n\n"
+                            f"import \"testing\"\n\n"
+                            f"func Test{func_name}Runs(t *testing.T) {{\n"
+                            f"\t// Verify package-level initialization succeeds\n"
+                            f"\tt.Log(\"{file_stem} package loaded\")\n"
+                            f"}}\n"
+                        )
 
                 else:
                     logger.warning(

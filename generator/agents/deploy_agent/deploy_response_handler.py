@@ -3257,9 +3257,52 @@ async def enrich_config_output(
     badge_url = "https://img.shields.io/badge/Compliance-Needs_Review-yellow.svg"
     enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
 
-    # 2. Add Diagrams (Conceptual)
-    diagram_placeholder = f"```mermaid\n  graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]\n  ```"
-    enriched_content_parts.append(f"## Configuration Diagram\n{diagram_placeholder}\n")
+    # 2. Add Diagram from parsed config
+    try:
+        _diagram_lines = ["graph TD"]
+        _nodes_added = set()
+        _data = structured_data if isinstance(structured_data, dict) else {}
+        # Kubernetes resources
+        if _data.get("kind") or _data.get("apiVersion"):
+            _kind = _data.get("kind", "Resource")
+            _name = (_data.get("metadata") or {}).get("name", _kind)
+            _diagram_lines.append(f'  K8s["{_kind}: {_name}"]')
+            _spec = _data.get("spec") or {}
+            for _key in ("containers", "template", "rules", "ports"):
+                if _key in _spec or _key in (_spec.get("template", {}).get("spec") or {}):
+                    _label = _key.capitalize()
+                    if _label not in _nodes_added:
+                        _diagram_lines.append(f'  K8s --> {_label}["{_label}"]')
+                        _nodes_added.add(_label)
+        # Docker Compose services
+        elif "services" in _data:
+            _diagram_lines.append('  DC["Docker Compose"]')
+            for _svc, _svc_cfg in (_data.get("services") or {}).items():
+                _safe = _svc.replace("-", "_")
+                _diagram_lines.append(f'  DC --> {_safe}["{_svc}"]')
+                for _dep in ((_svc_cfg or {}).get("depends_on") or []):
+                    _dep_safe = _dep.replace("-", "_")
+                    _diagram_lines.append(f'  {_dep_safe} --> {_safe}')
+        # Terraform/HCL resources
+        elif "resource" in _data or "module" in _data:
+            _diagram_lines.append('  TF["Terraform Config"]')
+            for _rtype, _rinstances in (_data.get("resource") or {}).items():
+                for _rname in (_rinstances or {}).keys():
+                    _safe = f"{_rtype}_{_rname}".replace("-", "_").replace(".", "_")
+                    _diagram_lines.append(f'  TF --> {_safe}["{_rtype}.{_rname}"]')
+        # Generic: show top-level keys as nodes
+        else:
+            _diagram_lines.append(f'  Root["{output_format} Config"]')
+            for _k in list(_data.keys())[:8]:
+                _safe = str(_k).replace("-", "_").replace(".", "_")
+                _diagram_lines.append(f'  Root --> {_safe}["{_k}"]')
+        if len(_diagram_lines) <= 1:
+            raise ValueError("No parseable structure")
+        _diagram_content = "\n".join(_diagram_lines)
+    except Exception as _diag_err:
+        logger.warning(f"Could not build config diagram from structured data: {_diag_err}. Using fallback.")
+        _diagram_content = f"graph TD\n    A[Start] --> B[Process {output_format} Config]\n    B --> C[Deploy]"
+    enriched_content_parts.append(f"## Configuration Diagram\n```mermaid\n{_diagram_content}\n```\n")
 
     # 3. Add Documentation Links
     enriched_content_parts.append(

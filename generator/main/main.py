@@ -547,7 +547,28 @@ async def shutdown(
 
         if runner_instance:
             logger.info("Cleaning up Runner resources...")
-            pass
+            try:
+                for method_name in ("close", "cleanup", "shutdown"):
+                    method = getattr(runner_instance, method_name, None)
+                    if callable(method):
+                        import asyncio as _asyncio
+                        if _asyncio.iscoroutinefunction(method):
+                            await method()
+                        else:
+                            method()
+                        logger.info(f"Runner {method_name}() called.")
+                        break
+                temp_dir = getattr(runner_instance, "temp_dir", None)
+                if temp_dir:
+                    import shutil as _shutil
+                    _shutil.rmtree(str(temp_dir), ignore_errors=True)
+                    logger.info(f"Runner temp_dir '{temp_dir}' removed.")
+                proc = getattr(runner_instance, "process", None)
+                if proc and hasattr(proc, "terminate"):
+                    proc.terminate()
+                    logger.info("Runner subprocess terminated.")
+            except Exception as _cleanup_err:
+                logger.warning(f"Runner cleanup encountered an error: {_cleanup_err}")
 
         if config_watcher:
             logger.info("Stopping config watcher...")

@@ -265,21 +265,39 @@ CLARIFICATION_KEYWORDS: Final[tuple] = (
     "ambiguit", "clarif", "unclear", "requirement", "specify"
 )
 
+def _make_fallback_code(prompt: str = "") -> str:
+    """Generate a meaningful fallback code skeleton when the LLM API is unavailable."""
+    prompt_summary = (prompt[:200] + "...") if len(prompt) > 200 else prompt
+    return (
+        '"""Auto-generated fallback module.\n'
+        "\nThis module was generated because the LLM API was unavailable at generation time.\n"
+        f"Original request: {prompt_summary}\n"
+        '"""\n'
+        "import argparse\n"
+        "import logging\n\n"
+        "logging.basicConfig(level=logging.INFO)\n"
+        "logger = logging.getLogger(__name__)\n\n"
+        f"# TODO: Implement the requested functionality: {prompt_summary}\n\n"
+        "def main():\n"
+        "    parser = argparse.ArgumentParser(description='Auto-generated skeleton')\n"
+        "    parser.add_argument('--verbose', action='store_true', help='Enable verbose output')\n"
+        "    args = parser.parse_args()\n"
+        "    if args.verbose:\n"
+        "        logging.getLogger().setLevel(logging.DEBUG)\n"
+        "    logger.info('Starting execution — implement logic here')\n\n\n"
+        "if __name__ == '__main__':\n"
+        "    main()\n"
+    )
+
+
 # Placeholder code template for when LLM API is unavailable
-FALLBACK_PYTHON_CODE: Final[str] = (
-    "# TODO: API unavailable - placeholder code\n"
-    "# Please configure API access or try again later\n\n"
-    "def main():\n"
-    "    print('Hello World')\n"
-    "    pass\n\n"
-    "if __name__ == '__main__':\n"
-    "    main()\n"
-)
+FALLBACK_PYTHON_CODE: Final[str] = _make_fallback_code()
 
 FALLBACK_README: Final[str] = (
-    "# Placeholder\n\n"
-    "This is placeholder code generated because the API was unavailable.\n\n"
-    "Please configure proper API access to generate actual code.\n"
+    "# Auto-generated Fallback Module\n\n"
+    "This code was auto-generated because the LLM API was unavailable.\n\n"
+    "Please configure proper API access and regenerate, or implement the required\n"
+    "functionality by filling in the `TODO` markers in the generated skeleton.\n"
 )
 
 

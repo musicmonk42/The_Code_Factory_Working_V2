@@ -167,14 +167,13 @@ class TestPluginInstallSignatureVerification:
             )
 
     def test_verify_signature_guard_in_source(self):
-        """Verify the NotImplementedError guard is present in cli.py source."""
+        """Verify the signature verification implementation is present in cli.py source."""
         import pathlib
         cli_src = (
             pathlib.Path(__file__).parent.parent / "generator" / "main" / "cli.py"
         ).read_text()
-        assert "raise NotImplementedError" in cli_src
         assert "verify_signature" in cli_src
-        assert "not yet implemented" in cli_src
+        assert "PLUGIN_VERIFY_PUBLIC_KEY" in cli_src
 
 
 # ---------------------------------------------------------------------------

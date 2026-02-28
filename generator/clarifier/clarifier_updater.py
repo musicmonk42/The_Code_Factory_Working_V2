@@ -666,10 +666,76 @@ class DefaultConflictResolver(ConflictResolver):
                 )
                 action_taken = True
             elif strategy == "ml_recommend":
-                logger.warning(
-                    f"ML recommendation strategy not yet implemented for conflict: {conflict_desc}."
-                )
-                UPDATE_ERRORS.labels("conflict_resolution", "ml_not_implemented").inc()
+                try:
+                    _config = get_config()
+                    _llm_client = GrokLLMClient()
+                    _api_key = os.getenv(f"{_config.INFERENCE_LLM.upper()}_API_KEY", "")
+                    if not _api_key:
+                        raise ValueError("LLM API key not configured for ml_recommend strategy.")
+                    _prompt = (
+                        f"You are a requirements conflict resolver. "
+                        f"Analyze this conflict and recommend an action.\n\n"
+                        f"Conflict type: {conflict_type}\n"
+                        f"Description: {conflict_desc}\n"
+                        f"Feature: {feature or 'N/A'}\n"
+                        f"Clarity: {clarity or 'N/A'}\n\n"
+                        f"Respond with a JSON object with a single key 'action' whose value is "
+                        f"one of: 'keep_old', 'keep_new', 'merge', or 'discard'.\n"
+                        f"Example: {{\"action\": \"keep_new\"}}"
+                    )
+                    _response = await _llm_client.call_llm(
+                        _prompt, _config.INFERENCE_LLM, _api_key
+                    )
+                    _ml_action = _response.get("action", "discard")
+                    if _ml_action in ("keep_new", "merge"):
+                        if feature and feature in resolved_requirements.get("features", []):
+                            resolved_requirements["features"].remove(feature)
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type=f"ml_recommend_{_ml_action}",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended '{_ml_action}' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                    elif _ml_action == "keep_old":
+                        if feature and clarity and feature in clarifications:
+                            del clarifications[feature]
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type="ml_recommend_keep_old",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended 'keep_old' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                    else:
+                        log_action(
+                            "conflict_resolved",
+                            category="conflict",
+                            type="ml_recommend_discard",
+                            description=conflict_desc,
+                        )
+                        logger.info(
+                            f"ML recommended 'discard' for conflict: {conflict_desc}."
+                        )
+                        action_taken = True
+                except Exception as _ml_err:
+                    logger.warning(
+                        f"ML recommendation failed for conflict '{conflict_desc}': {_ml_err}. "
+                        f"Falling back to 'discard' strategy."
+                    )
+                    log_action(
+                        "conflict_resolved",
+                        category="conflict",
+                        type="discard",
+                        description=conflict_desc,
+                    )
+                    action_taken = True
             else:
                 logger.warning(
                     f"Unknown conflict resolution strategy '{strategy}'. Conflict '{conflict_desc}' remains unaddressed."

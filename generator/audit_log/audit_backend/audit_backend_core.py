@@ -1516,8 +1516,7 @@ class InMemoryBackend(LogBackend):
         yield
 
     async def _append_single(self, prepared_entry: Dict[str, Any]):
-        # Batching handles storage, so single append is effectively no-op in this implementation
-        raise NotImplementedError
+        self.storage.append(prepared_entry)
 
     async def _query_single(
         self, filters: Dict[str, Any], limit: int
@@ -1539,12 +1538,33 @@ class InMemoryBackend(LogBackend):
 
     # --- ADDED: _load_snapshot method referenced in __init__ ---
     async def _load_snapshot(self):
-        """Conceptual: Loads previously saved snapshot."""
-        # This is a placeholder. In a real InMemoryBackend for testing,
-        # you might load from a file specified in params.
-        logger.info("InMemoryBackend: Skipping snapshot load (not implemented).")
-        await asyncio.sleep(0)  # Yield control to show it's async
-        return
+        """Loads previously saved snapshot from disk if configured."""
+        snapshot_file = self.params.get("snapshot_file", None)
+        if not snapshot_file or not os.path.exists(snapshot_file):
+            logger.info("InMemoryBackend: No snapshot file configured or found; starting empty.")
+            return
+        logger.info(
+            f"InMemoryBackend: Attempting to load snapshot from '{snapshot_file}'.",
+        )
+        try:
+            with open(snapshot_file, "rb") as f:
+                compressed_data = f.read()
+            decompressed_data = zlib.decompress(compressed_data)
+            loaded_entries = json.loads(decompressed_data.decode("utf-8"))
+            existing_ids = {e.get("entry_id") for e in self.storage}
+            new_count = 0
+            for entry in loaded_entries:
+                if entry.get("entry_id") not in existing_ids:
+                    self.storage.append(entry)
+                    new_count += 1
+            logger.info(
+                f"InMemoryBackend: Loaded {new_count} entries from snapshot '{snapshot_file}'.",
+            )
+        except Exception as e:
+            logger.error(
+                f"InMemoryBackend: Failed to load snapshot from '{snapshot_file}': {e}",
+                exc_info=True,
+            )
 
 
 # =========================================================================
