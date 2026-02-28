@@ -4087,7 +4087,7 @@ def _classify_stub_module(module_path: str, symbols: Set[str]) -> str:
         return "auth"
     if "config" in stem or "setting" in stem:
         return "config"
-    if stem in ("model",) and "schema" not in stem:
+    if stem == "model" and "schema" not in stem:
         return "model"
     if "schema" in stem:
         return "schema"
