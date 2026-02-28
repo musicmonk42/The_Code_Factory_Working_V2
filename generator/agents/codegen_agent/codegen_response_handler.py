@@ -319,6 +319,17 @@ _SKIP_VALIDATION_FILENAMES: frozenset = frozenset({
     '.dockerignore', '.editorconfig', 'LICENSE', 'CHANGELOG',
 })
 
+# Safe default values for common BaseSettings fields that frequently appear without
+# defaults in LLM-generated code.  Injected by auto_fix_settings_instantiation() to
+# prevent import-time ValidationError during cold-start validation.
+_SETTINGS_SAFE_DEFAULTS: Dict[str, str] = {
+    "database_url": "sqlite:///./dev.db",
+    "redis_url": "redis://localhost:6379/0",
+    "jwt_secret_key": "change-me-in-production",
+    "cors_origins": "*",
+    "secret_key": "change-me-in-production",
+}
+
 
 def _is_non_python_artifact(filename: str, lang: str) -> bool:
     """Return True when *filename* should skip Python syntax validation.
@@ -3075,8 +3086,9 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
     - ``settings = Settings()`` at module level → ``@lru_cache() / get_settings()``
     - Adds ``from functools import lru_cache`` import when not already present
     - Adds safe ``Field(default=...)`` values for common env-dependent fields that have
-      no default (``database_url``, ``redis_url``, ``jwt_secret_key``, ``cors_origins``,
-      ``secret_key``).
+      no default (see :data:`_SETTINGS_SAFE_DEFAULTS`).
+    - Adds ``from pydantic import Field`` import when ``Field`` defaults are injected
+      and the import is not already present.
 
     Args:
         files: Dictionary mapping filenames to file contents.
@@ -3084,16 +3096,18 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
     Returns:
         Updated files dictionary with fixes applied.
     """
-    import re as _re
-
-    # Common BaseSettings fields and their safe defaults
-    _SAFE_DEFAULTS: Dict[str, str] = {
-        "database_url": "sqlite:///./dev.db",
-        "redis_url": "redis://localhost:6379/0",
-        "jwt_secret_key": "change-me-in-production",
-        "cors_origins": "*",
-        "secret_key": "change-me-in-production",
-    }
+    # Compiled patterns reused across all files in this call.
+    _module_level_pat = re.compile(
+        r'^(settings\s*=\s*Settings\(\)\s*(?:#.*)?)$', re.MULTILINE
+    )
+    # Matches an existing `from functools import lru_cache` (with or without other names).
+    _lru_import_pat = re.compile(
+        r'^\s*from\s+functools\s+import\b[^\n]*\blru_cache\b', re.MULTILINE
+    )
+    # Matches an existing `from pydantic import ... Field ...`
+    _field_import_pat = re.compile(
+        r'^\s*from\s+pydantic\s+import\b[^\n]*\bField\b', re.MULTILINE
+    )
 
     fixed_files: Dict[str, str] = {}
     for filename, content in files.items():
@@ -3107,39 +3121,43 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
 
         original = content
 
-        # 1. Add safe defaults for common required fields missing a default.
-        # Match lines like: `    database_url: str` (no `=` on the same line) inside a
-        # BaseSettings subclass context.  We use a simple line-by-line approach to avoid
-        # mis-patching unrelated annotations.
+        # ------------------------------------------------------------------
+        # Step 1: Add safe defaults for common required fields missing a
+        # default inside any BaseSettings subclass.
+        # ------------------------------------------------------------------
+        # We use a simple line-by-line state machine rather than a full AST
+        # parse so that this fixer works on syntactically incomplete files.
         lines = content.splitlines(keepends=True)
-        new_lines = []
+        new_lines: List[str] = []
         in_settings_class = False
+        field_default_added = False
         for line in lines:
-            # Detect entry into a BaseSettings subclass
-            if _re.match(r'^class\s+\w+\s*\(.*BaseSettings.*\)', line):
+            # Enter a BaseSettings subclass (handles dotted base names like
+            # ``pydantic_settings.BaseSettings``).
+            if re.match(r'^class\s+\w+\s*\(.*BaseSettings.*\)\s*:', line):
                 in_settings_class = True
-            elif in_settings_class and _re.match(r'^class\s+', line):
-                # New top-level class — exit settings context
+            elif in_settings_class and re.match(r'^class\s+', line):
+                # A new top-level class definition ends the settings context.
                 in_settings_class = False
 
             if in_settings_class:
-                for field_name, safe_default in _SAFE_DEFAULTS.items():
-                    # Match annotation lines without a default value
-                    # e.g.: `    database_url: str` or `    database_url: str  # comment`
+                for field_name, safe_default in _SETTINGS_SAFE_DEFAULTS.items():
+                    # Pattern: `    field_name: SomeType` with no `=` before any comment.
                     _ann_pat = (
-                        r'^(\s+' + _re.escape(field_name) + r'\s*:\s*\S+)'
+                        r'^(\s+' + re.escape(field_name) + r'\s*:\s*\S+)'
                         r'(\s*(?:#.*)?)$'
                     )
-                    # Only add default when no '=' is present before any comment on the line
+                    # Guard: skip if the code portion (before any comment) already has `=`.
                     _code_part = line.split('#')[0]
-                    if _re.match(_ann_pat, line.rstrip('\n')) and '=' not in _code_part:
-                        line = _re.sub(
+                    if re.match(_ann_pat, line.rstrip('\n')) and '=' not in _code_part:
+                        line = re.sub(
                             _ann_pat,
                             lambda m, d=safe_default: (
                                 m.group(1) + f' = Field(default="{d}")' + m.group(2)
                             ),
                             line.rstrip('\n'),
                         ) + '\n'
+                        field_default_added = True
                         logger.info(
                             "auto_fix_settings_instantiation: added default for '%s' in %s",
                             field_name,
@@ -3149,12 +3167,48 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
             new_lines.append(line)
         content = "".join(new_lines)
 
-        # 2. Replace module-level `settings = Settings()` with a lazy get_settings() function.
-        # Match lines like: `settings = Settings()` (possibly with trailing comment/whitespace)
-        _module_level_pat = _re.compile(
-            r'^(settings\s*=\s*Settings\(\)\s*(?:#.*)?)$', _re.MULTILINE
-        )
+        # Ensure `from pydantic import Field` is present when we injected Field().
+        if field_default_added and not _field_import_pat.search(content):
+            if "from pydantic import" in content:
+                # Extend the existing pydantic import line.
+                content = re.sub(
+                    r'(from pydantic import )([^\n]+)',
+                    lambda m: (
+                        m.group(0)
+                        if "Field" in m.group(2)
+                        else m.group(1) + m.group(2).rstrip() + ", Field"
+                    ),
+                    content,
+                    count=1,
+                )
+            else:
+                # Inject a brand-new import right after any pydantic_settings import,
+                # or prepend to the file if no pydantic import exists yet.
+                if "from pydantic_settings import" in content:
+                    content = re.sub(
+                        r'(from pydantic_settings import [^\n]+\n)',
+                        r'\1from pydantic import Field\n',
+                        content,
+                        count=1,
+                    )
+                else:
+                    content = "from pydantic import Field\n" + content
+            logger.info(
+                "auto_fix_settings_instantiation: added 'from pydantic import Field' in %s",
+                filename,
+            )
+
+        # ------------------------------------------------------------------
+        # Step 2: Replace module-level ``settings = Settings()`` with a lazy
+        # ``get_settings()`` function guarded by ``@lru_cache``.
+        # ------------------------------------------------------------------
         if _module_level_pat.search(content):
+            # Determine BEFORE the substitution whether an lru_cache import
+            # already exists.  The replacement text itself contains the token
+            # "lru_cache", so any post-substitution check would be a false
+            # positive and the import would never be added (dead code).
+            _needs_lru_import = not bool(_lru_import_pat.search(content))
+
             _lazy_replacement = (
                 "@lru_cache()\n"
                 "def get_settings() -> Settings:\n"
@@ -3168,11 +3222,11 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
                 filename,
             )
 
-            # Ensure `from functools import lru_cache` is present
-            if "lru_cache" not in content:
-                # Insert after the last `from __future__` or after the first import block
+            # Add the lru_cache import only when it was absent before the sub.
+            if _needs_lru_import:
                 if "from functools import" in content:
-                    content = _re.sub(
+                    # Extend the existing functools import line.
+                    content = re.sub(
                         r'(from functools import )([^\n]+)',
                         lambda m: (
                             m.group(0)
@@ -3182,26 +3236,23 @@ def auto_fix_settings_instantiation(files: Dict[str, str]) -> Dict[str, str]:
                         content,
                         count=1,
                     )
+                elif "from __future__" in content:
+                    # Insert after the `from __future__` line.
+                    content = re.sub(
+                        r'(from __future__[^\n]+\n)',
+                        r'\1from functools import lru_cache\n',
+                        content,
+                        count=1,
+                    )
                 else:
-                    # Prepend after any `from __future__` line, else at very top
-                    if "from __future__" in content:
-                        content = _re.sub(
-                            r'(from __future__[^\n]+\n)',
-                            r'\1from functools import lru_cache\n',
-                            content,
-                            count=1,
-                        )
-                    else:
-                        content = "from functools import lru_cache\n" + content
+                    content = "from functools import lru_cache\n" + content
                 logger.info(
-                    "auto_fix_settings_instantiation: added 'from functools import lru_cache' in %s",
+                    "auto_fix_settings_instantiation: added "
+                    "'from functools import lru_cache' in %s",
                     filename,
                 )
 
-        if content != original:
-            fixed_files[filename] = content
-        else:
-            fixed_files[filename] = original
+        fixed_files[filename] = content
 
     return fixed_files
 

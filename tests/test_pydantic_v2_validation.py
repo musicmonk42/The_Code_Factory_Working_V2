@@ -574,6 +574,14 @@ class TestAutoFixSettingsInstantiation:
         }
         fixed = self._fix(files)
         assert fixed["config.py"].count("lru_cache") >= 1
+        # The import statement must appear exactly once (no duplication)
+        import_lines = [
+            ln for ln in fixed["config.py"].splitlines()
+            if "import" in ln and "lru_cache" in ln
+        ]
+        assert len(import_lines) == 1, (
+            f"Expected exactly one lru_cache import line, got: {import_lines}"
+        )
 
     def test_no_basesettings_file_unchanged(self):
         """Files without BaseSettings are returned unchanged."""
@@ -626,3 +634,105 @@ class TestAutoFixSettingsInstantiation:
         }
         fixed = self._fix(files)
         assert fixed == files
+
+    def test_lru_cache_import_added_when_no_functools_import(self):
+        """lru_cache import is added via a new statement when no functools import exists."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        assert "from functools import lru_cache" in content, (
+            f"Expected 'from functools import lru_cache' in:\n{content}"
+        )
+
+    def test_lru_cache_added_to_existing_functools_import(self):
+        """When 'from functools import X' already exists, lru_cache is appended to it."""
+        files = {
+            "config.py": (
+                "from functools import wraps\n"
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        # Should extend the existing import, not add a new one
+        assert "from functools import wraps, lru_cache" in content, (
+            f"Expected extended functools import in:\n{content}"
+        )
+        import_lines = [ln for ln in content.splitlines() if "functools" in ln and "import" in ln]
+        assert len(import_lines) == 1, (
+            f"Expected exactly one functools import line, got: {import_lines}"
+        )
+
+    def test_field_import_added_when_default_injected_and_missing(self):
+        """'from pydantic import Field' is added when Field is injected but not imported."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    cors_origins: str\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        assert "Field(default=" in content, "Expected Field default to be injected"
+        assert "Field" in content
+        # The import must be present
+        has_field_import = any(
+            "Field" in ln and "import" in ln and "pydantic" in ln
+            for ln in content.splitlines()
+        )
+        assert has_field_import, (
+            f"Expected a 'from pydantic import Field' line in:\n{content}"
+        )
+
+    def test_field_import_extended_when_pydantic_import_exists(self):
+        """When 'from pydantic import X' exists (without Field), Field is appended."""
+        files = {
+            "config.py": (
+                "from pydantic_settings import BaseSettings\n"
+                "from pydantic import BaseModel\n\n"
+                "class Settings(BaseSettings):\n"
+                "    cors_origins: str\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        assert "Field(default=" in content
+        assert "from pydantic import BaseModel, Field" in content, (
+            f"Expected extended pydantic import in:\n{content}"
+        )
+
+    def test_lru_cache_import_added_after_future_import(self):
+        """When 'from __future__ import ...' is present, lru_cache import follows it."""
+        files = {
+            "config.py": (
+                "from __future__ import annotations\n"
+                "from pydantic_settings import BaseSettings\n\n"
+                "class Settings(BaseSettings):\n"
+                "    env: str = 'dev'\n\n"
+                "settings = Settings()\n"
+            )
+        }
+        fixed = self._fix(files)
+        content = fixed["config.py"]
+        lines = content.splitlines()
+        future_idx = next(i for i, ln in enumerate(lines) if "from __future__" in ln)
+        lru_idx = next(
+            (i for i, ln in enumerate(lines) if "lru_cache" in ln and "import" in ln),
+            None,
+        )
+        assert lru_idx is not None, f"No lru_cache import found in:\n{content}"
+        assert lru_idx > future_idx, (
+            f"lru_cache import should appear after __future__ import "
+            f"(future_idx={future_idx}, lru_idx={lru_idx})"
+        )

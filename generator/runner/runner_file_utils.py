@@ -1133,6 +1133,41 @@ _FILENAME_HEADER_PATTERN = re.compile(
 )
 
 
+def _load_env_file(env_path: Path) -> dict:
+    """Parse a ``.env``-style file and return a ``{KEY: value}`` mapping.
+
+    Only non-blank, non-comment lines that contain ``=`` are processed.
+    Surrounding matching quotes (single or double) are stripped from values.
+    Lines where the key is already present in the result are skipped so that
+    the first occurrence wins (standard dotenv semantics).
+
+    Args:
+        env_path: ``pathlib.Path`` pointing to the env file to parse.
+
+    Returns:
+        Dictionary of environment variable names to their string values.
+        Returns an empty dict if the file cannot be read or parsed.
+    """
+    result: dict = {}
+    try:
+        for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            if not key or key in result:
+                continue
+            value = value.strip()
+            # Strip a single layer of matching surrounding quotes.
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
+                value = value[1:-1]
+            result[key] = value
+    except Exception as exc:  # pragma: no cover
+        logger.debug("_load_env_file: could not parse %s: %s", env_path, exc)
+    return result
+
+
 def _validate_filename_security(filename: str, output_dir: Path) -> Tuple[bool, str]:
     """
     Comprehensive security validation for filenames.
@@ -3029,23 +3064,11 @@ async def validate_generated_project(
             child_env = dict(_os_cold.environ)
             child_env["PYTHONPATH"] = str(output_dir)
             # Inject .env.example values so BaseSettings fields with required env vars
-            # don't raise ValidationError during the cold-start import check (Fix 2).
+            # don't raise ValidationError during the cold-start import check.
             _env_example = output_dir / ".env.example"
             if _env_example.exists():
-                try:
-                    for _line in _env_example.read_text(encoding="utf-8").splitlines():
-                        _line = _line.strip()
-                        if _line and not _line.startswith("#") and "=" in _line:
-                            _k, _, _v = _line.partition("=")
-                            _k = _k.strip()
-                            if _k and _k not in child_env:
-                                _v = _v.strip()
-                                # Strip matching surrounding quotes (single or double)
-                                if len(_v) >= 2 and _v[0] == _v[-1] and _v[0] in ('"', "'"):
-                                    _v = _v[1:-1]
-                                child_env[_k] = _v
-                except Exception as _env_ex:
-                    logger.debug("Could not parse .env.example for cold-start env: %s", _env_ex)
+                for _k, _v in _load_env_file(_env_example).items():
+                    child_env.setdefault(_k, _v)
             try:
                 proc = subprocess.run(
                     [_sys.executable, "-c", f"import {entry_module}; print('OK')"],
