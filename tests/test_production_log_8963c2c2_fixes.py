@@ -489,7 +489,6 @@ class TestGcpNlpCircuitBreaker:
 
         original = cp._gcp_nlp_disabled
         cp._gcp_nlp_disabled = True
-        call_count = [0]
 
         async def _run():
             req = {"features": ["Build a product catalog API"]}
@@ -499,7 +498,6 @@ class TestGcpNlpCircuitBreaker:
         try:
             result = asyncio.get_event_loop().run_until_complete(_run())
             assert result == {"features": ["Build a product catalog API"]}
-            assert call_count[0] == 0
         finally:
             cp._gcp_nlp_disabled = original
 

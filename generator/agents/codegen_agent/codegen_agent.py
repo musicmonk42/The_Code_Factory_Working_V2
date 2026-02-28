@@ -700,6 +700,9 @@ async def _repair_stub_services(
             repaired_count,
         )
     return updated
+
+
+def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     """Post-ensemble reconciliation: wire discovered routers into main.py (no LLM needed).
 
     Scans all generated ``app/routers/*.py`` files, rebuilds
@@ -761,10 +764,7 @@ async def _repair_stub_services(
         )
 
     if not router_modules:
-        return updated
-
-    # ------------------------------------------------------------------ #
-    # 2. Rebuild the router package __init__.py                           #
+        return updated  # Nothing to wire — return unchanged                           #
     # ------------------------------------------------------------------ #
     # All discovered routers share the same parent directory; derive it
     # from the first entry (mixed-directory projects are not supported).
@@ -1246,6 +1246,9 @@ async def _repair_stub_services(
     updated = disambiguate_model_schema_imports(updated)
 
     return updated
+
+
+def _ast_merge_python_files(old_content: str, new_content: str) -> str:
     """Merge two Python source files, preserving symbols from the old version.
 
     When a later generation pass produces a file that already exists in
