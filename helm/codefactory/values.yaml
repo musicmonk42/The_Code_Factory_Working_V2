@@ -225,6 +225,10 @@ env:
   DB_POOL_MAX_OVERFLOW: "20"
   DB_RETRY_ATTEMPTS: "3"
   DB_RETRY_DELAY: "1.0"
+  # Canonical names read by codebase_analyzer.py (SFE analysis) — Bug 7 fix.
+  # Must stay in sync with DB_RETRY_ATTEMPTS / DB_RETRY_DELAY above.
+  DATABASE_RETRY_ATTEMPTS: "3"
+  DATABASE_RETRY_DELAY: "1.0"
 
   # Message Bus Configuration
   MESSAGE_BUS_SHARD_COUNT: "8"
@@ -442,6 +446,11 @@ env:
 
   # Monitoring
   PROMETHEUS_PORT: "9090"
+  # OpenTelemetry OTLP export endpoint (Bug 6 fix).
+  # When set, the dlt-client-plugin routes spans to an OTLP collector instead of stdout,
+  # preventing Railway's 500 logs/sec rate-limit hits during burst lint operations.
+  # Override per release: helm upgrade --set env.OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
+  OTEL_EXPORTER_OTLP_ENDPOINT: ""
 
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"

@@ -1047,8 +1047,7 @@ class CodebaseAnalyzer:
                                 timeout=60,
                             )
                             if _proc.stdout.strip():
-                                import json as _json
-                                _msgs = _json.loads(_proc.stdout)
+                                _msgs = json.loads(_proc.stdout)
                                 for _m in _msgs:
                                     defects.append({
                                         "file": str(file_path),
@@ -1059,7 +1058,11 @@ class CodebaseAnalyzer:
                                     })
                                 continue  # skip the reporter.messages extend below
                         except Exception as _sub_err:
-                            logger.warning("Pylint Run API incompatible or config error, skipping lint for %s", file_path)
+                            logger.warning(
+                                "Pylint Run API incompatible or config error, skipping lint for %s: %s",
+                                file_path,
+                                _sub_err,
+                            )
                     defects.extend(
                         [
                             {

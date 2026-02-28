@@ -6378,7 +6378,16 @@ class OmniCoreService:
         # Attempt to reuse a shared PostgresClient so CodebaseAnalyzer does not open a
         # second connection to the same Railway PostgreSQL instance (Bug 7 fix).
         # The client is cached on the service instance after the first successful connection.
+        # If the cached pool has since been closed (e.g. idle timeout), reset it so the
+        # code below creates a fresh one.
         _shared_db_client = getattr(self, "_sfe_db_client", None)
+        if _shared_db_client is not None:
+            _pool = getattr(_shared_db_client, "_pool", None)
+            if _pool is None or (hasattr(_pool, "is_closed") and _pool.is_closed()):
+                logger.info("[SFE_ANALYSIS] Cached PostgresClient pool is closed — reconnecting.")
+                self._sfe_db_client = None
+                _shared_db_client = None
+
         if _shared_db_client is None:
             try:
                 from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient as _PGClient
@@ -9107,6 +9116,11 @@ class OmniCoreService:
                         sfe_feedback["critical_high_count"],
                         job_id,
                     )
+
+            # Persist the feedback summary in job metadata so it's available to
+            # downstream consumers (e.g., the finalizer and SFE dispatch step).
+            if sfe_feedback and job_id in jobs_db:
+                jobs_db[job_id].metadata["sfe_feedback"] = sfe_feedback
 
             # NOTE: Do NOT call _finalize_successful_job here.
             # Finalization is handled by finalize_job_success() in generator.py

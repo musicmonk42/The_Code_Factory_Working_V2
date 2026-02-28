@@ -749,7 +749,7 @@ fail or produce a non-functional application.
      ```python
      from passlib.context import CryptContext
      import jwt, os
-     from datetime import datetime, timedelta
+     from datetime import datetime, timedelta, timezone
 
      pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
      SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
@@ -762,7 +762,7 @@ fail or produce a non-functional application.
          return pwd_context.verify(plain, hashed)
 
      def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)) -> str:
-         payload = {**data, "exp": datetime.utcnow() + expires_delta}
+         payload = {**data, "exp": datetime.now(timezone.utc) + expires_delta}
          return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
      ```
    - Pydantic models MUST include real field validators, constraints, and type
