@@ -11,6 +11,7 @@ import importlib
 import inspect
 import json
 import logging
+import math
 import random
 import re
 import subprocess
@@ -935,8 +936,12 @@ async def mutation_test(
                     f"Sending mutation task to distributed runner at '{_endpoint}' for language '{language}'."
                 )
                 try:
-                    _MAX_PAYLOAD_FILES = 50
-                    _MAX_FILE_BYTES = 512 * 1024  # 512 KB per file
+                    _MAX_PAYLOAD_FILES: int = getattr(config, "max_payload_files", 50)
+                    # Per-file size cap — configurable so operators with larger source
+                    # files can raise the limit; default is 512 KB.
+                    _MAX_FILE_BYTES: int = getattr(
+                        config, "max_payload_file_size", 512 * 1024
+                    )
                     _files_payload: Dict[str, str] = {}
                     for _p in temp_dir.rglob("*"):
                         if not _p.is_file():
@@ -997,7 +1002,7 @@ async def mutation_test(
             # works on a directory directly) we fall back to a single invocation.
             _code_file_list = list(code_files) if code_files else []
             if _code_file_list and len(_code_file_list) > 1:
-                _chunk_size = max(1, -(-len(_code_file_list) // _max_workers))  # ceil division
+                _chunk_size = max(1, math.ceil(len(_code_file_list) / _max_workers))
                 _chunks = [
                     _code_file_list[i: i + _chunk_size]
                     for i in range(0, len(_code_file_list), _chunk_size)

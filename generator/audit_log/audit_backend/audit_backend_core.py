@@ -1555,8 +1555,15 @@ class InMemoryBackend(LogBackend):
             )
             return
 
-        _MAX_COMPRESSED_BYTES = 512 * 1024 * 1024   # 512 MB on-disk limit
-        _MAX_DECOMPRESSED_BYTES = 1024 * 1024 * 1024  # 1 GB decompressed limit
+        # Size limits — configurable via self.params so operators can tune them
+        # for their deployment's memory constraints.  Defaults are conservative:
+        # 512 MB compressed (on-disk) and 1 GB decompressed (in-memory).
+        _MAX_COMPRESSED_BYTES: int = self.params.get(
+            "max_snapshot_compressed_bytes", 512 * 1024 * 1024
+        )
+        _MAX_DECOMPRESSED_BYTES: int = self.params.get(
+            "max_snapshot_decompressed_bytes", 1024 * 1024 * 1024
+        )
 
         logger.info(
             f"InMemoryBackend: Attempting to load snapshot from '{snapshot_file}'.",

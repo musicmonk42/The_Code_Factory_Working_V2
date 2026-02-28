@@ -265,6 +265,12 @@ CLARIFICATION_KEYWORDS: Final[tuple] = (
     "ambiguit", "clarif", "unclear", "requirement", "specify"
 )
 
+# Maximum number of characters from the original prompt embedded in fallback
+# code docstrings and TODO comments.  Keeping this short prevents enormous
+# generated files when prompts are long.
+_MAX_PROMPT_SUMMARY_LENGTH: Final[int] = 200
+
+
 def _make_fallback_code(prompt: str = "") -> str:
     """Generate a meaningful Python skeleton when the LLM API is unavailable.
 
@@ -274,15 +280,20 @@ def _make_fallback_code(prompt: str = "") -> str:
     that a developer can quickly identify what was requested and implement it.
 
     Args:
-        prompt: The original generation request.  Up to the first 200 characters
-            are embedded in the docstring and ``TODO`` comment.  Pass an empty
-            string (the default) when no original prompt is available.
+        prompt: The original generation request.  Up to the first
+            ``_MAX_PROMPT_SUMMARY_LENGTH`` characters are embedded in the
+            docstring and ``TODO`` comment.  Pass an empty string (the default)
+            when no original prompt is available.
 
     Returns:
         A string containing syntactically valid Python source code that acts as
         a ready-to-extend skeleton for the requested functionality.
     """
-    prompt_summary = (prompt[:200] + "...") if len(prompt) > 200 else prompt
+    prompt_summary = (
+        prompt[:_MAX_PROMPT_SUMMARY_LENGTH] + "..."
+        if len(prompt) > _MAX_PROMPT_SUMMARY_LENGTH
+        else prompt
+    )
     return (
         '"""Auto-generated fallback module.\n'
         "\nThis module was generated because the LLM API was unavailable at generation time.\n"

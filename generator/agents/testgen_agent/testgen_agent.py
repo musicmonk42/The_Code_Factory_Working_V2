@@ -1839,14 +1839,43 @@ def test_{file_stem}_syntax_error_documentation():
                                     f"}}\n"
                                 )
                             elif _has_returns:
-                                _go_test_body += (
-                                    f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
-                                    f"\tgot := {_fn_name}()\n"
-                                    f'\tif got == ({_returns})(nil) {{\n'
-                                    f'\t\tt.Errorf("{_fn_name}() returned zero value")\n'
-                                    f"\t}}\n"
-                                    f"}}\n"
+                                # Determine the correct zero-value comparison.
+                                # In Go, only pointer, interface, map, channel, slice,
+                                # and func types are nil-comparable.  For all other
+                                # types (string, int, bool, struct, …) we log the
+                                # returned value and let the test always pass, giving
+                                # the developer a compile-safe starting point.
+                                _nil_comparable_prefixes = (
+                                    "*", "interface", "map[", "chan ", "[]", "func(",
                                 )
+                                _ret_stripped = _returns.strip()
+                                _is_nil_comparable = (
+                                    _ret_stripped == "error"
+                                    or any(
+                                        _ret_stripped.startswith(p)
+                                        for p in _nil_comparable_prefixes
+                                    )
+                                )
+                                if _is_nil_comparable:
+                                    _go_test_body += (
+                                        f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                        f"\tgot := {_fn_name}()\n"
+                                        f"\tif got == nil {{\n"
+                                        f'\t\tt.Errorf("{_fn_name}() returned nil")\n'
+                                        f"\t}}\n"
+                                        f"}}\n"
+                                    )
+                                else:
+                                    # Non-nil-comparable type: call and log; developer
+                                    # adds assertions for the concrete return value.
+                                    _go_test_body += (
+                                        f"\nfunc Test{_fn_name}(t *testing.T) {{\n"
+                                        f"\tgot := {_fn_name}()\n"
+                                        f'\tt.Logf("{_fn_name}() returned: %v", got)\n'
+                                        f"\t// Add assertions appropriate for the "
+                                        f"return type: {_ret_stripped}\n"
+                                        f"}}\n"
+                                    )
                             else:
                                 _go_test_body += (
                                     f"\nfunc Test{_fn_name}(t *testing.T) {{\n"

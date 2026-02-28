@@ -3258,6 +3258,9 @@ async def enrich_config_output(
     enriched_content_parts.append(f"![Compliance Status]({badge_url})\n\n")
 
     # 2. Add Diagram from parsed config
+    # Maximum number of top-level keys shown as diagram nodes for generic configs.
+    # Kept small to avoid producing an unreadable diagram for configs with many keys.
+    _MAX_DIAGRAM_KEYS = 8
     try:
         _diagram_lines = ["graph TD"]
         _nodes_added = set()
@@ -3293,7 +3296,7 @@ async def enrich_config_output(
         # Generic: show top-level keys as nodes
         else:
             _diagram_lines.append(f'  Root["{output_format} Config"]')
-            for _k in list(_data.keys())[:8]:
+            for _k in list(_data.keys())[:_MAX_DIAGRAM_KEYS]:
                 _safe = str(_k).replace("-", "_").replace(".", "_")
                 _diagram_lines.append(f'  Root --> {_safe}["{_k}"]')
         if len(_diagram_lines) <= 1:
