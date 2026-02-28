@@ -379,6 +379,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.warning(f"Failed to send heartbeat: {type(send_error).__name__} - {send_error}")
                         break
                     
+                except asyncio.CancelledError:
+                    logger.info(f"WebSocket event loop cancelled for {connection_id} (shutdown signal)")
+                    raise
                 except Exception as e:
                     error_type = type(e).__name__
                     logger.error(f"Error processing event: {error_type} - {str(e)}", exc_info=True)
@@ -399,6 +402,9 @@ async def websocket_endpoint(websocket: WebSocket):
                         severity="info",
                     )
                     await websocket.send_json(event.to_json_dict())
+                except asyncio.CancelledError:
+                    logger.info(f"WebSocket fallback loop cancelled for {connection_id} (shutdown signal)")
+                    raise
                 except Exception as fallback_error:
                     error_type = type(fallback_error).__name__
                     logger.error(f"Fallback mode error: {error_type} - {fallback_error}", exc_info=True)
@@ -409,6 +415,12 @@ async def websocket_endpoint(websocket: WebSocket):
         logger.info(
             f"WebSocket client disconnected. Total connections: {len(active_connections)}"
         )
+    except asyncio.CancelledError:
+        logger.info(
+            f"WebSocket connection cancelled for {connection_id} (shutdown signal). "
+            f"Total connections: {len(active_connections)}"
+        )
+        _remove_connection_safely(websocket)
     except Exception as e:
         error_type = type(e).__name__
         connection_count = len(active_connections)
