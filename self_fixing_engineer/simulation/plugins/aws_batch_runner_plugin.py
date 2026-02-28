@@ -223,7 +223,6 @@ class JobConfig(BaseModel):
         2.0, ge=0.0, le=30.0, description="Max jitter added/subtracted to poll interval"
     )
 
-    @classmethod
     @field_validator("jobDefinition", "jobQueue")
     def validate_identifier_or_arn(cls, v):
         is_arn = v.startswith("arn:aws:batch:")
@@ -232,7 +231,6 @@ class JobConfig(BaseModel):
             raise ValueError("Invalid Batch ARN or name format")
         return v
 
-    @classmethod
     @field_validator("input_s3_bucket", "output_s3_bucket")
     def validate_bucket_name(cls, v):
         if v is None:
