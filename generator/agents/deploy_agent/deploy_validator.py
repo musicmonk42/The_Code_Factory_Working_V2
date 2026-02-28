@@ -113,6 +113,18 @@ validator_calls = get_or_create_metric(
     "Total validator calls by operation",
     ["target", "operation"],
 )
+scan_total_findings = get_or_create_metric(
+    Counter,
+    "deploy_validator_scan_findings_total",
+    "Total scan findings by format and finding type",
+    ["format", "finding_type"],
+)
+issue_total_found = get_or_create_metric(
+    Counter,
+    "deploy_validator_issues_total",
+    "Total issues found by target and category",
+    ["target", "issue_type_category"],
+)
 # --- Security: PII/Secret & Dangerous Config Scanning Patterns ---
 # NOTE: This DANGEROUS_CONFIG_PATTERNS is now used by the *imported* scan_config_for_findings
 DANGEROUS_CONFIG_PATTERNS = {

@@ -320,6 +320,30 @@ PROMPT_ERRORS = get_or_create_metric(
     "Errors in user prompting",
     ["channel", "type"],
 )
+PROMPT_CYCLES = get_or_create_metric(
+    Counter,
+    "clarifier_prompt_cycles_total",
+    "Total prompt cycles by channel",
+    ["channel"],
+)
+USER_ENGAGEMENT = get_or_create_metric(
+    Gauge,
+    "clarifier_user_engagement",
+    "User engagement score",
+    ["user_id"],
+)
+COMPLIANCE_QUESTIONS_ASKED = get_or_create_metric(
+    Counter,
+    "clarifier_compliance_questions_asked_total",
+    "Total compliance questions asked",
+    ["question_id"],
+)
+COMPLIANCE_ANSWERS_RECEIVED = get_or_create_metric(
+    Counter,
+    "clarifier_compliance_answers_received_total",
+    "Total compliance answers received",
+    ["question_id", "answer_value"],
+)
 # User Profile
 class UserProfile(BaseModel):
     user_id: str
