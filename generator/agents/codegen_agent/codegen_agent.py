@@ -49,6 +49,7 @@ from .codegen_response_handler import (
     _classify_stub_module,
     _detect_module_package_collisions,
     disambiguate_model_schema_imports,
+    ERROR_FILENAME,
     fix_response_model_type_mismatches,
     get_stub_files,
     parse_llm_response,
@@ -227,6 +228,59 @@ _MULTIPASS_GROUPS = [
         ),
     },
 ]
+
+# Frontend-type → human-readable instruction fragment for the frontend pass.
+_FRONTEND_JINJA_FOCUS = (
+    "Create Jinja2 HTML templates in templates/ directory: "
+    "templates/base.html (base layout with navbar, footer, CSS/JS links), "
+    "templates/index.html (main page extending base), "
+    "and a template for each major entity/resource page. "
+    "Create static assets in static/ directory: "
+    "static/css/style.css (responsive stylesheet with CSS variables), "
+    "static/js/app.js (frontend JavaScript with fetch API calls to backend endpoints). "
+    "Backend main.py MUST mount static files: "
+    "app.mount('/static', StaticFiles(directory='static'), name='static') "
+    "and configure Jinja2Templates. "
+    "Do NOT regenerate any backend Python files. "
+    "Use the symbol manifest to reference actual endpoint paths."
+)
+
+
+def _build_multipass_groups(
+    include_frontend: bool,
+    frontend_type: Optional[str],
+) -> List[Dict[str, str]]:
+    """Return the ordered list of generation-pass descriptors for a single pipeline run.
+
+    Starts from :data:`_MULTIPASS_GROUPS` and conditionally appends a fourth
+    ``frontend`` pass when *include_frontend* is ``True``.  Keeping this logic in
+    one place ensures that both :class:`CodegenAgent` and
+    :class:`MultiPassCodegenAgent` always produce identical pass sequences.
+
+    Args:
+        include_frontend: Whether to append a frontend generation pass.
+        frontend_type: The frontend technology (e.g. ``"jinja_templates"``).
+            Only evaluated when *include_frontend* is ``True``.
+
+    Returns:
+        A new list of ``{"name": str, "focus": str}`` dicts.
+    """
+    groups: List[Dict[str, str]] = list(_MULTIPASS_GROUPS)
+    if include_frontend:
+        if frontend_type == "jinja_templates":
+            frontend_focus = (
+                "Generate ONLY the frontend template and static asset files. "
+                + _FRONTEND_JINJA_FOCUS
+            )
+        else:
+            frontend_focus = (
+                "Generate ONLY the frontend template and static asset files. "
+                f"Create {frontend_type} frontend files in the frontend/ directory. "
+                "Include package.json, entry point, and component files. "
+                "Do NOT regenerate any backend Python files."
+            )
+        groups.append({"name": "frontend", "focus": frontend_focus})
+    return groups
 
 
 def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
@@ -477,6 +531,23 @@ _PLACEHOLDER_SERVICE_THRESHOLD_PCT = 30.0
 # Maximum number of targeted LLM stub-replacement passes after the ensemble merge.
 # Kept small to prevent unbounded retry loops when the LLM persistently returns stubs.
 _STUB_RETRY_MAX_ATTEMPTS: int = 2
+
+# Plain-text prompt suffix used by _retry_stub_files when the Jinja2 template is
+# unavailable.  Centralised here so the exception-fallback and the no-template
+# paths always produce identical instructions.
+_STUB_RETRY_PLAIN_PROMPT_SUFFIX: str = (
+    "\n\n"
+    "Return ONLY a JSON object whose keys are the file paths listed above "
+    "and whose values are the complete, production-ready file contents. "
+    "Do NOT include any explanatory text outside the JSON object.\n\n"
+    "Example format:\n"
+    "{\n"
+    '  "files": {\n'
+    '    "app/config.py": "from pydantic import BaseSettings\\n...",\n'
+    '    "app/schemas/product.py": "from pydantic import BaseModel\\n..."\n'
+    "  }\n"
+    "}"
+)
 
 def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     """Validate that generated files form a coherent, runnable application.
@@ -793,6 +864,9 @@ async def _retry_stub_files(
             break
 
         stub_paths = get_stub_files(result)
+        # Never ask the LLM to regenerate main.py — it's auto-wired by _reconcile_app_wiring
+        stub_paths.discard("app/main.py")
+        stub_paths.discard("main.py")
         logger.info(
             "[CODEGEN] _retry_stub_files: attempt %d/%d — %d stub file(s) remaining: %s",
             attempt + 1,
@@ -845,20 +919,12 @@ async def _retry_stub_files(
                 )
             except Exception:
                 # Template render failed — fall back to plain hint concatenation.
-                retry_prompt = (
-                    f"{retry_hint}\n\n"
-                    "Return ONLY a JSON object whose keys are the file paths listed above "
-                    "and whose values are the complete, production-ready file contents. "
-                    "Do NOT include any explanatory text outside the JSON object."
-                )
+                retry_prompt = retry_hint + _STUB_RETRY_PLAIN_PROMPT_SUFFIX
         else:
             # Template file not present — use plain prompt fallback directly.
-            retry_prompt = (
-                f"{retry_hint}\n\n"
-                "Return ONLY a JSON object whose keys are the file paths listed above "
-                "and whose values are the complete, production-ready file contents. "
-                "Do NOT include any explanatory text outside the JSON object."
-            )
+            retry_prompt = retry_hint + _STUB_RETRY_PLAIN_PROMPT_SUFFIX
+
+        expected_paths = set(stub_paths)
 
         try:
             retry_response = await call_llm_api(
@@ -869,6 +935,28 @@ async def _retry_stub_files(
                 skip_cache=True,
             )
             new_files = parse_llm_response(retry_response)
+            # Recovery: if LLM returned everything under a single key (e.g. "main.py")
+            # that contains a JSON file-map string, extract the inner files.
+            if len(new_files) == 1:
+                single_key = next(iter(new_files))
+                single_val = new_files[single_key]
+                if single_key not in expected_paths or single_key == ERROR_FILENAME:
+                    try:
+                        inner = json.loads(single_val)
+                        if isinstance(inner, dict):
+                            # Check if it looks like a file-map (keys contain "/")
+                            file_like = {k: v for k, v in inner.items() if isinstance(v, str) and "/" in k}
+                            if not file_like:
+                                # Maybe it's wrapped in a "files" key
+                                file_like = inner.get("files", {})
+                            if file_like:
+                                new_files = file_like
+                                logger.info(
+                                    "[CODEGEN] _retry_stub_files: recovered %d file(s) from nested JSON in '%s' key",
+                                    len(new_files), single_key,
+                                )
+                    except (json.JSONDecodeError, TypeError):
+                        pass
         except Exception as llm_err:
             logger.warning(
                 "[CODEGEN] _retry_stub_files: LLM call failed on attempt %d (non-fatal): %s",
@@ -879,12 +967,18 @@ async def _retry_stub_files(
 
         replaced = 0
         for path, content in new_files.items():
+            # Never overwrite app/main.py — it is auto-generated by _reconcile_app_wiring
+            if path in ("app/main.py", "main.py"):
+                logger.info(
+                    "[CODEGEN] _retry_stub_files: skipping '%s' — auto-generated by _reconcile_app_wiring",
+                    path,
+                )
+                continue
             if path in result and content and content.strip():
                 result[path] = content
                 replaced += 1
 
         returned_paths = set(new_files.keys())
-        expected_paths = set(stub_paths)
         if returned_paths and not (returned_paths & expected_paths):
             logger.warning(
                 "[CODEGEN] _retry_stub_files: attempt %d — LLM returned %d file(s) "
@@ -1693,7 +1787,23 @@ def _ast_merge_python_files(old_content: str, new_content: str) -> str:
 
     # Prepend any missing imports at the top of the merged result
     if imports_to_prepend:
-        merged = "\n".join(imports_to_prepend) + "\n" + merged
+        # Ensure __future__ imports stay at the very top (Python requirement)
+        lines = merged.splitlines(keepends=True)
+        future_end_idx = 0
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("from __future__"):
+                future_end_idx = i + 1
+            elif stripped and not stripped.startswith("#") and not stripped.startswith('"""') and not stripped.startswith("'''"):
+                # Stop scanning at the first non-comment, non-future, non-docstring line
+                break
+
+        import_block = "\n".join(imports_to_prepend) + "\n"
+        if future_end_idx > 0:
+            # Insert after the last __future__ import
+            merged = "".join(lines[:future_end_idx]) + import_block + "".join(lines[future_end_idx:])
+        else:
+            merged = import_block + merged
 
     return merged
 
@@ -3129,11 +3239,11 @@ if PLUGIN_AVAILABLE:
                             )
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
-                            for _group in _MULTIPASS_GROUPS:
-                                _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
+                            _groups_to_run = _build_multipass_groups(include_frontend, frontend_type)
+                            for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                    f"({_pass_index}/{len(_groups_to_run)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
@@ -3845,11 +3955,11 @@ else:
                             )
                             # Track wall-clock time for the global PIPELINE_CODEGEN_TIMEOUT guard.
                             _multipass_global_start = time.monotonic()
-                            for _group in _MULTIPASS_GROUPS:
-                                _pass_index = _MULTIPASS_GROUPS.index(_group) + 1
+                            _groups_to_run = _build_multipass_groups(include_frontend, frontend_type)
+                            for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                    f"({_pass_index}/{len(_groups_to_run)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
