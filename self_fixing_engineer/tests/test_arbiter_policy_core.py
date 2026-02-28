@@ -141,6 +141,7 @@ from self_fixing_engineer.arbiter.policy.core import (
     initialize_policy_engine,
     reset_policy_engine,
 )
+import self_fixing_engineer.arbiter.policy.core as policy_core
 
 # Restore original modules to prevent cross-test contamination
 # The core module has already captured its references to the mocked modules
@@ -155,7 +156,6 @@ else:
     sys.modules.pop("self_fixing_engineer.arbiter.plugins.llm_client", None)
 
 # ============= HELPER FUNCTIONS =============
-
 
 def create_mock_enforce_compliance():
     """Creates a mock for _enforce_compliance that allows actions when no control tag is present."""
@@ -174,7 +174,6 @@ def create_mock_enforce_compliance():
 
 # ============= FIXTURES =============
 
-
 @pytest.fixture(autouse=True)
 async def cleanup():
     """Ensures clean state before and after each test."""
@@ -192,7 +191,6 @@ async def cleanup():
         pass
     gc.collect()
 
-
 @pytest.fixture(autouse=True)
 def mock_circuit_breaker(monkeypatch):
     """Automatically mock circuit breaker functions for all tests."""
@@ -201,13 +199,13 @@ def mock_circuit_breaker(monkeypatch):
     mock_record_success = AsyncMock()
 
     monkeypatch.setattr(
-        "self_fixing_engineer.arbiter.policy.core.is_llm_policy_circuit_breaker_open", mock_is_open
+        policy_core, "is_llm_policy_circuit_breaker_open", mock_is_open
     )
     monkeypatch.setattr(
-        "self_fixing_engineer.arbiter.policy.core.record_llm_policy_api_failure", mock_record_failure
+        policy_core, "record_llm_policy_api_failure", mock_record_failure
     )
     monkeypatch.setattr(
-        "self_fixing_engineer.arbiter.policy.core.record_llm_policy_api_success", mock_record_success
+        policy_core, "record_llm_policy_api_success", mock_record_success
     )
 
     return {
@@ -215,7 +213,6 @@ def mock_circuit_breaker(monkeypatch):
         "record_failure": mock_record_failure,
         "record_success": mock_record_success,
     }
-
 
 @pytest.fixture
 def valid_policy_content():
@@ -247,7 +244,6 @@ def valid_policy_content():
         "custom_python_rules_enabled": True,
     }
 
-
 @pytest.fixture
 def tmp_policy_file(valid_policy_content):
     """Creates a temporary valid policy JSON file."""
@@ -259,7 +255,6 @@ def tmp_policy_file(valid_policy_content):
         os.remove(f.name)
     except:
         pass
-
 
 @pytest.fixture
 def arbiter_config(tmp_policy_file):
@@ -318,7 +313,6 @@ def arbiter_config(tmp_policy_file):
 
     return config
 
-
 @pytest.fixture
 def minimal_arbiter():
     """Provides a mock Arbiter object with minimum required attributes."""
@@ -330,7 +324,6 @@ def minimal_arbiter():
         plugin_registry = MagicMock()
 
     return MinimalMockArbiter()
-
 
 @pytest.fixture
 async def policy_engine(minimal_arbiter, arbiter_config, monkeypatch):
@@ -352,7 +345,6 @@ async def policy_engine(minimal_arbiter, arbiter_config, monkeypatch):
     # Ensure cleanup
     await asyncio.sleep(0.01)
 
-
 @pytest.fixture
 async def sqlite_client(tmp_path):
     """Provides a connected SQLiteClient instance."""
@@ -361,7 +353,6 @@ async def sqlite_client(tmp_path):
     await client.connect()
     yield client
     await client.close()
-
 
 # ============= PARAMETRIZED TEST DATA =============
 
@@ -389,7 +380,6 @@ INVALID_USER_IDS = [
 ]
 
 # ============= SQLiteClient Tests =============
-
 
 class TestSQLiteClient:
     """Tests for SQLiteClient database operations."""
@@ -470,9 +460,7 @@ class TestSQLiteClient:
         entries = await sqlite_client.get_feedback_entries()
         assert len(entries) == 1
 
-
 # ============= BasicDecisionOptimizer Tests =============
-
 
 class TestBasicDecisionOptimizer:
     """Tests for BasicDecisionOptimizer trust scoring."""
@@ -515,7 +503,7 @@ class TestBasicDecisionOptimizer:
     )
     async def test_trust_score_scenarios(
         self, context, user_id, expected_range, arbiter_config
-    ):
+    ):  
         """Tests various trust score calculation scenarios."""
         optimizer = BasicDecisionOptimizer(
             settings=arbiter_config.DECISION_OPTIMIZER_SETTINGS
@@ -539,9 +527,7 @@ class TestBasicDecisionOptimizer:
         with pytest.raises(ValueError):
             await optimizer.compute_trust_score({"device_trusted": "not_bool"}, "user")
 
-
 # ============= PolicyEngine Tests =============
-
 
 class TestPolicyEngine:
     """Comprehensive tests for PolicyEngine."""
@@ -710,9 +696,7 @@ class TestPolicyEngine:
         result, _ = await policy_engine.should_auto_learn("evolved", "key", "user", {})
         assert result
 
-
 # ============= Performance Tests =============
-
 
 class TestPerformance:
     """Performance and benchmark tests."""
@@ -763,9 +747,7 @@ class TestPerformance:
 
         tracemalloc.stop()
 
-
 # ============= Security Tests =============
-
 
 class TestSecurity:
     """Security vulnerability tests."""
@@ -801,9 +783,7 @@ class TestSecurity:
             )
             assert isinstance(result, bool)
 
-
 # ============= Integration Tests =============
-
 
 class TestIntegration:
     """End-to-end integration tests."""
@@ -854,9 +834,7 @@ class TestIntegration:
             assert "event_type" in kwargs or len(args) > 0
             assert "message" in kwargs or len(args) > 1
 
-
 # ============= Stress Tests =============
-
 
 class TestStress:
     """Stress and resilience tests."""
@@ -900,9 +878,7 @@ class TestStress:
         alive_count = sum(1 for ref in clients if ref() is not None)
         assert alive_count == 0
 
-
 # ============= Test Utilities =============
-
 
 def test_all_public_apis_exported():
     """Verifies all expected public APIs are available."""
@@ -934,7 +910,6 @@ def test_metrics_registered():
     assert hasattr(metrics, "LLM_CALL_LATENCY")
     assert hasattr(metrics, "feedback_processing_time")
 
-
 # ============= Property-Based Tests (Optional) =============
 
 if HYPOTHESIS_AVAILABLE:
@@ -954,7 +929,7 @@ if HYPOTHESIS_AVAILABLE:
         @settings(max_examples=50, deadline=None, suppress_health_check=[HealthCheck.function_scoped_fixture])
         async def test_fuzz_should_auto_learn(
             self, policy_engine, domain, key, user_id, value
-        ):
+        ): 
             """Fuzz tests the should_auto_learn method."""
             try:
                 result, reason = await policy_engine.should_auto_learn(
@@ -965,7 +940,6 @@ if HYPOTHESIS_AVAILABLE:
             except Exception as e:
                 # Should only raise ValueError for invalid inputs
                 assert isinstance(e, (ValueError, TypeError))
-
 
 # ============= Run Configuration =============
 
