@@ -894,6 +894,10 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             # Re-run collision detection after stub generation: stubs may re-introduce
             # module files that collide with package directories already in code_files.
             fixed_files = _detect_module_package_collisions(fixed_files)
+            # Fix 1: rewrite SQLAlchemy model imports to Pydantic schema imports for response_model=
+            fixed_files = fix_response_model_type_mismatches(fixed_files)
+            # Fix 3: alias ORM imports when models/ and schemas/ share a class name
+            fixed_files = disambiguate_model_schema_imports(fixed_files)
         # Populate requirements.txt with any third-party imports found in the generated code
         fixed_files = extract_and_populate_requirements(fixed_files)
         return fixed_files
@@ -3592,6 +3596,297 @@ def _is_likely_variable(name: str) -> bool:
     return any(name_lower.endswith(suffix) for suffix in _VARIABLE_SUFFIXES)
 
 
+def fix_response_model_type_mismatches(code_files: Dict[str, str]) -> Dict[str, str]:
+    """Scan router files and fix ``response_model=X`` usages where X is a SQLAlchemy ORM model.
+
+    FastAPI requires Pydantic ``BaseModel`` subclasses for ``response_model=``.  When the LLM
+    imports from ``app.models.*`` (SQLAlchemy) instead of ``app.schemas.*`` (Pydantic) and uses
+    those classes as ``response_model`` arguments, FastAPI raises a ``FastAPIError`` at import
+    time because SQLAlchemy ORM models are not valid Pydantic field types.
+
+    Algorithm
+    ~~~~~~~~~
+    1. For each ``app/routers/*.py`` file, collect imports from ``app.models.*``.
+    2. Find decorator arguments like ``response_model=X`` where ``X`` was imported from a models
+       module.
+    3. If a matching schema exists in ``app/schemas/`` with the same class name, rewrite the
+       import to use the schema module instead.
+    4. If no schema equivalent exists, replace ``response_model=X`` with ``response_model=None``
+       and add a TODO comment to prevent the crash.
+
+    Args:
+        code_files: Mapping of relative file path → source code.
+
+    Returns:
+        The (potentially modified) *code_files* mapping.
+    """
+    _router_path_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
+    # Match "from app.models.<module> import <names>" (supports multiline parenthesised forms)
+    _model_import_re = re.compile(
+        r'from\s+(app\.models\.[\w]+)\s+import\s+'
+        r'(?:\(([^)]+)\)|([^\n]+))',
+        re.MULTILINE,
+    )
+    # Match response_model=SomeName inside a decorator
+    _response_model_re = re.compile(r'\bresponse_model\s*=\s*([A-Za-z_]\w*)')
+
+    # Build a map of schema classes available in app/schemas/
+    schema_classes: Dict[str, str] = {}  # class_name -> schema module path (dotted)
+    for path, content in code_files.items():
+        if not path.startswith("app/schemas/") or not path.endswith(".py"):
+            continue
+        module_dotted = path.replace("/", ".").removesuffix(".py")
+        try:
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    schema_classes[node.name] = module_dotted
+        except SyntaxError:
+            pass
+
+    updated = dict(code_files)
+
+    for path, content in code_files.items():
+        if not _router_path_re.match(path):
+            continue
+
+        # Collect which names were imported from app.models.*
+        model_imports: Dict[str, str] = {}  # symbol_name -> original dotted module
+        for m in _model_import_re.finditer(content):
+            module_dotted = m.group(1)
+            names_raw = m.group(2) or m.group(3) or ""
+            for part in names_raw.split(","):
+                name = part.split(" as ")[0].strip()
+                if name and name.isidentifier():
+                    model_imports[name] = module_dotted
+
+        if not model_imports:
+            continue
+
+        # Find all response_model= usages that reference a models-imported name
+        new_content = content
+        changed = False
+        for rm in _response_model_re.finditer(content):
+            sym = rm.group(1)
+            if sym not in model_imports:
+                continue
+            # Determine whether a schema equivalent exists
+            if sym in schema_classes:
+                schema_module = schema_classes[sym]
+                old_model_module = model_imports[sym]
+                # Rewrite the import line: replace models import with schema import
+                old_import_pattern = re.compile(
+                    r'from\s+' + re.escape(old_model_module) + r'\s+import\s+'
+                    r'(?:\([^)]*\)|[^\n]+)',
+                    re.MULTILINE,
+                )
+                def _rewrite_import(m_imp: re.Match, _sym: str = sym, _schema_mod: str = schema_module) -> str:
+                    original = m_imp.group(0)
+                    # Replace only the module path, keep the symbols
+                    return original.replace(old_model_module, _schema_mod)
+                new_content = old_import_pattern.sub(_rewrite_import, new_content, count=1)
+                changed = True
+                logger.info(
+                    "fix_response_model_type_mismatches: %s — rewrote import of '%s' "
+                    "from '%s' to '%s' (Pydantic schema)",
+                    path, sym, old_model_module, schema_module,
+                )
+            else:
+                # No schema equivalent — null out response_model to avoid crash
+                old_rm_str = rm.group(0)  # e.g. "response_model=Product"
+                new_rm_str = f"response_model=None  # TODO: Create Pydantic schema for {sym}"
+                new_content = new_content.replace(old_rm_str, new_rm_str, 1)
+                changed = True
+                logger.warning(
+                    "fix_response_model_type_mismatches: %s — no Pydantic schema found for '%s' "
+                    "(imported from '%s'); set response_model=None to prevent FastAPIError",
+                    path, sym, model_imports[sym],
+                )
+
+        if changed:
+            updated[path] = new_content
+
+    return updated
+
+
+def disambiguate_model_schema_imports(code_files: Dict[str, str]) -> Dict[str, str]:
+    """Alias ORM model imports in router files when models/ and schemas/ share a class name.
+
+    When both ``app/models/product.py`` and ``app/schemas/product.py`` define a class called
+    ``Product``, router files that import ``from app.models.product import Product`` and use
+    it as ``response_model=Product`` will crash FastAPI.  This function detects such collisions
+    and aliases the ORM import to ``<Name>Model`` (e.g. ``ProductModel``) so the Pydantic
+    schema name remains available unaliased for ``response_model=`` usage.
+
+    Args:
+        code_files: Mapping of relative file path → source code.
+
+    Returns:
+        The (potentially modified) *code_files* mapping.
+    """
+    _router_path_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
+
+    # Collect class names defined in models/ and schemas/ respectively
+    model_class_modules: Dict[str, str] = {}   # class_name -> dotted module e.g. "app.models.product"
+    schema_class_modules: Dict[str, str] = {}  # class_name -> dotted module e.g. "app.schemas.product"
+
+    for path, content in code_files.items():
+        is_model = bool(re.match(r'^app/models/(?!__init__)[^/]+\.py$', path))
+        is_schema = bool(re.match(r'^app/schemas/(?!__init__)[^/]+\.py$', path))
+        if not (is_model or is_schema):
+            continue
+        module_dotted = path.replace("/", ".").removesuffix(".py")
+        try:
+            tree = ast.parse(content)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    if is_model:
+                        model_class_modules[node.name] = module_dotted
+                    else:
+                        schema_class_modules[node.name] = module_dotted
+        except SyntaxError:
+            pass
+
+    # Names that appear in both models/ and schemas/
+    colliding: Set[str] = set(model_class_modules) & set(schema_class_modules)
+    if not colliding:
+        return code_files
+
+    updated = dict(code_files)
+
+    _model_import_re = re.compile(
+        r'from\s+(app\.models\.[\w]+)\s+import\s+(?:\(([^)]+)\)|([^\n]+))',
+        re.MULTILINE,
+    )
+
+    for path, content in code_files.items():
+        if not _router_path_re.match(path):
+            continue
+
+        new_content = content
+        changed = False
+
+        for m in _model_import_re.finditer(content):
+            model_module = m.group(1)
+            names_raw = m.group(2) or m.group(3) or ""
+            names_in_import = []
+            for part in names_raw.split(","):
+                name = part.split(" as ")[0].strip()
+                if name and name.isidentifier() and name in colliding:
+                    names_in_import.append(name)
+
+            for sym in names_in_import:
+                alias = f"{sym}Model"
+                # Rewrite: "from app.models.x import Product" → "... import Product as ProductModel"
+                # Handle both plain name and "name as existing_alias"
+                def _alias_sym(text: str, _s: str = sym, _a: str = alias) -> str:
+                    # Replace bare symbol with aliased version in import list
+                    return re.sub(
+                        r'\b' + re.escape(_s) + r'\b(?!\s+as\b)',
+                        f'{_s} as {_a}',
+                        text,
+                    )
+                new_content = _alias_sym(new_content)
+                # Now add the schema import if not already present
+                schema_module = schema_class_modules[sym]
+                schema_import_line = f"from {schema_module} import {sym}"
+                if schema_import_line not in new_content:
+                    # Insert after the models import line
+                    new_content = new_content.replace(
+                        m.group(0),
+                        m.group(0) + f"\n{schema_import_line}",
+                        1,
+                    )
+                changed = True
+                logger.info(
+                    "disambiguate_model_schema_imports: %s — aliased '%s' from '%s' as '%s'; "
+                    "added schema import from '%s'",
+                    path, sym, model_module, alias, schema_module,
+                )
+
+        if changed:
+            updated[path] = new_content
+
+    return updated
+
+
+def _is_stub_content(content: str) -> bool:
+    """Return ``True`` when *content* is an auto-generated stub with no real implementation.
+
+    A file is considered a stub when it contains *only*:
+
+    * The ``"Generated module — replace with actual implementation."`` docstring marker.
+    * ``pass`` or ``...`` class/function bodies with no field definitions.
+    * Placeholder imports (``from typing import Any``).
+    * Empty ``__init__.py`` style files (blank or only comments).
+
+    Returns ``False`` when the file contains real field definitions (Pydantic ``Field(...)``,
+    SQLAlchemy ``Column(...)``) or annotated class attributes or substantive function bodies.
+
+    Args:
+        content: Python source code string to inspect.
+
+    Returns:
+        ``True`` if the file contains only stub/placeholder content.
+    """
+    _STUB_MARKER = "Generated module — replace with actual implementation."
+    if not content or not content.strip():
+        return True
+    # Definitive "real content" indicators — if any are present the file is not a stub.
+    _real_patterns = [
+        r'\bField\s*\(',          # Pydantic Field(...)
+        r'\bColumn\s*\(',         # SQLAlchemy Column(...)
+        r'\brelationship\s*\(',   # SQLAlchemy relationship(...)
+        r'\bvalidator\s*\(',      # Pydantic @validator
+        r'\bfield_validator\s*\(', # Pydantic v2 @field_validator
+    ]
+    for pattern in _real_patterns:
+        if re.search(pattern, content):
+            return False
+    # Stub marker → immediately a stub
+    if _STUB_MARKER in content:
+        return True
+    # Parse and inspect class/function bodies for real content
+    try:
+        tree = ast.parse(content)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                # Class has real fields if it has any AnnAssign or non-trivial Assign
+                for child in node.body:
+                    if isinstance(child, (ast.Assign, ast.AnnAssign)):
+                        return False  # Real field definition found
+                    if isinstance(child, ast.FunctionDef):
+                        # Class method with real body (not just pass/docstring/return None)
+                        for stmt in child.body:
+                            if isinstance(stmt, ast.Return):
+                                if stmt.value and not (
+                                    isinstance(stmt.value, ast.Constant) and stmt.value.value is None
+                                ):
+                                    return False
+                            elif not isinstance(stmt, (ast.Pass, ast.Expr)):
+                                return False
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                # Skip if this function is a method (handled by ClassDef loop above)
+                if any(
+                    isinstance(parent, ast.ClassDef)
+                    for parent in ast.walk(tree)
+                    if hasattr(parent, 'body') and node in getattr(parent, 'body', [])
+                ):
+                    continue
+                # Module-level function — check for real body
+                for stmt in node.body:
+                    if isinstance(stmt, ast.Return):
+                        if stmt.value and not (
+                            isinstance(stmt.value, ast.Constant) and stmt.value.value is None
+                        ):
+                            return False
+                    elif not isinstance(stmt, (ast.Pass, ast.Expr)):
+                        return False
+    except SyntaxError:
+        return False  # Don't overwrite files we can't parse
+    return True
+
+
 def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     """Scan generated Python files for local module imports and generate stubs.
 
@@ -3709,6 +4004,19 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     # Second pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
         if not symbols:
+            continue
+
+        if module_path not in code_files:
+            # Module file is entirely missing — generate a stub.
+            # Determine up-front whether any router-pattern symbols are present
+            # so the APIRouter import can be emitted once at the module header.
+            pass  # fall through to stub generation below
+        elif not _is_stub_content(code_files[module_path]):
+            # Fix 2: file already has real (non-stub) content — do NOT overwrite it.
+            logger.info(
+                "ensure_local_module_stubs: skipping %s — file already has non-stub content (%d bytes)",
+                module_path, len(code_files[module_path]),
+            )
             continue
 
         if module_path not in code_files:

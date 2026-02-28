@@ -162,8 +162,11 @@ def setup_tracing(
                     }
                 )
             else:
-                logger.debug(
-                    "OTLP collector not reachable at %s — disabling OTLP exporter to prevent log flooding",
+                # Fix 4: Clear the endpoint env var so downstream OTel SDK auto-configuration
+                # also skips the collector and stops attempting gRPC connections.
+                os.environ["OTEL_EXPORTER_OTLP_ENDPOINT"] = ""
+                logger.info(
+                    "OTLP collector at %s is not reachable — disabling trace export to prevent log spam",
                     otlp_endpoint,
                 )
         

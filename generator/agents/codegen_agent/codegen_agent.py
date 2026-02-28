@@ -47,6 +47,8 @@ from .codegen_response_handler import (
     add_traceability_comments,
     build_stub_retry_prompt_hint,
     _detect_module_package_collisions,
+    disambiguate_model_schema_imports,
+    fix_response_model_type_mismatches,
     parse_llm_response,
 )
 
@@ -589,6 +591,117 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
+async def _repair_stub_services(
+    merged_files: Dict[str, str],
+    config: Any,
+    placeholder_services: List[Tuple[str, float]],
+) -> Dict[str, str]:
+    """Fix 6: Trigger a targeted LLM pass to replace stub service functions with real ORM logic.
+
+    When ``_validate_wiring`` detects service files where >= 50 % of functions are stubs
+    (``# Dummy:``, ``return []``, ``return {}``, etc.) this function asks the LLM to produce
+    a real implementation for each such service file.  Only one repair attempt is made per
+    pipeline run to avoid infinite loops.
+
+    Args:
+        merged_files: Current merged code_files mapping.
+        config: CodegenConfig-like object with ``backend`` and ``model`` attributes.
+        placeholder_services: List of (path, pct) tuples from ``_validate_wiring``.
+
+    Returns:
+        Updated code_files mapping with repaired service files (where successful).
+    """
+    from .codegen_response_handler import parse_llm_response
+
+    high_stub_services = [
+        (path, pct)
+        for path, pct in placeholder_services
+        if pct >= _PLACEHOLDER_SERVICE_THRESHOLD_PCT
+    ]
+    if not high_stub_services:
+        return merged_files
+
+    updated = dict(merged_files)
+    repaired_count = 0
+
+    for svc_path, pct in high_stub_services:
+        svc_content = merged_files.get(svc_path, "")
+        if not svc_content:
+            continue
+
+        # Find related model, schema, and router files
+        # e.g. "app/services/product_service.py" → base_name = "product"
+        svc_stem = Path(svc_path).stem  # e.g. "product_service"
+        base_name = re.sub(r"_service$", "", svc_stem)  # e.g. "product"
+
+        related_model = merged_files.get(f"app/models/{base_name}.py", "")
+        related_schema = merged_files.get(f"app/schemas/{base_name}.py", "")
+        # Router may be plural
+        related_router = (
+            merged_files.get(f"app/routers/{base_name}s.py", "")
+            or merged_files.get(f"app/routers/{base_name}.py", "")
+        )
+
+        context_parts = [
+            f"# FILE: {svc_path}\n{svc_content}",
+        ]
+        if related_model:
+            model_path = f"app/models/{base_name}.py"
+            context_parts.append(f"# FILE: {model_path}\n{related_model}")
+        if related_schema:
+            schema_path = f"app/schemas/{base_name}.py"
+            context_parts.append(f"# FILE: {schema_path}\n{related_schema}")
+        if related_router:
+            router_path = (
+                f"app/routers/{base_name}s.py"
+                if f"app/routers/{base_name}s.py" in merged_files
+                else f"app/routers/{base_name}.py"
+            )
+            context_parts.append(f"# FILE: {router_path}\n{related_router}")
+
+        context_block = "\n\n".join(context_parts)
+        repair_prompt = (
+            f"The following service file is {pct:.0f}% placeholder stubs "
+            f"(# Dummy: comments, `return []`, `return {{}}`, `return None` bodies). "
+            f"Replace every stub function with a real SQLAlchemy async ORM implementation. "
+            f"Use the model and schema files provided as context.\n\n"
+            f"Return ONLY the repaired service file as a JSON object with key '{svc_path}'.\n\n"
+            f"{context_block}"
+        )
+
+        try:
+            from generator.runner.llm_client import call_llm_api  # local import to avoid circular
+            repair_response = await call_llm_api(
+                prompt=repair_prompt,
+                provider=config.backend,
+                model=config.model.get(config.backend) if hasattr(config, "model") else None,
+                response_format={"type": "json_object"},
+                skip_cache=True,
+            )
+            repair_files = parse_llm_response(repair_response)
+            if svc_path in repair_files and repair_files[svc_path].strip():
+                updated[svc_path] = _ast_merge_python_files(
+                    merged_files[svc_path], repair_files[svc_path]
+                )
+                repaired_count += 1
+                logger.info(
+                    "[CODEGEN] Service repair pass: regenerated stub service '%s' with real ORM logic",
+                    svc_path,
+                )
+        except Exception as _repair_err:
+            logger.warning(
+                "[CODEGEN] Service repair pass failed for '%s' (non-fatal): %s",
+                svc_path, _repair_err,
+            )
+
+    if repaired_count:
+        logger.info(
+            "[CODEGEN] Service repair pass: regenerated %d stub service(s) with real ORM logic",
+            repaired_count,
+        )
+    return updated
+
+
 def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     """Post-ensemble reconciliation: wire discovered routers into main.py (no LLM needed).
 
@@ -651,10 +764,7 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         )
 
     if not router_modules:
-        return updated  # Nothing to wire — return unchanged
-
-    # ------------------------------------------------------------------ #
-    # 2. Rebuild the router package __init__.py                           #
+        return updated  # Nothing to wire — return unchanged                           #
     # ------------------------------------------------------------------ #
     # All discovered routers share the same parent directory; derive it
     # from the first entry (mixed-directory projects are not supported).
@@ -1129,6 +1239,11 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
                 dep_name,
                 path,
             )
+
+    # Fix 1 & 3: After all router wiring is done, fix response_model type mismatches
+    # and disambiguate models/ vs schemas/ name collisions in router files.
+    updated = fix_response_model_type_mismatches(updated)
+    updated = disambiguate_model_schema_imports(updated)
 
     return updated
 
@@ -3017,9 +3132,11 @@ if PLUGIN_AVAILABLE:
                             # Wiring validation: log warnings for placeholder services and
                             # any routers that are not yet mounted in main.py.
                             # ------------------------------------------------------------------
+                            _placeholder_svcs: List[Tuple[str, float]] = []
                             try:
                                 _wiring = _validate_wiring(_merged_files)
-                                for _svc_path, _pct in _wiring["placeholder_services"]:
+                                _placeholder_svcs = _wiring["placeholder_services"]
+                                for _svc_path, _pct in _placeholder_svcs:
                                     logger.warning(
                                         "[CODEGEN] Placeholder service detected in %s "
                                         "(%.0f%% of functions appear to be stubs) — "
@@ -3035,6 +3152,19 @@ if PLUGIN_AVAILABLE:
                                     )
                             except Exception as _val_err:
                                 logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")
+                            # ------------------------------------------------------------------
+                            # Fix 6: Stub service repair — replace placeholder stubs with real
+                            # ORM logic via a targeted LLM call (1 attempt, non-blocking).
+                            # ------------------------------------------------------------------
+                            if _placeholder_svcs:
+                                try:
+                                    _merged_files = await _repair_stub_services(
+                                        _merged_files, config, _placeholder_svcs
+                                    )
+                                except Exception as _repair_err:
+                                    logger.warning(
+                                        f"[CODEGEN] Stub service repair pass failed (non-fatal): {_repair_err}"
+                                    )
                             # ------------------------------------------------------------------
                             # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
                             # ------------------------------------------------------------------
@@ -3531,9 +3661,11 @@ else:
                             # Wiring validation: log warnings for placeholder services and
                             # any routers that are not yet mounted in main.py.
                             # ------------------------------------------------------------------
+                            _placeholder_svcs: List[Tuple[str, float]] = []
                             try:
                                 _wiring = _validate_wiring(_merged_files)
-                                for _svc_path, _pct in _wiring["placeholder_services"]:
+                                _placeholder_svcs = _wiring["placeholder_services"]
+                                for _svc_path, _pct in _placeholder_svcs:
                                     logger.warning(
                                         "[CODEGEN] Placeholder service detected in %s "
                                         "(%.0f%% of functions appear to be stubs) — "
@@ -3549,6 +3681,19 @@ else:
                                     )
                             except Exception as _val_err:
                                 logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")
+                            # ------------------------------------------------------------------
+                            # Fix 6: Stub service repair — replace placeholder stubs with real
+                            # ORM logic via a targeted LLM call (1 attempt, non-blocking).
+                            # ------------------------------------------------------------------
+                            if _placeholder_svcs:
+                                try:
+                                    _merged_files = await _repair_stub_services(
+                                        _merged_files, config, _placeholder_svcs
+                                    )
+                                except Exception as _repair_err:
+                                    logger.warning(
+                                        f"[CODEGEN] Stub service repair pass failed (non-fatal): {_repair_err}"
+                                    )
                             # ------------------------------------------------------------------
                             # Post-ensemble reconciliation: wire routers into main.py (no LLM needed)
                             # ------------------------------------------------------------------
