@@ -84,6 +84,11 @@ except ImportError:
 
 secrets_manager = SecretsManager()
 load_dotenv()
+
+# Fix 5: In-memory circuit breaker for the GCP NLP API.
+# Set to True when the API returns a 403 or is explicitly disabled via ENABLE_GCP_NLP=false,
+# so subsequent calls in the same process don't retry a known-broken endpoint.
+_gcp_nlp_disabled: bool = os.getenv("ENABLE_GCP_NLP", "").lower() == "false"
 # Get module logger - follows Python logging best practices.
 # Do NOT call basicConfig() at module level to avoid duplicate logs.
 
@@ -1221,8 +1226,21 @@ async def translate_requirements_if_needed(
     """
     Translates non-English requirements to English using the Google Cloud Translate API.
     """
+    global _gcp_nlp_disabled
+
     features = requirements.get("features", [])
     if not features:
+        return requirements
+
+    # Fix 5: Early exit when GCP NLP is explicitly disabled or circuit breaker is open.
+    if _gcp_nlp_disabled:
+        logger.debug("GCP NLP API not configured or previously failed — skipping language detection")
+        return requirements
+
+    # Respect explicit opt-out via ENABLE_GCP_NLP=false env var.
+    _enable_env = os.getenv("ENABLE_GCP_NLP", "").lower()
+    if _enable_env == "false":
+        logger.debug("GCP NLP API not configured — skipping language detection")
         return requirements
 
     try:
@@ -1270,11 +1288,13 @@ async def translate_requirements_if_needed(
         error_msg = str(e)
         error_msg = re.sub(r'key=[^&\s]+', 'key=REDACTED', error_msg)
         if "403" in error_msg or "Forbidden" in error_msg:
+            # Fix 5: Trip the circuit breaker so subsequent calls skip this API.
+            _gcp_nlp_disabled = True
             logger.warning(
                 "Google Cloud Language API returned 403 Forbidden. "
                 "Ensure the Cloud Natural Language API is enabled in your GCP project "
                 "and the API key has permission to access it. "
-                "Falling back to default language detection."
+                "Disabling GCP NLP for the remainder of this process."
             )
         else:
             logger.error(f"Language detection/translation failed: {error_msg}")

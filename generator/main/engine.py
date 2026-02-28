@@ -1637,6 +1637,39 @@ class WorkflowEngine:
                                 result["stages_completed"].append("validate:soft_fail")
                                 # Do NOT break — continue in soft-fail mode
                         
+                        # Fix 7: Ensure critique_report.json always exists after validation,
+                        # even when validation soft-fails and the critique stage was skipped.
+                        if output_path:
+                            try:
+                                _reports_dir = Path(output_path) / "reports"
+                                _reports_dir.mkdir(parents=True, exist_ok=True)
+                                _critique_report_path = _reports_dir / "critique_report.json"
+                                if not _critique_report_path.exists():
+                                    _critique_data = result.get("agent_results", {}).get("critique", {})
+                                    _critique_report = {
+                                        "job_id": workflow_id,
+                                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                                        "status": (
+                                            "skipped"
+                                            if not _critique_data
+                                            else _critique_data.get("status", "unknown")
+                                        ),
+                                        "reason": (
+                                            "Pipeline validation failed before critique stage"
+                                            if not _critique_data
+                                            else None
+                                        ),
+                                        "issues": _critique_data.get("issues", []),
+                                        "fixes_applied": _critique_data.get("fixes_applied", []),
+                                    }
+                                    _critique_report_path.write_text(
+                                        json.dumps(_critique_report, indent=2),
+                                        encoding="utf-8",
+                                    )
+                                    logger.info("[STAGE:CRITIQUE] Created reports/critique_report.json (fallback)")
+                            except Exception as _cr_err:
+                                logger.warning(f"[STAGE:CRITIQUE] Could not create critique_report.json: {_cr_err}")
+
                         # [STAGE:TESTGEN & DEPLOY_GEN] Execute in parallel for faster pipeline
                         # Deploy only depends on codegen output, so it can run alongside testgen
                         testgen_task = None

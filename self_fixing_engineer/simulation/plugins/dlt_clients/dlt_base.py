@@ -527,8 +527,34 @@ try:
         from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
             OTLPSpanExporter,
         )
+        from opentelemetry.sdk.trace.export import ConsoleSpanExporter as _ConsoleExporter
 
-        exporter = OTLPSpanExporter(endpoint="localhost:4317", insecure=True)
+        # Fix 4: probe the OTLP endpoint before attaching the exporter so that
+        # gRPC connection failures don't flood the logs when no collector is running.
+        import os as _os
+        import socket as _sock
+        _otlp_endpoint = _os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "localhost:4317")
+        _otlp_host = _otlp_endpoint.split("//")[-1].split(":")[0] or "localhost"
+        try:
+            _otlp_port_str = _otlp_endpoint.rsplit(":", 1)[-1]
+            _otlp_port = int(_otlp_port_str) if _otlp_port_str.isdigit() else 4317
+        except (ValueError, IndexError):
+            _otlp_port = 4317
+        _otlp_reachable = False
+        try:
+            with _sock.create_connection((_otlp_host, _otlp_port), timeout=2):
+                _otlp_reachable = True
+        except Exception:
+            _otlp_reachable = False
+
+        if _otlp_reachable:
+            exporter = OTLPSpanExporter(endpoint=_otlp_endpoint, insecure=True)
+        else:
+            exporter = _ConsoleExporter()
+            _base_logger.info(
+                "OTLP collector at %s:%s is not reachable — using ConsoleSpanExporter for DLT tracing",
+                _otlp_host, _otlp_port,
+            )
     except ImportError:
         # OTLP exporter not available, try Console exporter as fallback
         from opentelemetry.sdk.trace.export import ConsoleSpanExporter
