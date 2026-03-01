@@ -97,7 +97,7 @@ def test_auto_wire_wire_calls_after_fastapi_instantiation(tmp_path: Path) -> Non
     assert wire_pos > fastapi_pos
 
 
-def test_auto_wire_skipped_when_already_wired(tmp_path: Path) -> None:
+def test_auto_wire_adds_prefix_when_wired_without_prefix(tmp_path: Path) -> None:
     """Phase 8 adds a missing /api/v1/ prefix to routers already wired without one."""
     app_dir = tmp_path / "app"
     app_dir.mkdir()

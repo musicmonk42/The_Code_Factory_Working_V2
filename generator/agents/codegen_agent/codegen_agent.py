@@ -1482,9 +1482,13 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         {"health", "healthz", "readyz", "root", "index", "ws", "websocket"}
     )
     # Detect whether this project uses /api/v1/ paths (REST API heuristic).
+    # Scope the scan to router/route files and the existing main.py to avoid
+    # O(N) scans over non-code assets (templates, static files, etc.).
+    _API_V1_SCAN_RE = re.compile(r'^app/(?:routers?|routes?|main).*\.py$')
     _has_api_v1 = any(
         "/api/v1/" in content
-        for content in updated.values()
+        for path, content in updated.items()
+        if _API_V1_SCAN_RE.match(path)
     )
     for rm in router_modules:
         if rm['prefix']:

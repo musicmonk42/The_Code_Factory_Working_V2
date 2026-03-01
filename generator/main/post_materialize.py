@@ -389,17 +389,31 @@ def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
     if not unwired_modules:
         # All routers are imported — but some may be wired WITHOUT a prefix.
         # Do a second pass to inject missing prefixes into existing include_router calls.
+        # Use regex so we only match real code tokens and correctly detect when a prefix
+        # is already present (even with other kwargs like tags=[...] in between).
         updated_content = main_content
         for mod in router_modules:
             if mod in _NO_PREFIX_STEMS:
                 continue
-            bare_pattern = f"app.include_router({mod}_router)"
-            prefixed_pattern = f"app.include_router({mod}_router, prefix="
-            if bare_pattern in updated_content and prefixed_pattern not in updated_content:
-                updated_content = updated_content.replace(
-                    bare_pattern,
-                    f'app.include_router({mod}_router, prefix="/api/v1/{mod}")',
-                )
+            router_var = f"{mod}_router"
+            # Skip if this router's include_router call already has a prefix= kwarg.
+            _already_prefixed_re = re.compile(
+                r'app\.include_router\s*\(\s*' + re.escape(router_var) + r'[^)]*prefix\s*='
+            )
+            if _already_prefixed_re.search(updated_content):
+                continue
+            # Match the bare include_router call: `app.include_router(<mod>_router)`
+            # with no additional kwargs.  The closing `)` must immediately follow the
+            # router variable (modulo optional whitespace) to avoid matching calls
+            # that already carry other keyword arguments without a prefix.
+            _bare_re = re.compile(
+                r'(app\.include_router\s*\(\s*' + re.escape(router_var) + r'\s*\))'
+            )
+            def _add_prefix(m: re.Match) -> str:  # noqa: E306
+                return f'app.include_router({router_var}, prefix="/api/v1/{mod}")'
+            new_content, n_subs = _bare_re.subn(_add_prefix, updated_content)
+            if n_subs:
+                updated_content = new_content
                 logger.info(
                     "%s Added missing prefix to existing include_router(%s_router) in main.py",
                     _STAGE,

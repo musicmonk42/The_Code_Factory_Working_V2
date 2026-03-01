@@ -1323,9 +1323,9 @@ def validate_spec_fidelity(
 
             Strips leading/trailing whitespace and slashes, lowercases, removes
             the ``/api/v{N}`` version prefix (so ``/api/v1/orders`` and
-            ``/orders`` compare as equal), and replaces path parameters with a
-            canonical placeholder so ``{id}`` and ``{product_id}`` compare as
-            equal.
+            ``/orders`` compare as equal), and replaces every path parameter
+            with the canonical placeholder ``{_}`` so ``{id}``,
+            ``{product_id}``, and ``{order_id}`` all compare as equal.
             """
             normalized = path.strip().rstrip('/').lower()
             # Strip /api/v{N} prefix so /api/v1/orders and /orders compare as equal

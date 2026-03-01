@@ -5090,18 +5090,14 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
         if not symbols:
             continue
 
-        # Redirect Pydantic schema stubs away from app/models/ when all upper-cased
-        # symbols look like DTOs.  E.g. app/models/ordercreate.py → app/schemas/order.py
-        if (
-            "/models/" in module_path
-            and "/schemas/" not in module_path
-            and all(
-                not sym[0].isupper() or _should_redirect_to_schemas(module_path, sym)
-                for sym in symbols
-                if sym and sym[0].isupper()
-            )
-            and any(sym[0].isupper() for sym in symbols if sym)
-        ):
+        # Redirect Pydantic schema stubs away from app/models/ when every
+        # upper-cased symbol carries a DTO suffix (e.g. OrderCreate, ProductRead).
+        # Use a separate variable so the loop variable is never silently mutated.
+        _uppercase_syms = [sym for sym in symbols if sym and sym[0].isupper()]
+        _all_pydantic = bool(_uppercase_syms) and all(
+            _should_redirect_to_schemas(module_path, sym) for sym in _uppercase_syms
+        )
+        if _all_pydantic:
             # Derive entity base name by stripping the Pydantic suffix from the stem.
             _stem = module_path.rsplit("/", 1)[-1].removesuffix(".py")
             for _sfx in _PYDANTIC_SCHEMA_SUFFIXES:
@@ -5109,29 +5105,30 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 if _stem.endswith(_sfx_lower):
                     _stem = _stem[: -len(_sfx_lower)]
                     break
-            _redirected_path = "app/schemas/" + _stem + ".py"
+            target_module_path = "app/schemas/" + _stem + ".py"
             logger.info(
                 "ensure_local_module_stubs: redirecting Pydantic schema stub from"
                 " %s → %s",
                 module_path,
-                _redirected_path,
+                target_module_path,
             )
-            module_path = _redirected_path  # noqa: PLW2901
+        else:
+            target_module_path = module_path
 
-        if module_path not in code_files:
+        if target_module_path not in code_files:
             # Module file is entirely missing — generate a stub.
             # Determine up-front whether any router-pattern symbols are present
             # so the APIRouter import can be emitted once at the module header.
             pass  # fall through to stub generation below
-        elif not _is_stub_content(code_files[module_path]):
+        elif not _is_stub_content(code_files[target_module_path]):
             # Fix 2: file already has real (non-stub) content — do NOT overwrite it.
             logger.info(
                 "ensure_local_module_stubs: skipping %s — file already has non-stub content (%d bytes)",
-                module_path, len(code_files[module_path]),
+                target_module_path, len(code_files[target_module_path]),
             )
             continue
 
-        if module_path not in code_files:
+        if target_module_path not in code_files:
             # Module file is entirely missing — generate a stub.
             # Determine up-front whether any router-pattern symbols are present
             # so the APIRouter import can be emitted once at the module header.
@@ -5141,11 +5138,11 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Issue 1 fix: distinguish ORM model files from Pydantic schema files.
             # Files under models/ (but not schemas/) should use SQLAlchemy Base,
             # not pydantic.BaseModel, because service layers use ORM patterns.
-            _is_sqlalchemy_module = "/models/" in module_path and "/schemas/" not in module_path
+            _is_sqlalchemy_module = "/models/" in target_module_path and "/schemas/" not in target_module_path
             # Pydantic is appropriate only for schemas/ files or suffix-matched names.
             _is_pydantic_module = (
-                "schemas" in module_path
-                or (not _is_sqlalchemy_module and "/models/" in module_path)
+                "schemas" in target_module_path
+                or (not _is_sqlalchemy_module and "/models/" in target_module_path)
             )
             has_pydantic_class = any(
                 sym[0].isupper() and (
@@ -5242,11 +5239,11 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     "            await session.rollback()\n"
                     "            raise\n"
                 )
-                code_files[module_path] = db_stub
-                stub_files_created.add(module_path)
+                code_files[target_module_path] = db_stub
+                stub_files_created.add(target_module_path)
                 logger.info(
                     "ensure_local_module_stubs: created database module %s with symbols %s",
-                    module_path,
+                    target_module_path,
                     sorted(symbols),
                 )
                 continue
@@ -5258,22 +5255,22 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # When field hints are available for classes in this module, skip the
             # template and use the inline code that produces spec-aware stubs.
             # ------------------------------------------------------------------
-            _stub_category = _classify_stub_module(module_path, symbols)
-            _module_field_hints_check = class_field_hints.get(module_path, {})
+            _stub_category = _classify_stub_module(target_module_path, symbols)
+            _module_field_hints_check = class_field_hints.get(target_module_path, {})
             _has_field_hints = any(
                 bool(_module_field_hints_check.get(sym))
                 for sym in symbols if sym and sym[0].isupper()
             )
             if _stub_category not in ("service", "generic", "database") and not _has_field_hints:
-                _rendered = _render_stub_template(_stub_category, module_path, symbols)
+                _rendered = _render_stub_template(_stub_category, target_module_path, symbols)
                 if _rendered is not None:
-                    code_files[module_path] = _rendered
-                    stub_files_created.add(module_path)
+                    code_files[target_module_path] = _rendered
+                    stub_files_created.add(target_module_path)
                     logger.info(
                         "ensure_local_module_stubs: created %s stub module %s"
                         " with symbols %s (template)",
                         _stub_category,
-                        module_path,
+                        target_module_path,
                         sorted(symbols),
                     )
                     continue
@@ -5294,7 +5291,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
             # Field hints for this module (detected from importing files)
-            _module_field_hints = class_field_hints.get(module_path, {})
+            _module_field_hints = class_field_hints.get(target_module_path, {})
             for sym in sorted(symbols):
                 # Uppercase initial → class; router variable → None assignment;
                 # other known variable suffixes → None variable;
@@ -5359,7 +5356,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                                 + (_attr_lines if _attr_lines else "    pass\n")
                                 + "\n\n"
                             )
-                            _stub_class_names.setdefault(module_path, set()).add(sym)
+                            _stub_class_names.setdefault(target_module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
                         f"{sym} = APIRouter()\n\n\n"
@@ -5374,16 +5371,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         f'    """Placeholder implementation."""\n'
                         f"    return None\n\n\n"
                     )
-            code_files[module_path] = "".join(stub_lines)
-            stub_files_created.add(module_path)
+            code_files[target_module_path] = "".join(stub_lines)
+            stub_files_created.add(target_module_path)
             logger.info(
                 "ensure_local_module_stubs: created stub module %s with symbols %s",
-                module_path,
+                target_module_path,
                 sorted(symbols),
             )
         else:
             # Module exists — identify and append any missing symbols.
-            existing_content = code_files[module_path]
+            existing_content = code_files[target_module_path]
             try:
                 tree = ast.parse(existing_content)
                 # Collect names from function/class definitions at any nesting depth.
@@ -5414,10 +5411,10 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     if not sym[0].isupper()
                 )
                 # Issue 1 fix: distinguish ORM model files from Pydantic schema files.
-                _is_sqlalchemy_module = "/models/" in module_path and "/schemas/" not in module_path
+                _is_sqlalchemy_module = "/models/" in target_module_path and "/schemas/" not in target_module_path
                 _is_pydantic_module = (
-                    "schemas" in module_path
-                    or (not _is_sqlalchemy_module and "/models/" in module_path)
+                    "schemas" in target_module_path
+                    or (not _is_sqlalchemy_module and "/models/" in target_module_path)
                 )
                 has_sqlalchemy_missing = _is_sqlalchemy_module and any(
                     sym[0].isupper() for sym in missing
@@ -5463,7 +5460,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                                     f'    """Stub class."""\n'
                                     f"    pass\n"
                                 )
-                                _stub_class_names.setdefault(module_path, set()).add(sym)
+                                _stub_class_names.setdefault(target_module_path, set()).add(sym)
                     elif _is_router_variable(sym):
                         appended_lines.append(
                             f"\n{sym} = APIRouter()\n"
@@ -5478,12 +5475,12 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f'    """Placeholder implementation."""\n'
                             f"    return None\n"
                         )
-                code_files[module_path] = existing_content + "".join(appended_lines)
-                stub_files_created.add(module_path)
+                code_files[target_module_path] = existing_content + "".join(appended_lines)
+                stub_files_created.add(target_module_path)
                 logger.info(
                     "ensure_local_module_stubs: appended stubs for %s to %s",
                     sorted(missing),
-                    module_path,
+                    target_module_path,
                 )
 
     # Third pass: detect methods referenced on instances of stub classes and inject
@@ -5496,7 +5493,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     # prevent the caller from receiving the already-valid code_files dict.
     if _stub_class_names:
         try:
-            # Build reverse mapping: class_name -> module_path.
+            # Build reverse mapping: class_name -> target_module_path.
             # Guard: skip if all stub class sets were empty (avoids empty-alternation regex).
             _class_to_module: Dict[str, str] = {
                 _cls: _mod_path
@@ -5510,7 +5507,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     r"^[ \t]*([A-Za-z_]\w*)\s*=\s*(" + _cls_alt + r")\s*\(",
                     re.MULTILINE,
                 )
-                # Maps variable_name -> (class_name, module_path)
+                # Maps variable_name -> (class_name, target_module_path)
                 _instance_vars: Dict[str, Tuple[str, str]] = {}
                 for _content in code_files.values():
                     for _m in _instantiation_re.finditer(_content):
@@ -5519,7 +5516,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                         )
 
                 if _instance_vars:
-                    # Maps (module_path, class_name) -> {method_name: is_async}
+                    # Maps (target_module_path, class_name) -> {method_name: is_async}
                     _methods_to_inject: Dict[Tuple[str, str], Dict[str, bool]] = {}
                     for _var, (_cls, _mod_path) in _instance_vars.items():
                         _ev = re.escape(_var)
