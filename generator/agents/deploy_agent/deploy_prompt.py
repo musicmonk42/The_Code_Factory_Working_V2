@@ -242,6 +242,18 @@ FEW_SHOT_USAGE = get_or_create_metric(
     "Total few-shot examples used in prompts",
     ["target", "variant"],
 )
+TEMPLATE_LOADS = get_or_create_metric(
+    Counter,
+    "deploy_prompt_template_loads_total",
+    "Total number of prompt templates loaded",
+    ["target", "variant"],
+)
+prompt_tokens_generated = get_or_create_metric(
+    Histogram,
+    "deploy_prompt_tokens_generated",
+    "Number of tokens in generated prompts",
+    ["target", "variant"],
+)
 # --- Security: Sensitive Data Scrubbing ---
 # Define common sensitive patterns for regex fallback if Presidio is not available or fails.
 COMMON_SECRET_PATTERNS = [
