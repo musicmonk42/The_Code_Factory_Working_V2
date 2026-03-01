@@ -197,6 +197,18 @@ handler_errors = get_or_create_metric(
     "Total handler errors by format, operation and error type",
     ["format", "operation", "error_type"],
 )
+handler_latency = get_or_create_metric(
+    Gauge,
+    "deploy_response_handler_latency_seconds",
+    "Operation latency in seconds",
+    ["format", "operation"],
+)
+scan_findings_gauge = get_or_create_metric(
+    Gauge,
+    "deploy_handler_scan_findings_gauge",
+    "Current number of scan findings by format and type",
+    ["format", "finding_type"],
+)
 # --- ADDED: Constants and Functions for Test Fixes ---
 ERROR_FILENAME = "error.txt"
 

@@ -125,6 +125,12 @@ issue_total_found = get_or_create_metric(
     "Total issues found by target and category",
     ["target", "issue_type_category"],
 )
+issue_count_gauge = get_or_create_metric(
+    Gauge,
+    "deploy_validator_issue_count_gauge",
+    "Current number of findings by target and category",
+    ["target", "issue_type_category"],
+)
 # --- Security: PII/Secret & Dangerous Config Scanning Patterns ---
 # NOTE: This DANGEROUS_CONFIG_PATTERNS is now used by the *imported* scan_config_for_findings
 DANGEROUS_CONFIG_PATTERNS = {
