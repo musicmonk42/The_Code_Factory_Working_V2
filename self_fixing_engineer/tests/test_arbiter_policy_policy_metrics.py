@@ -25,12 +25,12 @@ import threading
 import pytest
 from prometheus_client import Counter, Gauge, Histogram, Summary, generate_latest
 
-sys.modules["..guardrails.compliance_mapper"] = __import__("types").SimpleNamespace(
-    load_compliance_map=lambda: {
-        "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
-        "FAKE-2": {"name": "FakeOptional", "status": "logged", "required": False},
-    }
-)
+_compliance_mapper_mod = __import__("types").ModuleType("guardrails.compliance_mapper")
+_compliance_mapper_mod.load_compliance_map = lambda: {
+    "FAKE-1": {"name": "FakeControl", "status": "enforced", "required": True},
+    "FAKE-2": {"name": "FakeOptional", "status": "logged", "required": False},
+}
+sys.modules["..guardrails.compliance_mapper"] = _compliance_mapper_mod
 
 from self_fixing_engineer.arbiter.policy.metrics import (
     COMPLIANCE_CONTROL_ACTIONS_TOTAL,

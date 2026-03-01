@@ -609,7 +609,7 @@ class ArbiterConfig(BaseSettings):
                 new_config = type(self)(_env_file=self.model_config.get("env_file"))
 
                 # Atomically update all fields from the reloaded config
-                for field in self.model_fields:
+                for field in type(self).model_fields:
                     if hasattr(new_config, field):
                         setattr(self, field, getattr(new_config, field))
 
@@ -646,7 +646,7 @@ class ArbiterConfig(BaseSettings):
 
                 result = self.model_dump()
                 for key, value in result.items():
-                    if isinstance(self.model_fields[key].default, SecretStr) or key in [
+                    if isinstance(type(self).model_fields[key].default, SecretStr) or key in [
                         "ENCRYPTION_KEY",
                         "OPENAI_API_KEY",
                         "ANTHROPIC_API_KEY",
