@@ -384,6 +384,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Using direct binary download for better cross-platform compatibility
 # (APT repository may not support all Debian versions like 'trixie')
 # TRIVY_VERSION can be overridden at build time to pin a specific version
+# DIAGNOSTIC (temporary): sha256sum verification is intentionally replaced with a plain
+# sha256sum print so the real checksum is visible in build logs.
+# TODO: Restore verification once the correct TRIVY_SHA256 is confirmed from the log output.
 # When changing TRIVY_VERSION, update TRIVY_SHA256 from trivy_<version>_checksums.txt
 ARG TRIVY_VERSION=0.69.1
 RUN curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" && \
