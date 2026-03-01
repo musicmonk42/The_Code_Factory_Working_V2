@@ -1220,6 +1220,21 @@ class ArbiterExplorer:
         self._lock = threading.Lock()
         logger.info("ArbiterExplorer initialized.")
 
+    def _create_mutated_agent(self, base_agent: Any, generation: int) -> Any:
+        """Return a mutated copy of *base_agent* for the given *generation*.
+
+        For dict-based agents a shallow copy is made with a ``_generation``
+        field injected so each mutant is distinguishable.  For object-based
+        agents the name is suffixed with the generation number.
+        """
+        import copy
+        if isinstance(base_agent, dict):
+            mutant = copy.copy(base_agent)
+            mutant["_generation"] = generation
+            return mutant
+        # Object-based agents: delegate to MutatedAgent as Explorer does
+        return MutatedAgent(getattr(base_agent, "name", "BaseAgent"), generation)
+
     async def run_ab_test(
         self,
         experiment_name: str,
@@ -1336,16 +1351,22 @@ class ArbiterExplorer:
                         result = await self.sandbox_env.test_agent(agent)
                         scores.append(score)
 
+                    best_score = max(scores) if scores else 0
+                    best_agent = current_population[scores.index(best_score)] if scores else initial_agent
+
                     generations.append(
                         {
                             "generation": gen,
                             "scores": scores,
-                            "best_score": max(scores) if scores else 0,
+                            "best_score": best_score,
                         }
                     )
 
-                    # Create next generation (simplified mutation)
-                    current_population = [initial_agent] * population_size
+                    # Create next generation with elitism + mutation (fix for cloning bug)
+                    next_population = [best_agent]
+                    for _ in range(population_size - 1):
+                        next_population.append(self._create_mutated_agent(best_agent, gen))
+                    current_population = next_population
 
                 except Exception as e:
                     logger.error(

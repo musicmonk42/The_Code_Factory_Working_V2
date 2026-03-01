@@ -1872,7 +1872,25 @@ else:
             try:
                 from self_fixing_engineer.evolution import GeneticEvolutionEngine
                 self.evolution_engine = GeneticEvolutionEngine()
-                self.evolution_engine.initialize_population()
+                # Attempt to restore persisted population from disk (Issue 8)
+                _pop_path = os.path.join(
+                    self.settings.REPORTS_DIRECTORY, "evolution_population.json"
+                )
+                if os.path.exists(_pop_path):
+                    try:
+                        self.evolution_engine.load_population(_pop_path)
+                        logger.info(
+                            f"[{name}] GeneticEvolutionEngine: restored population from "
+                            f"{_pop_path} (gen={self.evolution_engine.generation})"
+                        )
+                    except Exception as _load_err:
+                        logger.warning(
+                            f"[{name}] Could not load GA population from {_pop_path}: "
+                            f"{_load_err}. Initializing fresh population."
+                        )
+                        self.evolution_engine.initialize_population()
+                else:
+                    self.evolution_engine.initialize_population()
                 logger.info(f"[{name}] GeneticEvolutionEngine initialized")
             except Exception as e:
                 logger.warning(f"[{name}] Could not initialize GeneticEvolutionEngine: {e}")
@@ -2400,7 +2418,111 @@ else:
         def is_alive(self) -> bool:
             """Checks if the agent has energy to perform actions."""
             return self.state_manager.energy > 0
-    
+
+        def get_rl_status(self) -> Dict[str, Any]:
+            """Return a dict describing which RL components are active vs. disabled.
+
+            Exposes the health of the RL stack so operators can quickly diagnose
+            why PPO training or genetic evolution may be skipped.
+            """
+            return {
+                "gymnasium_available": GYM_AVAILABLE,
+                "stable_baselines3_available": STABLE_BASELINES3_AVAILABLE,
+                "sklearn_available": SKLEARN_AVAILABLE,
+                "code_health_env_initialized": self.code_health_env is not None,
+                "evolution_engine_initialized": getattr(self, "evolution_engine", None) is not None,
+                "rl_policy_loaded": "rl_policy" in self.engines,
+                "ppo_training_active": (
+                    GYM_AVAILABLE
+                    and STABLE_BASELINES3_AVAILABLE
+                    and self.code_health_env is not None
+                ),
+            }
+
+        def _collect_real_metrics(self) -> Any:
+            """Collect real platform metrics for GA fitness evaluation.
+
+            Tries (in order):
+            1. ``code_health_env.get_current_metrics()`` — live RL env metrics.
+            2. ``state_manager.memory`` events — heuristic pass/generation/critique rates.
+
+            Falls back to per-field defaults only for fields that cannot be
+            computed.  Emits a WARNING log whenever defaults are used so operators
+            know the GA is running on degraded data.
+
+            Returns a SimpleNamespace with the fields expected by
+            ``GeneticEvolutionEngine.evaluate_fitness()``.
+            """
+            from types import SimpleNamespace
+
+            defaults: Dict[str, float] = {
+                "pass_rate": 0.0,
+                "code_coverage": 0.0,
+                "complexity": 0.5,
+                "generation_success_rate": 0.0,
+                "critique_score": 0.0,
+            }
+            gathered: Dict[str, float] = {}
+
+            # 1. Try the live RL environment
+            if self.code_health_env and hasattr(self.code_health_env, "get_current_metrics"):
+                try:
+                    env_metrics = self.code_health_env.get_current_metrics()
+                    if env_metrics is not None:
+                        for k in defaults:
+                            v = getattr(env_metrics, k, None)
+                            if v is not None:
+                                gathered[k] = float(v)
+                except Exception as _me:
+                    logger.warning(
+                        f"[{self.name}] CodeHealthEnv.get_current_metrics() failed: {_me}"
+                    )
+
+            # 2. Fill remaining fields from state_manager memory events
+            memory_events = list(getattr(self.state_manager, "memory", []))
+            if memory_events:
+                outcomes = [
+                    e for e in memory_events if e.get("event_type") == "action_outcome"
+                ]
+                if outcomes and "pass_rate" not in gathered:
+                    successes = sum(1 for e in outcomes if e.get("outcome") == "success")
+                    gathered["pass_rate"] = successes / len(outcomes)
+
+                gen_events = [
+                    e for e in memory_events
+                    if e.get("event_type") in ("generate", "generation_complete")
+                ]
+                if gen_events and "generation_success_rate" not in gathered:
+                    gen_successes = sum(
+                        1 for e in gen_events if e.get("outcome") == "success"
+                    )
+                    gathered["generation_success_rate"] = gen_successes / len(gen_events)
+
+                critique_events = [
+                    e for e in memory_events if e.get("event_type") == "critique"
+                ]
+                if critique_events and "critique_score" not in gathered:
+                    scores = [
+                        e.get("score", 0.0)
+                        for e in critique_events
+                        if isinstance(e.get("score"), (int, float))
+                    ]
+                    if scores:
+                        gathered["critique_score"] = sum(scores) / len(scores)
+
+            # Apply per-field defaults and warn for missing fields
+            missing = [k for k in defaults if k not in gathered]
+            for k in missing:
+                gathered[k] = defaults[k]
+
+            if missing:
+                logger.warning(
+                    f"[{self.name}] GA evolution using default values for metrics: {missing}. "
+                    "RL training may be degraded. Ensure CodeHealthEnv and job history are populated."
+                )
+
+            return SimpleNamespace(**gathered)
+
         def log_event(self, event_description: str, event_type: str = "general"):
             """Logs an event to the monitor and the logger."""
             # The Monitor.log_action may be async (if using the internal Monitor class)
@@ -2439,13 +2561,19 @@ else:
                     self.log_event("Initiating evolution cycle...", "evolve_start")
                     await self.publish_to_omnicore("evolve_start", {"agent": self.name})
     
-                    if self.audit_log_manager:
+                    _evolution_backend = os.getenv("EVOLUTION_BACKEND", "auto").lower()
+                    _deap_succeeded = False
+                    if self.audit_log_manager and _evolution_backend != "custom":
                         try:
                             best_config = evolve_configs(
                                 audit_logger=self.audit_log_manager,
                                 # IB-2: read from env so K8s/Helm/Compose configs take effect
                                 generations=int(os.getenv("EVOLUTION_GENERATIONS", "5")),
                                 pop_size=int(os.getenv("EVOLUTION_POPULATION_SIZE", "10")),
+                            )
+                            _deap_succeeded = True
+                            logger.info(
+                                f"[{self.name}] Evolution backend: deap (EVOLUTION_BACKEND={_evolution_backend})"
                             )
                             self.log_event(
                                 f"GA found optimal configuration: {best_config}",
@@ -2462,12 +2590,30 @@ else:
                                 "ga_failure", {"agent": self.name, "error": str(e)}
                             )
     
-                    if (
+                    _rl_ready = (
                         self.code_health_env
                         and STABLE_BASELINES3_AVAILABLE
                         and GYM_AVAILABLE
                         and ENVS_AVAILABLE
-                    ):
+                    )
+                    if not _rl_ready:
+                        if not GYM_AVAILABLE:
+                            logger.warning(
+                                f"[{self.name}] PPO training skipped: gymnasium not installed"
+                            )
+                        if not STABLE_BASELINES3_AVAILABLE:
+                            logger.warning(
+                                f"[{self.name}] PPO training skipped: stable_baselines3 not installed"
+                            )
+                        if not ENVS_AVAILABLE:
+                            logger.warning(
+                                f"[{self.name}] PPO training skipped: envs package not available"
+                            )
+                        if not self.code_health_env:
+                            logger.warning(
+                                f"[{self.name}] PPO training skipped: CodeHealthEnv not initialized"
+                            )
+                    if _rl_ready:
                         self.log_event(
                             "Starting RL-based code health optimization loop...", "rl_start"
                         )
@@ -2525,28 +2671,43 @@ else:
                     )
 
                     # GeneticEvolutionEngine: evolve platform parameters if available
-                    if hasattr(self, "evolution_engine") and self.evolution_engine:
+                    # In "auto" mode skip the custom GA if DEAP already ran successfully
+                    # (avoids conflicting writes to the same config space).
+                    _run_custom_ga = (
+                        hasattr(self, "evolution_engine") and self.evolution_engine
+                        and _evolution_backend != "deap"
+                        and not (_evolution_backend == "auto" and _deap_succeeded)
+                    )
+                    if _run_custom_ga:
                         try:
-                            metrics = None
-                            if self.code_health_env and hasattr(self.code_health_env, "get_current_metrics"):
-                                metrics = self.code_health_env.get_current_metrics()
-                            if metrics is None:
-                                # Create minimal dummy metrics for evolution
-                                from types import SimpleNamespace
-                                metrics = SimpleNamespace(
-                                    pass_rate=0.0,
-                                    code_coverage=0.0,
-                                    complexity=0.5,
-                                    generation_success_rate=0.0,
-                                    critique_score=0.0,
-                                )
+                            metrics = self._collect_real_metrics()
+                            metrics_source = "real" if not any(
+                                getattr(metrics, k, None) == 0.0
+                                for k in ("pass_rate", "generation_success_rate")
+                            ) else "partial"
+                            logger.info(
+                                f"[{self.name}] Evolution backend: custom (EVOLUTION_BACKEND={_evolution_backend})"
+                            )
                             best_genome = self.evolution_engine.evolve_generation(metrics)
                             self.log_event(
-                                f"Genetic evolution: best genome {best_genome.genome_id} fitness={best_genome.fitness:.4f}",
+                                f"Genetic evolution: best genome {best_genome.genome_id} "
+                                f"fitness={best_genome.fitness:.4f} metrics_source={metrics_source}",
                                 "genetic_evolution",
                             )
+                            # Persist population so progress survives restarts (Issue 8)
+                            try:
+                                _pop_path = os.path.join(
+                                    self.settings.REPORTS_DIRECTORY, "evolution_population.json"
+                                )
+                                self.evolution_engine.save_population(_pop_path)
+                            except Exception as _save_err:
+                                logger.warning(
+                                    f"[{self.name}] Could not save GA population: {_save_err}"
+                                )
                             if self.code_health_env and hasattr(self.code_health_env, "config"):
-                                self.evolution_engine.apply_genome_to_config(best_genome, self.code_health_env.config)
+                                self.evolution_engine.apply_genome_to_config(
+                                    best_genome, self.code_health_env.config
+                                )
                         except Exception as _evo_err:
                             logger.warning(f"[{self.name}] GeneticEvolution step failed: {_evo_err}")
 
@@ -3268,11 +3429,14 @@ else:
                             "details": "scikit-learn not available.",
                         }
     
-                    if len(self.state_manager.memory) < 10:
+                    if len(self.state_manager.memory) < int(
+                        os.getenv("MIN_SUPERVISED_TRAINING_SAMPLES", "50")
+                    ):
                         return {"status": "skipped", "details": "Not enough data to learn."}
     
                     X = []
                     y = []
+                    heuristic_count = 0
                     for entry in self.state_manager.memory:
                         if entry.get("event_type") == "action_outcome":
                             features = [
@@ -3283,11 +3447,29 @@ else:
                             target = 1 if entry["outcome"] == "success" else 0
                             X.append(features)
                             y.append(target)
+                            if entry.get("policy_source", "heuristic") == "heuristic":
+                                heuristic_count += 1
     
                     if not X:
                         return {
                             "status": "skipped",
                             "details": "No action outcome data to learn from.",
+                        }
+    
+                    # Data quality gate: if >80% of samples are from heuristic policy, skip
+                    heuristic_ratio = heuristic_count / len(X) if X else 0.0
+                    if heuristic_ratio > 0.8:
+                        logging.getLogger(__name__).warning(
+                            f"[{self.name}] learn_from_data skipped: {heuristic_ratio:.0%} of "
+                            "training samples come from the heuristic fallback policy "
+                            "(not RL-guided). Train PPO first to improve data quality."
+                        )
+                        return {
+                            "status": "skipped",
+                            "details": (
+                                f"Data quality too low: {heuristic_ratio:.0%} heuristic samples "
+                                "(threshold 80%). Run PPO training to generate RL-guided samples."
+                            ),
                         }
     
                     X_train, X_test, y_train, y_test = train_test_split(
