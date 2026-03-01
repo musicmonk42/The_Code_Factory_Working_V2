@@ -330,7 +330,7 @@ class PolicyManager:
         if db_url and Base is not None:
             try:
                 # project-specific client should provide async get_session()
-                from self_fixing_engineer.arbiter.postgres_client import PostgresClient  # type: ignore
+                from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient  # type: ignore
 
                 self.db_client = PostgresClient(db_url)
             except Exception as e:  # pragma: no cover - optional

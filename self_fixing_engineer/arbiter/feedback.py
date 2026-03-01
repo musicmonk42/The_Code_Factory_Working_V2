@@ -72,7 +72,7 @@ except ImportError:
             return True
 
 try:
-    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 
     DB_CLIENTS_AVAILABLE = True
 except ImportError:
