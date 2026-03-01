@@ -762,7 +762,7 @@ fail or produce a non-functional application.
      def verify_password(plain: str, hashed: str) -> bool:
          return pwd_context.verify(plain, hashed)
 
-     def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)) -> str:
+     def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)) -> str:
          payload = {**data, "exp": datetime.now(timezone.utc) + expires_delta}
          return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
      ```

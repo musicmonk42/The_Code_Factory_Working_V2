@@ -59,10 +59,11 @@ class {{ cls }}(_SETTINGS_BASE):
         description="CORS allowed origins",
     )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
 
 {% else %}
 
@@ -106,10 +107,11 @@ class Settings(_SETTINGS_BASE):
     access_token_expire_minutes: int = Field(30, ge=1, description="Access token lifetime in minutes")
     database_url: str = Field("sqlite+aiosqlite:///./app.db")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
 
 {% endif %}
 
