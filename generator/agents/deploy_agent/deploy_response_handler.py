@@ -3437,7 +3437,7 @@ async def handle_deploy_response(
             normalized_data = handler.normalize(
                 scrubbed_raw_response
             )  # Normalize scrubbed raw response
-            handler_latency.labels(format=output_format, operation="normalize").observe(
+            handler_latency.labels(format=output_format, operation="normalize").set(
                 time.time() - start_normalize
             )
             span.set_attribute("normalization_successful", True)
@@ -3495,7 +3495,7 @@ async def handle_deploy_response(
                 )
                 handler_latency.labels(
                     format=output_format, operation="repair"
-                ).observe(time.time() - start_repair)
+                ).set(time.time() - start_repair)
                 span.set_attribute("repair_attempted", True)
                 span.set_attribute("repair_successful", True)
 
@@ -3559,7 +3559,7 @@ async def handle_deploy_response(
             start_convert = time.time()
             # Convert normalized data to the final desired string format
             handler.convert(normalized_data, to_format or output_format)
-            handler_latency.labels(format=output_format, operation="convert").observe(
+            handler_latency.labels(format=output_format, operation="convert").set(
                 time.time() - start_convert
             )
             span.set_attribute("conversion_successful", True)
@@ -3576,7 +3576,7 @@ async def handle_deploy_response(
                 repo_path,
                 handler_registry,
             )
-            handler_latency.labels(format=output_format, operation="enrich").observe(
+            handler_latency.labels(format=output_format, operation="enrich").set(
                 time.perf_counter() - start_enrich
             )
             span.set_attribute("enrichment_successful", True)
@@ -3599,7 +3599,7 @@ async def handle_deploy_response(
             await add_provenance("provenance", provenance)
 
             total_latency = time.perf_counter() - start_time
-            handler_latency.labels(format=output_format, operation="total").observe(
+            handler_latency.labels(format=output_format, operation="total").set(
                 total_latency
             )
             span.set_status(
