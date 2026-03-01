@@ -1645,15 +1645,44 @@ class AuditLog(Base):
     log_hash = Column(String, nullable=False, unique=True)
 
 
-# Mocked Integrations
-class KnowledgeGraph:
-    async def add_fact(self, *args, **kwargs):
-        pass
+# Mocked Integrations — used only when the real implementations cannot be imported.
+# The real KnowledgeGraph and FeedbackManager are preferred; these no-op stubs
+# exist solely as a last-resort fallback so the module can still load.
+_REAL_KG_AVAILABLE = False
+_REAL_FM_AVAILABLE = False
+
+try:
+    from self_fixing_engineer.arbiter.knowledge_graph.core import KnowledgeGraph
+    _REAL_KG_AVAILABLE = True
+except Exception:
+    logger.warning(
+        "arbiter_growth: Could not import real KnowledgeGraph — growth facts will NOT be "
+        "persisted. Install self_fixing_engineer.arbiter.knowledge_graph to enable fact storage."
+    )
+
+    class KnowledgeGraph:  # type: ignore[no-redef]
+        async def add_fact(self, *args, **kwargs):
+            logger.warning(
+                "arbiter_growth: KnowledgeGraph stub — add_fact() is a no-op. "
+                "Growth events are being discarded."
+            )
 
 
-class FeedbackManager:
-    async def record_feedback(self, *args, **kwargs):
-        pass
+try:
+    from self_fixing_engineer.arbiter.feedback import FeedbackManager
+    _REAL_FM_AVAILABLE = True
+except Exception:
+    logger.warning(
+        "arbiter_growth: Could not import real FeedbackManager — feedback will NOT be "
+        "recorded. Install self_fixing_engineer.arbiter.feedback to enable feedback storage."
+    )
+
+    class FeedbackManager:  # type: ignore[no-redef]
+        async def record_feedback(self, *args, **kwargs):
+            logger.warning(
+                "arbiter_growth: FeedbackManager stub — record_feedback() is a no-op. "
+                "Feedback events are being discarded."
+            )
 
 
 class PluginHook(ABC):
@@ -1845,12 +1874,14 @@ class ArbiterGrowthManager:
             logger.info("  3. Running evolutionary experiment via ArbiterExplorer...")
             try:
                 if explorer_available:
-                    # Run evolutionary experiment for behavior optimization
+                    # Run evolutionary experiment for behavior optimization.
+                    # Parameters are configurable via env vars so K8s/Helm deployments
+                    # can tune evolutionary pressure without code changes.
                     evo_result = await explorer.run_evolutionary_experiment(
                         experiment_name=f"{self.arbiter}_evolution_genetic",
                         initial_agent={"config": "baseline", "arbiter_id": self.arbiter},
-                        num_generations=2,
-                        population_size=3,
+                        num_generations=int(os.getenv("EXPLORER_EVOLUTION_GENERATIONS", "5")),
+                        population_size=int(os.getenv("EXPLORER_EVOLUTION_POPULATION_SIZE", "10")),
                         metric="perf"
                     )
                     evolution_results["evolutionary_experiment"] = evo_result

@@ -1678,7 +1678,32 @@ class KnowledgeGraph:
         return self._nodes.get(node_id)
 
     async def query(self, query_string: str) -> List[Dict[str, Any]]:
-        return [{"result": "mock_result", "query": query_string}]
+        """Search the in-memory graph for nodes and edges matching *query_string*.
+
+        Matches are case-insensitive and checked against node IDs, node property
+        values, edge relationship names, and edge property values.  Returns every
+        matching node/edge as a result dict so callers get real data instead of a
+        placeholder.
+        """
+        qs = query_string.lower()
+        results: List[Dict[str, Any]] = []
+
+        for node_id, node_data in self._nodes.items():
+            if qs in node_id.lower() or any(
+                qs in str(v).lower() for v in node_data.get("properties", {}).values()
+            ):
+                results.append({"type": "node", "id": node_id, **node_data})
+
+        for edge in self._edges:
+            if (
+                qs in edge.get("relationship", "").lower()
+                or qs in edge.get("from", "").lower()
+                or qs in edge.get("to", "").lower()
+                or any(qs in str(v).lower() for v in edge.get("properties", {}).values())
+            ):
+                results.append({"type": "edge", **edge})
+
+        return results
 
     async def get_neighbors(
         self, node_id: str, relationship_type: Optional[str] = None

@@ -2423,19 +2423,22 @@ else:
             """Return a dict describing which RL components are active vs. disabled.
 
             Exposes the health of the RL stack so operators can quickly diagnose
-            why PPO training or genetic evolution may be skipped.
+            why PPO training or genetic evolution may be skipped.  Safe to call
+            at any point in the Arbiter lifecycle, including before full init.
             """
+            engines = getattr(self, "engines", {})
+            code_health_env = getattr(self, "code_health_env", None)
             return {
                 "gymnasium_available": GYM_AVAILABLE,
                 "stable_baselines3_available": STABLE_BASELINES3_AVAILABLE,
                 "sklearn_available": SKLEARN_AVAILABLE,
-                "code_health_env_initialized": self.code_health_env is not None,
+                "code_health_env_initialized": code_health_env is not None,
                 "evolution_engine_initialized": getattr(self, "evolution_engine", None) is not None,
-                "rl_policy_loaded": "rl_policy" in self.engines,
+                "rl_policy_loaded": "rl_policy" in engines,
                 "ppo_training_active": (
                     GYM_AVAILABLE
                     and STABLE_BASELINES3_AVAILABLE
-                    and self.code_health_env is not None
+                    and code_health_env is not None
                 ),
             }
 
