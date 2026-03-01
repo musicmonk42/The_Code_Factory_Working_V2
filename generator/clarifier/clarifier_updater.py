@@ -294,6 +294,7 @@ class HistoryStore:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute("PRAGMA synchronous=NORMAL;")
+                conn.execute("PRAGMA busy_timeout=5000;")
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS history (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -340,7 +341,14 @@ class HistoryStore:
 
             await asyncio.to_thread(
                 self.conn.execute,
-                "INSERT INTO history (version, entry_id, encrypted_data) VALUES (?, ?, ?)",
+                """
+                INSERT INTO history (version, entry_id, encrypted_data)
+                VALUES (?, ?, ?)
+                ON CONFLICT(entry_id) DO UPDATE SET
+                    version=excluded.version,
+                    encrypted_data=excluded.encrypted_data,
+                    timestamp=CURRENT_TIMESTAMP
+                """,
                 (entry.get("version", 0), entry_id, encrypted_data),
             )
             await asyncio.to_thread(self.conn.commit)

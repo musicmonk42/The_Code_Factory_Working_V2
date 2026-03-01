@@ -153,6 +153,12 @@ docgen_content_quality_score = get_or_create_metric(
     "Content quality score for generated documentation",
     ["format", "metric_type"],
 )
+process_latency_seconds = get_or_create_metric(
+    Histogram,
+    "docgen_validator_process_latency_seconds",
+    "Latency of validation processing by format and operation",
+    ["format", "operation"],
+)
 # --- NLTK Data Download (Strictly required data for NLP features) ---
 # Use a helper function to avoid polluting global scope
 def setup_nltk_data():

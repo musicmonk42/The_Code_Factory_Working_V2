@@ -2055,6 +2055,56 @@ def test_{file_stem}_syntax_error_documentation():
                 return True
         return False
 
+    def _sanitize_async_fixtures(self, test_content: str) -> str:
+        """
+        Replace ``@pytest.fixture`` with ``@pytest_asyncio.fixture`` for async fixtures.
+
+        pytest-asyncio in strict mode requires ``@pytest_asyncio.fixture`` for any
+        fixture defined with ``async def``.  The LLM frequently emits the wrong
+        decorator, causing ``AttributeError: 'async_generator' object has no
+        attribute '...'`` at runtime.
+
+        Also ensures ``import pytest_asyncio`` is present when the decorator is used.
+        The import is inserted directly after the ``import pytest`` line (or after the
+        last import block) rather than prepended to the top of the file to avoid
+        breaking module-level docstrings.
+
+        Args:
+            test_content: Raw test file content (may be LLM-generated).
+
+        Returns:
+            Sanitized test content with corrected async fixture decorators.
+        """
+        # Replace @pytest.fixture (with or without parentheses) that is immediately
+        # followed by `async def` on the next line.
+        # `re` is imported at module level.
+        fixed = re.sub(
+            r'@pytest\.fixture(\s*\([^)]*\))?\s*\n(\s*async\s+def\s)',
+            lambda m: f'@pytest_asyncio.fixture{m.group(1) or ""}\n{m.group(2)}',
+            test_content,
+        )
+
+        if fixed == test_content or 'import pytest_asyncio' in fixed:
+            return fixed
+
+        # Insert `import pytest_asyncio` after the `import pytest` line so the
+        # import block stays coherent and module docstrings are not displaced.
+        after_pytest = re.search(r'^import pytest\b.*$', fixed, re.MULTILINE)
+        if after_pytest:
+            pos = after_pytest.end()
+            return fixed[:pos] + '\nimport pytest_asyncio' + fixed[pos:]
+
+        # Fallback: insert after the last top-level import statement.
+        last_import = None
+        for m in re.finditer(r'^(?:import|from)\s+\S+.*$', fixed, re.MULTILINE):
+            last_import = m
+        if last_import:
+            pos = last_import.end()
+            return fixed[:pos] + '\nimport pytest_asyncio' + fixed[pos:]
+
+        # Last resort: prepend (file has no imports at all).
+        return 'import pytest_asyncio\n' + fixed
+
     def _generate_fastapi_tests(self, content: str, file_path: str) -> str:
         """
         Generate real FastAPI TestClient tests for a FastAPI application.
@@ -2550,6 +2600,13 @@ def test_{file_stem}_syntax_error_documentation():
                             raise ValueError(
                                 "Parsed tests are empty after generation/refinement."
                             )
+                        # Sanitize async fixtures: replace @pytest.fixture with
+                        # @pytest_asyncio.fixture for async def fixtures.
+                        if language.lower() == "python":
+                            generated_tests_this_attempt = {
+                                fp: self._sanitize_async_fixtures(content)
+                                for fp, content in generated_tests_this_attempt.items()
+                            }
                         
                         # Issue 2: Auto-Healing Boundaries – apply any source code patches
                         # the LLM produced so that discrepancies between source and tests are
@@ -2650,6 +2707,12 @@ def test_{file_stem}_syntax_error_documentation():
                                 raise ValueError(
                                     "Parsed tests are still empty after self-healing."
                                 )
+                            # Sanitize async fixtures in self-healed tests
+                            if language.lower() == "python":
+                                generated_tests_this_attempt = {
+                                    fp: self._sanitize_async_fixtures(content)
+                                    for fp, content in generated_tests_this_attempt.items()
+                                }
                             await add_provenance(
                                 "self_heal_success",
                                 {
