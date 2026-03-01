@@ -156,6 +156,7 @@ docgen_content_quality_score = get_or_create_metric(
 process_latency_seconds = get_or_create_metric(
     Histogram,
     "docgen_validator_process_latency_seconds",
+    "Latency of docgen validation process in seconds",
     "Latency of validation processing by format and operation",
     ["format", "operation"],
 )

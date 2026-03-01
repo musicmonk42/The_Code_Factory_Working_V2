@@ -63,7 +63,7 @@ except ImportError:
             return True
 
 try:
-    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 except ImportError:
     class PostgresClient:
         def __init__(self, db_url):

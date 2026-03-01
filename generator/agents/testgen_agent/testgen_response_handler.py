@@ -365,6 +365,76 @@ def fix_brittle_pydantic_assertions(test_files: Dict[str, str], language: str = 
     return fixed_files
 
 
+def fix_async_pytest_fixtures(test_files: Dict[str, str], language: str = "python") -> Dict[str, str]:
+    """
+    Post-process generated Python tests to replace ``@pytest.fixture`` with
+    ``@pytest_asyncio.fixture`` for async fixture functions, and ensure
+    ``import pytest_asyncio`` is present in any file that uses it.
+
+    pytest-asyncio in strict mode requires async fixtures to use
+    ``@pytest_asyncio.fixture``; using the plain ``@pytest.fixture`` decorator
+    causes the fixture to yield an ``async_generator`` object instead of the
+    resolved value, producing ``AttributeError: 'async_generator' object has
+    no attribute ...`` errors at test runtime.
+
+    Args:
+        test_files: Mapping of filename → source code for generated test files.
+        language: Source language of the test files. Only ``"python"`` files are
+            processed; all other languages are returned unchanged.
+
+    Returns:
+        A new mapping with the same keys; Python test files have async
+        ``@pytest.fixture`` decorators replaced with ``@pytest_asyncio.fixture``
+        and ``import pytest_asyncio`` added when required.
+    """
+    if language != "python":
+        return test_files
+
+    # Matches @pytest.fixture (with optional arguments) followed by any
+    # whitespace (including newlines) before an async def, to handle all
+    # valid Python formatting styles.
+    _async_fixture_pattern = re.compile(
+        r"(@pytest\.fixture(?:\([^)]*\))?)\s+(\s*async\s+def\s)",
+        re.MULTILINE,
+    )
+
+    fixed_files: Dict[str, str] = {}
+    for filename, content in test_files.items():
+        if not filename.endswith(".py"):
+            fixed_files[filename] = content
+            continue
+
+        replaced_content, replacements = _async_fixture_pattern.subn(
+            lambda m: m.group(0).replace("@pytest.fixture", "@pytest_asyncio.fixture", 1),
+            content,
+        )
+
+        if replacements > 0:
+            # Ensure pytest_asyncio is imported
+            if "import pytest_asyncio" not in replaced_content:
+                # Insert after the last pytest import line, or before first non-import line
+                import_pattern = re.compile(r"^import pytest\b.*$", re.MULTILINE)
+                match = None
+                for match in import_pattern.finditer(replaced_content):
+                    pass
+                if match:
+                    insert_pos = match.end()
+                    replaced_content = (
+                        replaced_content[:insert_pos]
+                        + "\nimport pytest_asyncio"
+                        + replaced_content[insert_pos:]
+                    )
+                else:
+                    # No existing pytest import found; prepend the import
+                    replaced_content = "import pytest_asyncio\n" + replaced_content
+
+            fixed_files[filename] = replaced_content
+        else:
+            fixed_files[filename] = content
+
+    return fixed_files
+
+
 def validate_monkeypatch_targets(test_files: Dict[str, str], code_files: Optional[Dict[str, str]] = None, language: str = "python") -> Dict[str, str]:
     """
     Validates and removes tests with invalid monkeypatch targets.
@@ -1796,6 +1866,9 @@ async def parse_llm_response(
         # Fix brittle Pydantic v1-style assertions before validation
         test_files = fix_brittle_pydantic_assertions(test_files, language)
 
+        # Replace @pytest.fixture with @pytest_asyncio.fixture for async fixtures
+        test_files = fix_async_pytest_fixtures(test_files, language)
+
         # Validate and fix monkeypatch targets
         test_files = validate_monkeypatch_targets(test_files, code_files, language)
         
@@ -1822,6 +1895,9 @@ async def parse_llm_response(
 
             # Fix brittle Pydantic v1-style assertions in healed files
             healed_files = fix_brittle_pydantic_assertions(healed_files, language)
+
+            # Replace @pytest.fixture with @pytest_asyncio.fixture for async fixtures in healed files
+            healed_files = fix_async_pytest_fixtures(healed_files, language)
 
             # Also validate monkeypatch targets in healed files
             healed_files = validate_monkeypatch_targets(healed_files, code_files, language)

@@ -731,3 +731,437 @@ class TestFixImportPathsNestedModules:
         content = result["test_deep.py"]
         assert "generated." not in content
         assert "app.routers" in content
+
+
+# ===========================================================================
+# Bug 3 — fix_async_pytest_fixtures: replace @pytest.fixture with
+#          @pytest_asyncio.fixture for async fixtures
+# ===========================================================================
+
+
+def _load_fix_async_pytest_fixtures():
+    """Extract and return the ``fix_async_pytest_fixtures`` function from
+    ``testgen_response_handler.py`` without loading its full dependency tree.
+
+    The function depends only on the standard-library ``re`` module, which is
+    injected directly into the execution namespace.
+    """
+    _cache_key = "_fix_async_pytest_fixtures_fn"
+    if _cache_key in sys.modules:  # reuse across test calls
+        return sys.modules[_cache_key]
+
+    source_path = (
+        PROJECT_ROOT / "generator/agents/testgen_agent/testgen_response_handler.py"
+    )
+    source = source_path.read_text(encoding="utf-8")
+    tree = ast.parse(source)
+
+    # Extract only the fix_async_pytest_fixtures function definition
+    parts: List[str] = []
+    for node in ast.iter_child_nodes(tree):
+        if (
+            isinstance(node, ast.FunctionDef)
+            and node.name == "fix_async_pytest_fixtures"
+        ):
+            parts.append(ast.get_source_segment(source, node))
+
+    assert parts, "fix_async_pytest_fixtures not found in testgen_response_handler.py"
+    combined = "\n\n".join(p for p in parts if p)
+
+    namespace: Dict[str, Any] = {
+        "re": re,
+        "logging": logging,
+        "logger": logging.getLogger("fix_async_pytest_fixtures_test"),
+        "Dict": Dict,
+        "Optional": Optional,
+        "List": List,
+        "Tuple": Tuple,
+        "Any": Any,
+    }
+    exec(compile(combined, str(source_path), "exec"), namespace)
+    fn = namespace["fix_async_pytest_fixtures"]
+
+    # Cache the callable in a fake sys.modules slot to survive repeated calls
+    fake_holder = types.ModuleType(_cache_key)
+    fake_holder.fix_async_pytest_fixtures = fn
+    sys.modules[_cache_key] = fake_holder
+    return fake_holder
+
+
+class TestFixAsyncPytestFixtures:
+    """``fix_async_pytest_fixtures`` must replace ``@pytest.fixture`` with
+    ``@pytest_asyncio.fixture`` on every async fixture function and inject
+    ``import pytest_asyncio`` when the import is not already present."""
+
+    def setup_method(self):
+        self._fix = _load_fix_async_pytest_fixtures().fix_async_pytest_fixtures
+
+    # ------------------------------------------------------------------
+    # Decorator replacement — basic cases
+    # ------------------------------------------------------------------
+
+    def test_bare_async_fixture_decorator_replaced(self):
+        """``@pytest.fixture`` directly above ``async def`` must become
+        ``@pytest_asyncio.fixture``."""
+        files = {
+            "test_client.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client(app):\n"
+                "    async with TestClient(app) as c:\n"
+                "        yield c\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_client.py"]
+        assert "@pytest_asyncio.fixture\nasync def client" in content
+        assert "@pytest.fixture\nasync def" not in content
+
+    def test_async_fixture_with_scope_argument(self):
+        """``@pytest.fixture(scope="session")`` on an async def must become
+        ``@pytest_asyncio.fixture(scope="session")``."""
+        files = {
+            "test_db.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture(scope='session')\n"
+                "async def db_session():\n"
+                "    yield session\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_db.py"]
+        assert "@pytest_asyncio.fixture(scope='session')\nasync def db_session" in content
+        assert "@pytest.fixture(scope='session')\nasync def" not in content
+
+    def test_async_fixture_with_autouse_argument(self):
+        """``@pytest.fixture(autouse=True)`` on an async def must become
+        ``@pytest_asyncio.fixture(autouse=True)``."""
+        files = {
+            "test_setup.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture(autouse=True)\n"
+                "async def setup_database():\n"
+                "    yield\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_setup.py"]
+        assert "@pytest_asyncio.fixture(autouse=True)\nasync def setup_database" in content
+
+    def test_async_fixture_with_multiple_arguments(self):
+        """``@pytest.fixture(scope='module', autouse=True)`` on an async def."""
+        files = {
+            "test_multi.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture(scope='module', autouse=True)\n"
+                "async def module_setup():\n"
+                "    yield\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_multi.py"]
+        assert "@pytest_asyncio.fixture(scope='module', autouse=True)" in content
+        assert "@pytest.fixture(scope='module'" not in content
+
+    # ------------------------------------------------------------------
+    # Sync fixtures must NOT be modified
+    # ------------------------------------------------------------------
+
+    def test_sync_fixture_not_modified(self):
+        """``@pytest.fixture`` above a synchronous ``def`` must not be changed."""
+        original = (
+            "import pytest\n"
+            "\n"
+            "@pytest.fixture\n"
+            "def sync_client():\n"
+            "    return TestClient(app)\n"
+        )
+        files = {"test_sync.py": original}
+        result = self._fix(files)
+        assert result["test_sync.py"] == original
+
+    def test_sync_fixture_with_args_not_modified(self):
+        """``@pytest.fixture(scope='module')`` on a sync ``def`` must not change."""
+        original = (
+            "import pytest\n"
+            "\n"
+            "@pytest.fixture(scope='module')\n"
+            "def db_engine():\n"
+            "    return create_engine(URL)\n"
+        )
+        files = {"test_engine.py": original}
+        result = self._fix(files)
+        assert result["test_engine.py"] == original
+
+    # ------------------------------------------------------------------
+    # Mixed files — only async fixtures changed
+    # ------------------------------------------------------------------
+
+    def test_mixed_file_only_async_fixtures_changed(self):
+        """In a file that contains both sync and async fixtures only async
+        ones must be rewritten; sync ones must be left exactly as-is."""
+        files = {
+            "test_mixed.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture\n"
+                "def sync_fixture():\n"
+                "    return 'sync'\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def async_fixture():\n"
+                "    yield 'async'\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_mixed.py"]
+        assert "@pytest.fixture\ndef sync_fixture" in content, (
+            "Sync fixture decorator must be unchanged"
+        )
+        assert "@pytest_asyncio.fixture\nasync def async_fixture" in content, (
+            "Async fixture decorator must be replaced"
+        )
+
+    def test_multiple_async_fixtures_all_replaced(self):
+        """Every async fixture in the file must be rewritten, not just the
+        first one."""
+        files = {
+            "test_multi.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client():\n"
+                "    yield 1\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def db():\n"
+                "    yield 2\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def cache():\n"
+                "    yield 3\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_multi.py"]
+        assert content.count("@pytest_asyncio.fixture") == 3
+        assert "@pytest.fixture\nasync def" not in content
+
+    # ------------------------------------------------------------------
+    # Already-correct fixtures must not be double-replaced
+    # ------------------------------------------------------------------
+
+    def test_already_correct_fixture_unchanged(self):
+        """A file that already uses ``@pytest_asyncio.fixture`` for async defs
+        must be returned byte-for-byte identical."""
+        original = (
+            "import pytest\n"
+            "import pytest_asyncio\n"
+            "\n"
+            "@pytest_asyncio.fixture\n"
+            "async def client():\n"
+            "    yield 'ok'\n"
+        )
+        files = {"test_already.py": original}
+        result = self._fix(files)
+        assert result["test_already.py"] == original
+
+    def test_no_double_replacement_of_pytest_asyncio_fixture(self):
+        """A file that already uses ``@pytest_asyncio.fixture`` must not be
+        processed a second time.  A naive ``str.replace`` implementation would
+        turn ``@pytest_asyncio.fixture`` into ``@pytest_asyncio_asyncio.fixture``
+        or corrupt the identifier in some other way; this test guards against
+        that regression.  The literal string ``pytest_asyncio`` with an extra
+        leading ``pytest_`` must NOT appear in the output."""
+        original = (
+            "import pytest_asyncio\n"
+            "\n"
+            "@pytest_asyncio.fixture\n"
+            "async def setup():\n"
+            "    yield\n"
+        )
+        files = {"test_no_double.py": original}
+        result = self._fix(files)
+        content = result["test_no_double.py"]
+        # Guard: the decorator must appear exactly once, unchanged
+        assert content.count("@pytest_asyncio.fixture") == 1
+        # Guard: no corrupted identifier from accidental double-replacement
+        assert "@pytest_asyncio_asyncio" not in content
+        assert "pytest_asyncio.pytest_asyncio" not in content
+
+    # ------------------------------------------------------------------
+    # import pytest_asyncio injection
+    # ------------------------------------------------------------------
+
+    def test_import_injected_after_existing_import_pytest(self):
+        """When ``import pytest`` is present, ``import pytest_asyncio`` must be
+        inserted on the immediately following line."""
+        files = {
+            "test_inject.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client():\n"
+                "    yield 1\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_inject.py"]
+        lines = content.splitlines()
+        pytest_idx = next(i for i, l in enumerate(lines) if l == "import pytest")
+        # The very next line must be the new import
+        assert lines[pytest_idx + 1] == "import pytest_asyncio", (
+            f"Expected 'import pytest_asyncio' right after 'import pytest', "
+            f"got: {lines[pytest_idx + 1]!r}"
+        )
+
+    def test_import_prepended_when_no_existing_pytest_import(self):
+        """When the file has no ``import pytest`` line, ``import pytest_asyncio``
+        must be prepended to the file."""
+        files = {
+            "test_prepend.py": (
+                "# no pytest import here\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client():\n"
+                "    yield 1\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_prepend.py"]
+        assert content.startswith("import pytest_asyncio\n"), (
+            "import must be prepended when no 'import pytest' line exists"
+        )
+
+    def test_import_not_duplicated_when_already_present(self):
+        """If ``import pytest_asyncio`` already exists in the file, a second
+        copy must NOT be added."""
+        files = {
+            "test_already_imported.py": (
+                "import pytest\n"
+                "import pytest_asyncio\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client():\n"
+                "    yield 1\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_already_imported.py"]
+        assert content.count("import pytest_asyncio") == 1
+
+    def test_single_import_added_for_multiple_async_fixtures(self):
+        """A file with several async fixtures must receive exactly one
+        ``import pytest_asyncio`` statement, not one per fixture."""
+        files = {
+            "test_many.py": (
+                "import pytest\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def client():\n"
+                "    yield 1\n"
+                "\n"
+                "@pytest.fixture\n"
+                "async def db():\n"
+                "    yield 2\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_many.py"]
+        assert content.count("import pytest_asyncio") == 1
+
+    # ------------------------------------------------------------------
+    # Indented fixtures (class-based test patterns)
+    # ------------------------------------------------------------------
+
+    def test_indented_async_fixture_in_class_replaced(self):
+        """An async fixture defined inside a test class (indented 4 spaces)
+        must also have its decorator replaced."""
+        files = {
+            "test_class.py": (
+                "import pytest\n"
+                "\n"
+                "class TestSuite:\n"
+                "    @pytest.fixture\n"
+                "    async def client(self):\n"
+                "        yield 'ok'\n"
+            )
+        }
+        result = self._fix(files)
+        content = result["test_class.py"]
+        assert "@pytest_asyncio.fixture\n    async def client" in content
+
+    # ------------------------------------------------------------------
+    # Edge cases: non-Python files and language parameter
+    # ------------------------------------------------------------------
+
+    def test_non_python_file_unchanged(self):
+        """Files that do not end with ``.py`` must be returned unmodified
+        regardless of their content."""
+        original = "@pytest.fixture\nasync def client():\n    yield 1\n"
+        files = {"test_client.js": original}
+        result = self._fix(files)
+        assert result["test_client.js"] == original
+
+    def test_non_python_language_returns_input_unchanged(self):
+        """When ``language`` is not ``'python'``, the entire dict must be
+        returned as-is without any processing."""
+        original = {
+            "test_client.py": (
+                "@pytest.fixture\nasync def client():\n    yield 1\n"
+            )
+        }
+        result = self._fix(dict(original), language="javascript")
+        assert result == original
+
+    def test_empty_dict_returns_empty_dict(self):
+        """An empty input mapping must produce an empty output mapping."""
+        assert self._fix({}) == {}
+
+    def test_file_without_async_fixtures_unchanged(self):
+        """A Python file that contains no ``async def`` fixtures at all must
+        be returned byte-for-byte identical."""
+        original = (
+            "import pytest\n"
+            "\n"
+            "@pytest.fixture\n"
+            "def sync_only():\n"
+            "    return 42\n"
+            "\n"
+            "def test_something(sync_only):\n"
+            "    assert sync_only == 42\n"
+        )
+        files = {"test_pure_sync.py": original}
+        result = self._fix(files)
+        assert result["test_pure_sync.py"] == original
+
+    # ------------------------------------------------------------------
+    # Multiple files in one call
+    # ------------------------------------------------------------------
+
+    def test_multiple_files_processed_independently(self):
+        """When multiple files are provided, each must be processed in
+        isolation; a replacement in one file must not affect another."""
+        files = {
+            "test_a.py": (
+                "import pytest\n"
+                "@pytest.fixture\nasync def fa():\n    yield 1\n"
+            ),
+            "test_b.py": (
+                "import pytest\n"
+                "@pytest.fixture\ndef fb():\n    return 2\n"
+            ),
+            "test_c.js": "@pytest.fixture\nasync def fc():\n    yield 3\n",
+        }
+        result = self._fix(files)
+        # test_a.py: async fixture must be fixed; import added
+        assert "@pytest_asyncio.fixture\nasync def fa" in result["test_a.py"]
+        assert "import pytest_asyncio" in result["test_a.py"]
+        # test_b.py: sync fixture must be unchanged
+        assert result["test_b.py"] == files["test_b.py"]
+        # test_c.js: non-Python file must be unchanged
+        assert result["test_c.js"] == files["test_c.js"]

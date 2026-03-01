@@ -176,7 +176,7 @@ except ImportError:
         return MockTracer()
 
 try:
-    from self_fixing_engineer.arbiter.postgres_client import PostgresClient
+    from self_fixing_engineer.arbiter.models.postgres_client import PostgresClient
 except ImportError:
     class PostgresClient:
         """Fallback PostgresClient stub when the real module is unavailable.
