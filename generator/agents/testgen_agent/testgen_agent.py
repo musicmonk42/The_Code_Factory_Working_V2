@@ -2065,6 +2065,9 @@ def test_{file_stem}_syntax_error_documentation():
         attribute '...'`` at runtime.
 
         Also ensures ``import pytest_asyncio`` is present when the decorator is used.
+        The import is inserted directly after the ``import pytest`` line (or after the
+        last import block) rather than prepended to the top of the file to avoid
+        breaking module-level docstrings.
 
         Args:
             test_content: Raw test file content (may be LLM-generated).
@@ -2072,22 +2075,35 @@ def test_{file_stem}_syntax_error_documentation():
         Returns:
             Sanitized test content with corrected async fixture decorators.
         """
-        import re
-
         # Replace @pytest.fixture (with or without parentheses) that is immediately
-        # followed (allowing blank lines / comments) by `async def`.
-        # Pattern: @pytest.fixture or @pytest.fixture(...) then async def
+        # followed by `async def` on the next line.
+        # `re` is imported at module level.
         fixed = re.sub(
             r'@pytest\.fixture(\s*\([^)]*\))?\s*\n(\s*async\s+def\s)',
             lambda m: f'@pytest_asyncio.fixture{m.group(1) or ""}\n{m.group(2)}',
             test_content,
         )
 
-        # If we made replacements, ensure `import pytest_asyncio` is present
-        if fixed != test_content and 'import pytest_asyncio' not in fixed:
-            fixed = 'import pytest_asyncio\n' + fixed
+        if fixed == test_content or 'import pytest_asyncio' in fixed:
+            return fixed
 
-        return fixed
+        # Insert `import pytest_asyncio` after the `import pytest` line so the
+        # import block stays coherent and module docstrings are not displaced.
+        after_pytest = re.search(r'^import pytest\b.*$', fixed, re.MULTILINE)
+        if after_pytest:
+            pos = after_pytest.end()
+            return fixed[:pos] + '\nimport pytest_asyncio' + fixed[pos:]
+
+        # Fallback: insert after the last top-level import statement.
+        last_import = None
+        for m in re.finditer(r'^(?:import|from)\s+\S+.*$', fixed, re.MULTILINE):
+            last_import = m
+        if last_import:
+            pos = last_import.end()
+            return fixed[:pos] + '\nimport pytest_asyncio' + fixed[pos:]
+
+        # Last resort: prepend (file has no imports at all).
+        return 'import pytest_asyncio\n' + fixed
 
     def _generate_fastapi_tests(self, content: str, file_path: str) -> str:
         """

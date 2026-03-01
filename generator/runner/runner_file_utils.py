@@ -1713,8 +1713,7 @@ def _repair_double_prefix(output_dir: Path) -> None:
     Args:
         output_dir: Root directory of the generated project.
     """
-    import re
-
+    # `re` is imported at module level.
     _APIROUTER_PREFIX_RE = re.compile(
         r'APIRouter\s*\([^)]*prefix\s*=\s*["\']([^"\']+)["\']'
     )
