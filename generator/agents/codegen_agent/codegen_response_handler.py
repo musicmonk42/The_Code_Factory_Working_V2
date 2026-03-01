@@ -979,7 +979,8 @@ def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
         "    _db_url = \"postgresql+asyncpg://\" + _db_url[len(\"postgres://\"):]\n"
         "elif _db_url.startswith(\"mysql://\"):\n"
         "    _db_url = \"mysql+aiomysql://\" + _db_url[len(\"mysql://\"):]\n"
-        "elif _db_url.startswith(\"sqlite:///\") and not _db_url.startswith(\"sqlite+aiosqlite:///\"):\n"
+        "elif _db_url.startswith(\"sqlite:///\"):\n"
+        "    # sqlite:/// can never equal sqlite+aiosqlite:/// so no guard needed.\n"
         "    _db_url = \"sqlite+aiosqlite:///\" + _db_url[len(\"sqlite:///\"):]\n"
     )
     # Pattern to detect: <VAR> = os.getenv(...) followed (within a few lines) by
@@ -4956,6 +4957,13 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
         "__hash__", "__bool__", "__len__", "__iter__", "__next__",
         "__enter__", "__exit__", "__call__", "__getattr__", "__setattr__",
         "__delattr__", "__getitem__", "__setitem__", "__delitem__",
+        # Rich comparison dunders
+        "__eq__", "__ne__", "__lt__", "__le__", "__gt__", "__ge__",
+        # Container dunders
+        "__contains__",
+        # Serialisation / miscellaneous dunders
+        "__format__", "__sizeof__", "__reduce__", "__reduce_ex__",
+        "__init_subclass__", "__subclasshook__",
         # Pydantic model methods (not field names)
         "model_dump", "model_validate", "model_json_schema", "model_fields",
         "model_config", "model_copy", "model_rebuild",
@@ -5082,7 +5090,8 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     '    _db_url = "postgresql+asyncpg://" + _db_url[len("postgres://"):]\n'
                     'elif _db_url.startswith("mysql://"):\n'
                     '    _db_url = "mysql+aiomysql://" + _db_url[len("mysql://"):]\n'
-                    'elif _db_url.startswith("sqlite:///") and not _db_url.startswith("sqlite+aiosqlite:///"):\n'
+                    'elif _db_url.startswith("sqlite:///"):\n'
+                    '    # sqlite:/// never equals sqlite+aiosqlite:/// so no guard needed\n'
                     '    _db_url = "sqlite+aiosqlite:///" + _db_url[len("sqlite:///"):]\n\n'
                     "engine = create_async_engine(\n"
                     "    _db_url,\n"

@@ -135,6 +135,10 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
                 logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
                 # Also build multi-level mappings for nested modules:
                 # e.g., "app/routers/orders.py" -> also map "routers.orders" -> "app.routers.orders"
+                # Precedence: first-processed file wins for any given partial key.
+                # Two modules with the same leaf/partial path (e.g. app/services/user.py
+                # and app/models/user.py) each map different partial keys
+                # ("services.user" vs "models.user") and will not conflict.
                 if len(import_parts) >= 3:
                     for start in range(1, len(import_parts) - 1):
                         partial_key = ".".join(import_parts[start:])

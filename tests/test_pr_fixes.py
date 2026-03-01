@@ -213,15 +213,10 @@ class TestDatabaseStubRuntimeUrlRewrite:
         result = self._crh.ensure_local_module_stubs(files)
         db = result.get("app/database.py", "")
         assert "_db_url" in db
-        # The engine call must pass the rewritten variable (may span multiple lines)
         assert "create_async_engine(" in db
-        # The _db_url variable must appear after the runtime rewrite block
-        rewrite_pos = db.find("_db_url")
-        engine_pos = db.find("create_async_engine(")
-        assert rewrite_pos != -1
-        assert engine_pos != -1
-        # _db_url must be referenced after its assignment (rewrite block comes first)
-        assert rewrite_pos < engine_pos or "_db_url" in db[engine_pos:]
+        # The runtime rewrite variable must appear in the stub content (correct usage
+        # is verified by the full database stub tests above)
+        assert db.count("_db_url") >= 2  # assigned in rewrite + passed to engine
 
     def test_stub_handles_sqlite_runtime_rewrite(self):
         """Stub must rewrite ``sqlite:///`` → ``sqlite+aiosqlite:///`` at runtime."""
