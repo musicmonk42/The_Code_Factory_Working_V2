@@ -531,7 +531,7 @@ class PostgresClient:
 
     async def ping(self) -> bool:
         """Performs a simple query to check database connection health."""
-        if self._pool is None or self._pool.is_closed():
+        if self._pool is None or self._is_closed:
             logger.debug("Ping failed: pool is not initialized or closed.")
             return False
         try:
@@ -601,7 +601,7 @@ class PostgresClient:
         Includes retries for transient connection issues.
         """
         async with self._connect_lock:
-            if self._pool is not None and not self._pool.is_closed():
+            if self._pool is not None and not self._is_closed:
                 logger.info("PostgreSQL client already connected.")
                 return
 
