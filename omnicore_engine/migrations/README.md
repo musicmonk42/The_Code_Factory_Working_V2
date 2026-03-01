@@ -102,6 +102,8 @@ migrations/
 ├── env.py              # Alembic environment configuration
 ├── script.py.mako      # Template for new migration files
 ├── versions/           # Migration version files
-│   └── .gitkeep       # Ensures directory is tracked by git
+│   ├── 001_add_custom_attributes_column.py  # Adds custom_attributes (JSONB) to generator_agent_state
+│   └── 002_create_sfe_tables.py             # Creates SFE core tables: feedback, agent_knowledge,
+│                                            #   agent_states, audit_events
 └── README.md          # This file
 ```
