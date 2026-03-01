@@ -18,7 +18,7 @@ Fixes tested:
 - Fix 3: ``codegen_prompt.py`` — JWT example uses ``ACCESS_TOKEN_EXPIRE_MINUTES``
   constant and ``model_config`` dict (Pydantic v2) in all Settings examples
 - Fix 4: Gemini model updated from ``gemini-2.0-flash`` to
-  ``gemini-2.0-flash-001`` in ``server/config.py``, ``llm_client.py``,
+  ``gemini-2.5-flash`` (via ``gemini-2.0-flash-001``) in ``server/config.py``, ``llm_client.py``,
   and ``get_default_model_for_provider``
 - Fix 5: ``config_stub.jinja2`` uses Pydantic v2 ``model_config`` dict instead
   of the deprecated ``class Config:`` inner class
@@ -208,7 +208,8 @@ class TestFix3CodegenPromptJwtExample:
 
 
 # ===========================================================================
-# Fix 4 — Gemini model identifier: gemini-2.0-flash → gemini-2.0-flash-001
+# Fix 4 — Gemini model identifier: gemini-2.0-flash → gemini-2.5-flash
+# (previously updated to gemini-2.0-flash-001; now deprecated entirely)
 # ===========================================================================
 
 def _strip_inline_comment(line: str) -> str:
@@ -227,22 +228,22 @@ def _strip_inline_comment(line: str) -> str:
     return line
 
 
-EXPECTED_GEMINI_MODEL = "gemini-2.0-flash"
-STALE_GEMINI_MODEL = "gemini-2.0-flash-001"
+EXPECTED_GEMINI_MODEL = "gemini-2.5-flash"
+STALE_GEMINI_MODEL = "gemini-2.0-flash"
 
 
 class TestFix4GeminiModelUpdate:
-    """All Gemini model references must use the updated gemini-2.0-flash-001 identifier."""
+    """All Gemini model references must use the updated gemini-2.5-flash identifier."""
 
     def test_llm_client_provider_default_models(self):
-        """llm_client.py _PROVIDER_DEFAULT_MODELS must reference gemini-2.0-flash-001."""
+        """llm_client.py _PROVIDER_DEFAULT_MODELS must reference gemini-2.5-flash."""
         content = _LLM_CLIENT.read_text(encoding="utf-8")
         assert EXPECTED_GEMINI_MODEL in content, (
             f"llm_client.py must reference {EXPECTED_GEMINI_MODEL} in _PROVIDER_DEFAULT_MODELS"
         )
 
     def test_llm_client_no_stale_model(self):
-        """llm_client.py must not assign the stale gemini-2.0-flash-001 identifier in code."""
+        """llm_client.py must not assign the stale gemini-2.0-flash identifier in code."""
         content = _LLM_CLIENT.read_text(encoding="utf-8")
         # Strip full-line and inline comments to avoid false positives from historical notes
         code_lines = [
@@ -252,7 +253,7 @@ class TestFix4GeminiModelUpdate:
         ]
         stale_in_code = [
             line for line in code_lines
-            if re.search(r'["\']gemini-2\.0-flash-001["\']', line)
+            if re.search(r'["\']gemini-2\.0-flash["\']', line)
         ]
         assert stale_in_code == [], (
             f"llm_client.py code still assigns stale '{STALE_GEMINI_MODEL}': "
@@ -260,7 +261,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_google_model_field(self):
-        """server/config.py google_model Field default must be gemini-2.0-flash."""
+        """server/config.py google_model Field default must be gemini-2.5-flash."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Accept both single and double-quoted string values
         match = re.search(r'google_model.*?default\s*=\s*["\']([^"\']+)["\']', content, re.DOTALL)
@@ -271,7 +272,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_get_default_model_for_provider(self):
-        """get_default_model_for_provider('google') must return gemini-2.0-flash."""
+        """get_default_model_for_provider('google') must return gemini-2.5-flash."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Use the ast module to reliably extract the function body
         import ast
@@ -292,7 +293,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_no_stale_model(self):
-        """server/config.py must not assign gemini-2.0-flash-001 in code (non-comment) lines."""
+        """server/config.py must not assign gemini-2.0-flash in code (non-comment) lines."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Strip full-line and inline comments to avoid false positives from historical notes
         code_lines = [
@@ -302,7 +303,7 @@ class TestFix4GeminiModelUpdate:
         ]
         stale_in_code = [
             line for line in code_lines
-            if re.search(r'["\']gemini-2\.0-flash-001["\']', line)
+            if re.search(r'["\']gemini-2\.0-flash["\']', line)
         ]
         assert stale_in_code == [], (
             f"server/config.py code still assigns stale '{STALE_GEMINI_MODEL}': "

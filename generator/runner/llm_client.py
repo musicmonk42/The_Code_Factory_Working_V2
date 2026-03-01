@@ -102,7 +102,7 @@ MAX_TOTAL_FALLBACK_ATTEMPTS = int(os.getenv("MAX_LLM_FALLBACK_ATTEMPTS", "6"))
 # Provider default models for fallback scenarios
 _PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-4o",
-    "gemini": "gemini-2.0-flash",  # Updated from gemini-2.0-flash-001 (no longer available to new users)
+    "gemini": "gemini-2.5-flash",  # Updated from gemini-2.0-flash (deprecated, no longer available to new users)
     "local": "codellama",
     "grok": "grok-beta",
     "claude": "claude-3-sonnet-20240229",
