@@ -80,7 +80,7 @@ ANTHROPIC_MODEL=claude-3-sonnet-20240229  # Options: claude-3-opus, claude-3-son
 
 ```bash
 GOOGLE_API_KEY=your-key-here
-GOOGLE_MODEL=gemini-pro
+GOOGLE_MODEL=gemini-2.5-flash
 ```
 
 ### LLM Behavior Settings

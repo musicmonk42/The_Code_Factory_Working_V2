@@ -103,7 +103,7 @@ class GeminiAdapter:
             self.client = LLMClient(
                 provider="gemini",
                 api_key=api_key,
-                model=settings.get("LLM_MODEL", "gemini-1.5-flash"),
+                model=settings.get("LLM_MODEL", "gemini-2.5-flash"),
                 timeout=settings.get("LLM_API_TIMEOUT_SECONDS", 60),
                 retry_attempts=settings.get("LLM_API_RETRY_ATTEMPTS", 3),
                 retry_backoff_factor=settings.get("LLM_API_RETRY_BACKOFF_FACTOR", 2.0),

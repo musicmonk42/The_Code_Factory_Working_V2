@@ -140,7 +140,7 @@ llm = init_llm("anthropic")  # Will use MockLLM if ANTHROPIC_API_KEY not set
 **Supported Providers:**
 - `openai` - OpenAI GPT models (default: gpt-3.5-turbo)
 - `anthropic` - Anthropic Claude models (default: claude-3-haiku-20240307)
-- `gemini` - Google Gemini models (default: gemini-pro)
+- `gemini` - Google Gemini models (default: gemini-2.5-flash)
 - `mock` - Mock LLM for testing
 
 ## SIEM Integration
