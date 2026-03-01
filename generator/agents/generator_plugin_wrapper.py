@@ -285,6 +285,8 @@ def validate_required_agents(registry: object) -> dict:
 
     hard_missing = []
     soft_missing = []
+    # Track all soft agents absent from the registry (even if loaded via fallback)
+    _soft_registry_absent = []
     agents = {}
 
     for agent_name in HARD_REQUIRED_AGENTS:
@@ -305,6 +307,8 @@ def validate_required_agents(registry: object) -> dict:
     for agent_name in SOFT_REQUIRED_AGENTS:
         agent = registry.get(agent_name)
         if agent is None:
+            # Track that this agent was absent from the registry regardless of fallback
+            _soft_registry_absent.append(agent_name)
             # Attempt a direct import as a fallback when the plugin registry doesn't have the agent
             fallback = _soft_agent_fallbacks.get(agent_name)
             if fallback:
@@ -334,16 +338,19 @@ def validate_required_agents(registry: object) -> dict:
         )
 
     if hard_missing:
+        # Include all agents absent from the registry (both hard-missing and all soft
+        # agents that the registry did not provide, regardless of fallback success) so
+        # that the error message enumerates every agent the caller needs to investigate.
+        _all_registry_missing = sorted(set(hard_missing) | set(_soft_registry_absent))
         _soft_missing_note = (
-            f" Also missing soft-required agents: {', '.join(sorted(soft_missing))}."
-            if soft_missing else ""
+            f" Soft-required agents also absent from registry: {', '.join(sorted(_soft_registry_absent))}."
+            if _soft_registry_absent else ""
         )
         raise ConfigurationError(
-            f"Critical workflow agents are missing from the plugin registry: {', '.join(sorted(hard_missing))}. "
-            f"The generator workflow cannot execute without these agents."
+            f"Critical workflow agents are missing from the plugin registry: {', '.join(_all_registry_missing)}. "
+            f"Hard-required agents that must be present: {', '.join(sorted(hard_missing))}."
             f"{_soft_missing_note} "
-            f"Please check agent initialization logs and ensure all dependencies are properly installed. "
-            f"Hard-required agents: {', '.join(sorted(HARD_REQUIRED_AGENTS))}"
+            f"Please check agent initialization logs and ensure all dependencies are properly installed."
         )
 
     return agents

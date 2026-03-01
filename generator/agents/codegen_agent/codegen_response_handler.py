@@ -3988,7 +3988,7 @@ _ROUTER_VARIABLE_PATTERNS: frozenset = frozenset({
 # from ``pydantic.BaseModel`` rather than being a bare class.
 _PYDANTIC_CLASS_SUFFIXES: tuple = (
     "Response", "Request", "Schema", "Create", "Update",
-    "Read", "InDB", "Base", "Input", "Output", "Model",
+    "Read", "InDB", "Base", "Input", "Output",
     "Params", "Filter", "Detail", "Summary", "List",
 )
 

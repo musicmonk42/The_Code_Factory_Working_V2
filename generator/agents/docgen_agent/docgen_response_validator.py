@@ -1303,10 +1303,10 @@ Return only the corrected documentation content.
             return {
                 "is_valid": False,
                 "overall_status": "failed",
-                "docs": "",
+                "docs": "<!-- Documentation validation failed -->",
                 "issues": [str(e)],
                 "suggestions": [],
-                "quality_metrics": {},
+                "quality_metrics": {"overall_score": 0.0},
                 "security_findings": [],
                 "provenance": provenance,
             }
