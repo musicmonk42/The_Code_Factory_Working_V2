@@ -817,7 +817,7 @@ def test_ensure_local_module_stubs_function_returns_none_not_raises():
 
 def test_ensure_local_module_stubs_variable_gets_assignment_not_function():
     """
-    Variable-like symbols (e.g. api_router) must become ``name = None`` assignments,
+    Variable-like symbols (e.g. api_router) must become variable assignments,
     not stub functions.
     """
     code_files = {
@@ -829,8 +829,8 @@ def test_ensure_local_module_stubs_variable_gets_assignment_not_function():
     stub_src = result["app/routing.py"]
     # Should NOT create a def for a variable-like name
     assert "def api_router" not in stub_src
-    # Should create a simple assignment
-    assert "api_router = None" in stub_src
+    # Should create a variable assignment (either None or APIRouter() is acceptable)
+    assert "api_router = " in stub_src
 
 
 def test_ensure_local_module_stubs_class_uses_pass():

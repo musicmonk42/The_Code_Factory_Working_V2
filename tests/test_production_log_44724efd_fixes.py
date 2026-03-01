@@ -531,11 +531,12 @@ def _load_stub_helpers() -> dict:
         "_classify_stub_module",
         "_pluralize_tablename",
         "_render_stub_template",
+        "_should_redirect_to_schemas",
         "ensure_local_module_stubs",
     })
     _TARGET_CONSTS = frozenset({
         "_LOCAL_IMPORT_RE", "_APP_SUBMODULE_IMPORT_RE", "_PYDANTIC_CLASS_SUFFIXES",
-        "_REAL_CONTENT_PATTERNS", "_VARIABLE_SUFFIXES",
+        "_PYDANTIC_SCHEMA_SUFFIXES", "_REAL_CONTENT_PATTERNS", "_VARIABLE_SUFFIXES",
         "_ROUTER_VARIABLE_PATTERNS", "_STUB_TABLENAME_IRREGULARS",
     })
 
@@ -620,7 +621,7 @@ class TestPydanticStubClassInheritance:
         assert "class SomeHelper:" in content
 
     def test_models_path_gets_basemodel(self):
-        """Class stubs in app/models/user.py inherit from BaseModel."""
+        """Pydantic DTO stubs imported from app/models/ are redirected to app/schemas/."""
         code_files = {
             "app/routers/users.py": (
                 "from app.models.user import UserCreate\n\n"
@@ -628,8 +629,10 @@ class TestPydanticStubClassInheritance:
             ),
         }
         result = self.ensure_local_module_stubs(code_files)
-        assert "app/models/user.py" in result
-        content = result["app/models/user.py"]
+        # UserCreate has a Pydantic-schema suffix so _should_redirect_to_schemas
+        # moves the stub from app/models/user.py to app/schemas/user.py.
+        assert "app/schemas/user.py" in result
+        content = result["app/schemas/user.py"]
         assert "class UserCreate(BaseModel):" in content
         assert "from pydantic import BaseModel" in content
 

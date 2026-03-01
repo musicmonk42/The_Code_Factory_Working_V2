@@ -33,6 +33,7 @@ Version: 2.0 (Production-Grade)
 
 from __future__ import annotations
 
+import ast
 import logging
 import os
 import re
@@ -470,6 +471,19 @@ class SyntaxAutoRepair:
             return code, []
 
         try:
+            # Check if the original code already has a string-related SyntaxError.
+            # If so, we can keep the repair even if the result still has a different
+            # syntax error (e.g. unclosed parenthesis) because we fixed the string
+            # issue. If the original error was a non-string error (e.g. IndentationError),
+            # we keep the existing revert behavior.
+            _original_string_syntax_error = False
+            try:
+                ast.parse(code)
+            except SyntaxError as _orig_se:
+                _orig_msg = str(_orig_se).lower()
+                if "unterminated" in _orig_msg or "eof" in _orig_msg or "eol" in _orig_msg:
+                    _original_string_syntax_error = True
+
             lines = code.split('\n')
             repaired_lines = []
 
@@ -540,8 +554,7 @@ class SyntaxAutoRepair:
             # opened it so we can append the correct closing delimiter.
             # ----------------------------------------------------------------
             try:
-                import ast as _ast
-                _ast.parse(repaired_code)
+                ast.parse(repaired_code)
                 # No syntax error — nothing more to do.
             except SyntaxError as _se:
                 _se_msg = str(_se).lower()
@@ -591,7 +604,7 @@ class SyntaxAutoRepair:
                         # Validate that the closure doesn't introduce new errors
                         # before committing to it.
                         try:
-                            _ast.parse(_candidate)
+                            ast.parse(_candidate)
                             repaired_code = _candidate
                             fixes.append(
                                 f"Appended missing closing triple-quoted string delimiter "
@@ -613,18 +626,33 @@ class SyntaxAutoRepair:
                 else:
                     # The first-pass line-by-line repair introduced a new syntax
                     # error (e.g. IndentationError, which is a SyntaxError subclass)
-                    # rather than resolving the original issue.  Propagating this
-                    # broken intermediate state would make the pipeline worse, so we
-                    # revert to the unmodified original code.
-                    logger.warning(
-                        "repair_unterminated_strings: first-pass repair introduced "
-                        "%s (%s); discarding %d fix(es) and reverting to original code",
-                        type(_se).__name__,
-                        _se,
-                        len(fixes),
-                    )
-                    repaired_code = code
-                    fixes = []
+                    # rather than resolving the original issue.  Keep the repair only
+                    # when all of the following hold:
+                    #   1. The original error was a string-related error (unterminated /
+                    #      EOL/EOF in string), meaning the repair was targeting a real issue.
+                    #   2. The resulting error is NOT an IndentationError, which indicates
+                    #      a structural problem that the repair has exposed or introduced.
+                    if (
+                        _original_string_syntax_error
+                        and not isinstance(_se, IndentationError)
+                    ):
+                        logger.debug(
+                            "repair_unterminated_strings: repaired code still has %s "
+                            "(%s) but original had a string syntax error; keeping %d fix(es)",
+                            type(_se).__name__,
+                            _se,
+                            len(fixes),
+                        )
+                    else:
+                        logger.warning(
+                            "repair_unterminated_strings: first-pass repair introduced "
+                            "%s (%s); discarding %d fix(es) and reverting to original code",
+                            type(_se).__name__,
+                            _se,
+                            len(fixes),
+                        )
+                        repaired_code = code
+                        fixes = []
 
             return repaired_code, fixes
 
