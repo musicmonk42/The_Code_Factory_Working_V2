@@ -155,7 +155,6 @@ async def pg_client(mocker: MockerFixture):
     mock_pool.acquire = mocker.MagicMock(return_value=MockAcquireContext())
     mock_pool.close = mocker.AsyncMock()
     mock_pool.get_size = mocker.MagicMock(return_value=1)
-    mock_pool.is_closed = mocker.MagicMock(return_value=False)
 
     # Mock create_pool
     mocker.patch(
