@@ -1300,3 +1300,100 @@ class TestStructureValidationDirectoryFilter:
         sv = result["structure_validation"]
         assert "app/services" in sv["missing_directories"]
         assert "app/routers" not in sv["missing_directories"]
+
+
+class TestNormalizePathParameterVariants:
+    """validate_spec_fidelity must match routes differing only in path-parameter names."""
+
+    def test_different_param_names_match(self):
+        """Spec /api/v1/products/{id} must match code /products/{product_id}."""
+        md = "- GET /api/v1/products/{id}\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n\n"
+                "@app.get('/products/{product_id}')\n"
+                "def get_product(product_id: int): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"GET /api/v1/products/{{id}} should match /products/{{product_id}}; "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == []
+
+    def test_nested_path_param_variants_match(self):
+        """Spec /api/v1/orders/{order_id}/items/{item_id} matches equivalent code path."""
+        md = "- GET /api/v1/orders/{order_id}/items/{item_id}\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n\n"
+                "@app.get('/orders/{oid}/items/{iid}')\n"
+                "def get_item(oid: int, iid: int): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Nested path params with different names must still match; "
+            f"missing: {result['missing_endpoints']}"
+        )
+
+    def test_path_with_trailing_whitespace_normalized(self):
+        """Paths with leading/trailing whitespace in spec/code must still match."""
+        md = "| GET | /api/v1/orders  | List orders |\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n\n"
+                "@app.get('/orders')\n"
+                "def list_orders(): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Trailing whitespace in paths must be stripped; "
+            f"missing: {result['missing_endpoints']}"
+        )
+
+    def test_api_v2_prefix_also_stripped(self):
+        """/api/v2/ prefix is stripped just like /api/v1/."""
+        md = "- POST /api/v2/users\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n\n"
+                "@app.post('/users')\n"
+                "def create_user(): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"/api/v2/ prefix must be stripped during normalisation; "
+            f"missing: {result['missing_endpoints']}"
+        )
+
+    def test_router_prefix_plus_param_name_difference(self):
+        """Router prefix (/api/v1/products) + route param {product_id} must match
+        spec /api/v1/products/{id} even when parameter names differ."""
+        md = "- GET /api/v1/products/{id}\n"
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers.products import router as products_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(products_router, prefix=\"/api/v1/products\")\n"
+            ),
+            "app/routers/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/{product_id}')\n"
+                "def get_product(product_id: int): pass\n"
+            ),
+        }
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Router prefix + differing param name must match spec; "
+            f"missing: {result['missing_endpoints']}"
+        )

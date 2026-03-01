@@ -1608,3 +1608,185 @@ class TestConsolidateBaseDefinitionsMultiSymbol:
         assert "from app.database import Base" in order_py
         assert "class Base(DeclarativeBase)" not in order_py
         assert "DeclarativeBase" not in order_py
+
+
+class TestFixDependsEllipsis:
+    """Tests for fix_depends_ellipsis() in codegen_response_handler."""
+
+    def test_depends_ellipsis_replaced(self):
+        """Depends(...) must be replaced with Depends(_placeholder_dep)."""
+        files = {
+            "app/routers/products.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/')\n"
+                "async def list_products(dep=Depends(...)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/products.py"]
+        assert "Depends(_placeholder_dep)" in content, (
+            "Depends(...) should be replaced with Depends(_placeholder_dep)"
+        )
+        assert "Depends(...)" not in content, (
+            "Original Depends(...) should no longer appear in the output"
+        )
+
+    def test_depends_none_replaced(self):
+        """Depends(None) must be replaced with Depends(_placeholder_dep)."""
+        files = {
+            "app/routers/auth.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "router = APIRouter()\n\n"
+                "@router.post('/login')\n"
+                "async def login(dep=Depends(None)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/auth.py"]
+        assert "Depends(_placeholder_dep)" in content
+        assert "Depends(None)" not in content
+
+    def test_placeholder_stub_injected(self):
+        """When Depends(...) is replaced, a _placeholder_dep stub must be injected."""
+        files = {
+            "app/routers/orders.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/')\n"
+                "async def list_orders(dep=Depends(...)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/orders.py"]
+        assert "async def _placeholder_dep" in content, (
+            "A _placeholder_dep stub function must be injected into files using Depends(...)"
+        )
+
+    def test_stub_not_duplicated_when_already_defined(self):
+        """If _placeholder_dep is already defined, no duplicate stub is injected."""
+        files = {
+            "app/routers/orders.py": (
+                "from fastapi import APIRouter, Depends\n\n"
+                "async def _placeholder_dep():\n"
+                "    return None\n\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/')\n"
+                "async def list_orders(dep=Depends(...)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/orders.py"]
+        assert content.count("async def _placeholder_dep") == 1, (
+            "Stub should not be duplicated when _placeholder_dep is already defined"
+        )
+
+    def test_non_python_files_untouched(self):
+        """Non-.py files must pass through unchanged."""
+        original = "SELECT * FROM orders WHERE dep = '...';\n"
+        files = {"app/queries/orders.sql": original}
+        result = crh.fix_depends_ellipsis(files)
+        assert result["app/queries/orders.sql"] == original
+
+    def test_no_depends_ellipsis_unchanged(self):
+        """Files without Depends(...) or Depends(None) must be returned unchanged."""
+        original = (
+            "from fastapi import APIRouter, Depends\n\n"
+            "async def get_current_user(): return {}\n\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/')\n"
+            "async def list_items(user=Depends(get_current_user)): ...\n"
+        )
+        files = {"app/routers/items.py": original}
+        result = crh.fix_depends_ellipsis(files)
+        assert result["app/routers/items.py"] == original, (
+            "Files without Depends(...)/Depends(None) must not be modified"
+        )
+
+    def test_multiple_occurrences_all_replaced(self):
+        """All Depends(...) occurrences in a file must be replaced."""
+        files = {
+            "app/routers/products.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/')\n"
+                "async def list_products(a=Depends(...), b=Depends(...)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/products.py"]
+        assert "Depends(...)" not in content
+        assert content.count("Depends(_placeholder_dep)") == 2, (
+            "Both Depends(...) occurrences must be replaced"
+        )
+
+    def test_mixed_ellipsis_and_none_both_replaced(self):
+        """Both Depends(...) and Depends(None) in the same file must be replaced."""
+        files = {
+            "app/routers/mixed.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/a')\n"
+                "async def route_a(dep=Depends(...)): ...\n\n"
+                "@router.get('/b')\n"
+                "async def route_b(dep=Depends(None)): ...\n"
+            )
+        }
+        result = crh.fix_depends_ellipsis(files)
+        content = result["app/routers/mixed.py"]
+        assert "Depends(...)" not in content
+        assert "Depends(None)" not in content
+        assert content.count("Depends(_placeholder_dep)") == 2
+
+    def test_empty_files_dict_returns_empty(self):
+        """An empty input dict must return an empty dict."""
+        assert crh.fix_depends_ellipsis({}) == {}
+
+    def test_multiple_files_only_affected_files_changed(self):
+        """Only files containing Depends(...) or Depends(None) should be modified."""
+        original_clean = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/')\n"
+            "async def index(): return {}\n"
+        )
+        original_broken = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/data')\n"
+            "async def get_data(dep=Depends(...)): ...\n"
+        )
+        files = {
+            "app/routers/index.py": original_clean,
+            "app/routers/data.py": original_broken,
+        }
+        result = crh.fix_depends_ellipsis(files)
+        assert result["app/routers/index.py"] == original_clean, (
+            "Clean file must not be modified"
+        )
+        assert "Depends(_placeholder_dep)" in result["app/routers/data.py"]
+
+
+class TestShouldRedirectToSchemas:
+    """Tests for _should_redirect_to_schemas() helper in codegen_response_handler."""
+
+    def test_pydantic_suffix_in_models_dir_redirects(self):
+        """Symbols with Pydantic suffixes under app/models/ should redirect."""
+        assert crh._should_redirect_to_schemas("app/models/ordercreate.py", "OrderCreate")
+        assert crh._should_redirect_to_schemas("app/models/productread.py", "ProductRead")
+        assert crh._should_redirect_to_schemas("app/models/userresponse.py", "UserResponse")
+        assert crh._should_redirect_to_schemas("app/models/orderschema.py", "OrderSchema")
+
+    def test_non_pydantic_suffix_in_models_dir_no_redirect(self):
+        """ORM model symbols (no Pydantic suffix) under app/models/ must not redirect."""
+        assert not crh._should_redirect_to_schemas("app/models/order.py", "Order")
+        assert not crh._should_redirect_to_schemas("app/models/product.py", "Product")
+
+    def test_schemas_dir_never_redirects(self):
+        """Symbols already in app/schemas/ must never trigger a redirect."""
+        assert not crh._should_redirect_to_schemas("app/schemas/order.py", "OrderCreate")
+
+    def test_non_models_path_never_redirects(self):
+        """Symbols outside app/models/ must never trigger a redirect."""
+        assert not crh._should_redirect_to_schemas("app/routers/orders.py", "OrderCreate")
+        assert not crh._should_redirect_to_schemas("app/services/order.py", "OrderCreate")

@@ -592,3 +592,106 @@ class TestIntegrationWithValidation:
 if __name__ == "__main__":
     # Allow running tests directly
     pytest.main([__file__, "-v"])
+
+
+class TestRepairDependsEllipsis:
+    """Tests for SyntaxAutoRepair.repair_depends_ellipsis()."""
+
+    def test_depends_ellipsis_replaced_with_lambda(self):
+        """Depends(...) must be replaced with Depends(lambda: None)."""
+        code = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/')\n"
+            "async def list_items(dep=Depends(...)): ...\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert "Depends(lambda: None)" in repaired, (
+            "Depends(...) should be replaced with Depends(lambda: None)"
+        )
+        assert "Depends(...)" not in repaired
+        assert len(fixes) == 1
+
+    def test_depends_none_replaced_with_lambda(self):
+        """Depends(None) must be replaced with Depends(lambda: None)."""
+        code = (
+            "from fastapi import APIRouter, Depends\n"
+            "router = APIRouter()\n\n"
+            "@router.get('/')\n"
+            "async def route(dep=Depends(None)): ...\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert "Depends(lambda: None)" in repaired
+        assert "Depends(None)" not in repaired
+        assert len(fixes) == 1
+
+    def test_multiple_depends_ellipsis_all_replaced(self):
+        """All occurrences of Depends(...) in a file must be replaced."""
+        code = (
+            "from fastapi import Depends\n\n"
+            "async def a(x=Depends(...), y=Depends(...)): ...\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert "Depends(...)" not in repaired
+        assert repaired.count("Depends(lambda: None)") == 2
+        assert len(fixes) == 2
+
+    def test_mixed_ellipsis_and_none(self):
+        """Both Depends(...) and Depends(None) in the same code are both replaced."""
+        code = (
+            "from fastapi import Depends\n\n"
+            "async def a(x=Depends(...), y=Depends(None)): ...\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert "Depends(...)" not in repaired
+        assert "Depends(None)" not in repaired
+        assert repaired.count("Depends(lambda: None)") == 2
+        assert len(fixes) == 2
+
+    def test_valid_depends_callable_unchanged(self):
+        """Depends(real_function) must not be modified."""
+        code = (
+            "from fastapi import Depends\n\n"
+            "async def get_user(): return {}\n\n"
+            "async def route(user=Depends(get_user)): ...\n"
+        )
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert repaired == code
+        assert fixes == []
+
+    def test_non_python_language_unchanged(self):
+        """Only Python code should be repaired; other languages pass through."""
+        code = "function route(dep = Depends(...)) {}\n"
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "javascript")
+        assert repaired == code
+        assert fixes == []
+
+    def test_empty_string_handled_gracefully(self):
+        """Empty string input must return empty string without error."""
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis("", "python")
+        assert repaired == ""
+        assert fixes == []
+
+    def test_invalid_input_type_handled_gracefully(self):
+        """Non-string input must be returned as-is without raising."""
+        result_code, fixes = SyntaxAutoRepair.repair_depends_ellipsis(None, "python")  # type: ignore[arg-type]
+        assert result_code is None
+        assert fixes == []
+
+    def test_depends_ellipsis_fix_applied_in_auto_repair(self):
+        """Phase 3 (repair_depends_ellipsis) must run inside auto_repair()."""
+        code = (
+            "from fastapi import Depends\n\n"
+            "async def route(dep=Depends(...)): ...\n"
+        )
+        result = SyntaxAutoRepair.auto_repair(code, "python")
+        assert "Depends(lambda: None)" in result["repaired_code"]
+        assert result["was_modified"] is True
+        assert any("Depends" in fix for fix in result["fixes_applied"])
+
+    def test_whitespace_variants_replaced(self):
+        """Depends( ... ) with extra whitespace around ellipsis must be replaced."""
+        code = "async def route(dep=Depends( ... )): ...\n"
+        repaired, fixes = SyntaxAutoRepair.repair_depends_ellipsis(code, "python")
+        assert "Depends(lambda: None)" in repaired
+        assert len(fixes) == 1

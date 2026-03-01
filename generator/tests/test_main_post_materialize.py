@@ -97,8 +97,8 @@ def test_auto_wire_wire_calls_after_fastapi_instantiation(tmp_path: Path) -> Non
     assert wire_pos > fastapi_pos
 
 
-def test_auto_wire_skipped_when_already_wired(tmp_path: Path) -> None:
-    """Phase 8 must not double-wire when include_router is already present."""
+def test_auto_wire_adds_missing_prefix(tmp_path: Path) -> None:
+    """Phase 8 adds a missing /api/v1/ prefix to routers already wired without one."""
     app_dir = tmp_path / "app"
     app_dir.mkdir()
     routers_dir = app_dir / "routers"
@@ -118,8 +118,13 @@ def test_auto_wire_skipped_when_already_wired(tmp_path: Path) -> None:
     result = _make_result()
     _auto_wire_routers(tmp_path, result)
 
-    assert (app_dir / "main.py").read_text() == original
-    assert result.files_created == []
+    # The prefix should have been injected since orders_router was wired without one.
+    expected = original.replace(
+        "app.include_router(orders_router)",
+        'app.include_router(orders_router, prefix="/api/v1/orders")',
+    )
+    assert (app_dir / "main.py").read_text() == expected
+    assert result.files_created != []
 
 
 def test_auto_wire_skipped_when_no_router_dir(tmp_path: Path) -> None:
@@ -335,3 +340,89 @@ def test_auto_wire_not_skipped_when_stubs_are_none(tmp_path: Path) -> None:
     main_content = (app_dir / "main.py").read_text()
     # The per-module import must now be injected.
     assert "from app.routers.products import router as products_router" in main_content
+
+
+def test_auto_wire_adds_prefix_to_already_wired_router(tmp_path: Path) -> None:
+    """Phase 8 must inject /api/v1/{mod} prefix when router is wired without one."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "products.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    original = (
+        "from fastapi import FastAPI\n"
+        "from app.routers.products import router as products_router\n"
+        "app = FastAPI()\n"
+        "app.include_router(products_router)\n"
+    )
+    (app_dir / "main.py").write_text(original)
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    content = (app_dir / "main.py").read_text()
+    assert 'prefix="/api/v1/products"' in content, (
+        "Missing /api/v1/products prefix should have been injected"
+    )
+    assert result.files_created != [], "modified file should be recorded"
+
+
+def test_auto_wire_skips_prefix_injection_for_health_routers(tmp_path: Path) -> None:
+    """Phase 8 must NOT inject /api/v1/ prefix for health/utility routers."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "health.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    original = (
+        "from fastapi import FastAPI\n"
+        "from app.routers.health import router as health_router\n"
+        "app = FastAPI()\n"
+        "app.include_router(health_router)\n"
+    )
+    (app_dir / "main.py").write_text(original)
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    content = (app_dir / "main.py").read_text()
+    assert 'prefix="/api/v1/health"' not in content, (
+        "health router must not receive an /api/v1/ prefix"
+    )
+    # file may or may not be rewritten — but the prefix must not appear
+    assert "health_router)" in content or 'health_router, prefix' not in content
+
+
+def test_auto_wire_does_not_duplicate_existing_prefix(tmp_path: Path) -> None:
+    """Phase 8 must not modify a router that is already wired with a prefix."""
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    routers_dir = app_dir / "routers"
+    routers_dir.mkdir()
+    (routers_dir / "__init__.py").write_text("")
+    (routers_dir / "orders.py").write_text(
+        "from fastapi import APIRouter\nrouter = APIRouter()\n"
+    )
+    original = (
+        "from fastapi import FastAPI\n"
+        "from app.routers.orders import router as orders_router\n"
+        "app = FastAPI()\n"
+        'app.include_router(orders_router, prefix="/api/v1/orders")\n'
+    )
+    (app_dir / "main.py").write_text(original)
+
+    result = _make_result()
+    _auto_wire_routers(tmp_path, result)
+
+    content = (app_dir / "main.py").read_text()
+    # The existing prefix must not be duplicated
+    assert content.count('prefix="/api/v1/orders"') == 1, (
+        "Existing prefix must not be duplicated"
+    )
+    assert content == original, "File must not be changed when prefix already exists"
