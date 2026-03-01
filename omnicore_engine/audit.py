@@ -1402,6 +1402,8 @@ class ExplainAudit:
                 "Audit flush skipped — no database client. %d records will be lost.",
                 len(records_to_flush),
             )
+            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="dropped").inc(len(records_to_flush))
+            AUDIT_ERRORS.labels(operation="flush_buffer_no_db_client").inc()
             return
 
         # Lazy table initialization - ensures database tables exist before first write operation

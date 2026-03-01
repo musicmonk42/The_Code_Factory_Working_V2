@@ -1520,6 +1520,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
                 # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
                 code_files = _detect_module_package_collisions(code_files)
+                code_files = _detect_file_package_conflicts(code_files)
 
                 # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
                 shadow_warnings = _detect_name_shadowing(code_files)
@@ -1651,6 +1652,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
                     # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
                     code_files = _detect_module_package_collisions(code_files)
+                    code_files = _detect_file_package_conflicts(code_files)
 
                     # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
                     shadow_warnings = _detect_name_shadowing(code_files)
