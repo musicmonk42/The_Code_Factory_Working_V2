@@ -68,11 +68,13 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development")
     log_level: str = Field(default="info")
-    database_url: str = Field(default="sqlite:///./dev.db")
+    database_url: str = Field(default="sqlite+aiosqlite:///./dev.db")
     redis_url: str = Field(default="redis://localhost:6379/0")
     jwt_secret_key: str = Field(default="change-me-in-production")
     cors_origins: str = Field(default="*")
     secret_key: str = Field(default="change-me-in-production")
+    algorithm: str = Field(default="HS256")
+    access_token_expire_minutes: int = Field(default=30)
 
 @lru_cache()
 def get_settings() -> Settings:

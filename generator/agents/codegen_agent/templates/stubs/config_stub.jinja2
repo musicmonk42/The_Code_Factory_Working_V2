@@ -50,6 +50,8 @@ class {{ cls }}(_SETTINGS_BASE):
         "sqlite+aiosqlite:///./app.db",
         description="Async database connection URL",
     )
+    algorithm: str = Field("HS256", description="JWT signing algorithm")
+    access_token_expire_minutes: int = Field(30, ge=1, description="Access token lifetime in minutes")
     redis_url: str | None = Field(None, description="Optional Redis URL")
     log_level: str = Field("INFO", description="Logging level (DEBUG/INFO/WARNING/ERROR)")
     allowed_origins: list[str] = Field(
@@ -57,10 +59,11 @@ class {{ cls }}(_SETTINGS_BASE):
         description="CORS allowed origins",
     )
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
 
 {% else %}
 
@@ -100,12 +103,15 @@ class Settings(_SETTINGS_BASE):
     host: str = Field("0.0.0.0", description="Bind host")
     port: int = Field(8000, ge=1, le=65535, description="Bind port")
     secret_key: str = Field("change-me-in-production", min_length=16)
+    algorithm: str = Field("HS256", description="JWT signing algorithm")
+    access_token_expire_minutes: int = Field(30, ge=1, description="Access token lifetime in minutes")
     database_url: str = Field("sqlite+aiosqlite:///./app.db")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        case_sensitive = False
+    model_config = {
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+        "case_sensitive": False,
+    }
 
 {% endif %}
 

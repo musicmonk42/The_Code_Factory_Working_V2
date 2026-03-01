@@ -754,6 +754,7 @@ fail or produce a non-functional application.
      pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
      SECRET_KEY = os.getenv("SECRET_KEY", "change-me-in-production")
      ALGORITHM = "HS256"
+     ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
      def hash_password(password: str) -> str:
          return pwd_context.hash(password)
@@ -761,7 +762,7 @@ fail or produce a non-functional application.
      def verify_password(plain: str, hashed: str) -> bool:
          return pwd_context.verify(plain, hashed)
 
-     def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=30)) -> str:
+     def create_access_token(data: dict, expires_delta: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)) -> str:
          payload = {**data, "exp": datetime.now(timezone.utc) + expires_delta}
          return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
      ```
