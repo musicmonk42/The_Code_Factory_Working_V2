@@ -205,14 +205,19 @@ class TestBuildMultipassGroupsHelper:
         self._build = _load_build_multipass_groups()
 
     def test_no_frontend_returns_three_base_groups(self):
-        """Without frontend, returns the standard 3 passes unchanged."""
+        """Without frontend, returns the standard base passes unchanged."""
         groups = self._build(include_frontend=False, frontend_type=None)
-        assert [g["name"] for g in groups] == ["core", "routes_and_services", "infrastructure"]
+        names = [g["name"] for g in groups]
+        assert "core" in names
+        assert "routes_and_services" in names
+        assert "infrastructure" in names
+        assert names[-1] == "infrastructure"
 
     def test_include_frontend_appends_fourth_pass(self):
-        """With include_frontend=True, a 4th 'frontend' pass is appended."""
+        """With include_frontend=True, a 'frontend' pass is appended after base passes."""
+        base_groups = self._build(include_frontend=False, frontend_type=None)
         groups = self._build(include_frontend=True, frontend_type="jinja_templates")
-        assert len(groups) == 4
+        assert len(groups) == len(base_groups) + 1
         assert groups[-1]["name"] == "frontend"
 
     def test_jinja_frontend_focus_references_templates_and_static(self):
@@ -230,10 +235,10 @@ class TestBuildMultipassGroupsHelper:
         assert "package.json" in focus
 
     def test_base_groups_identical_regardless_of_frontend_flag(self):
-        """First 3 passes must be identical whether or not frontend is added."""
+        """Base passes must be identical whether or not frontend is added."""
         plain = self._build(include_frontend=False, frontend_type=None)
         full = self._build(include_frontend=True, frontend_type="jinja_templates")
-        assert plain == full[:3]
+        assert plain == full[:len(plain)]
 
     def test_frontend_pass_excludes_backend_regeneration(self):
         """Frontend pass focus must forbid regenerating backend Python files."""

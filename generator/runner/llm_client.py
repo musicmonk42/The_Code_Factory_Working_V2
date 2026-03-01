@@ -301,17 +301,19 @@ class LLMClient:
     - Full observability with metrics and tracing
     """
     
-    def __init__(self, config: RunnerConfig):
+    def __init__(self, config: RunnerConfig = None, **kwargs):
         """
         Initialize LLM client with validated provider directory.
         
         Args:
-            config: Runner configuration object
+            config: Runner configuration object. If None, default values are used.
+            **kwargs: Accepted for backward-compatibility (e.g. api_key in tests).
             
         Raises:
             ValueError: If provider directory doesn't exist
             ConfigurationError: If required dependencies are missing
         """
+        # Accept None config for backward-compatibility; use attribute fallbacks below.
         self.config = config
         
         # INDUSTRY STANDARD: Defensive path validation before use
@@ -351,9 +353,10 @@ class LLMClient:
         self.manager = LLMPluginManager(plugin_dir=provider_dir)
         
         # Initialize other components with proper error handling
+        _redis_url = getattr(config, 'redis_url', None) if config else None
         self.secrets = SecretsManager()
-        self.cache = CacheManager(config.redis_url)
-        self.rate_limiter = DistributedRateLimiter(config.redis_url)
+        self.cache = CacheManager(_redis_url)
+        self.rate_limiter = DistributedRateLimiter(_redis_url)
         self.circuit_breaker = CircuitBreaker(state_metric_gauge=metrics.LLM_CIRCUIT_STATE)
         self._is_initialized = asyncio.Event()
         self._init_task = None
@@ -859,7 +862,7 @@ class LLMClient:
         effective_timeout: float = (
             timeout_per_provider
             if timeout_per_provider is not None
-            else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "300"))
+            else float(os.environ.get("ENSEMBLE_PROVIDER_TIMEOUT_SECONDS", "180"))
         )
 
         # Snapshot which providers are currently loaded so we can skip ones that

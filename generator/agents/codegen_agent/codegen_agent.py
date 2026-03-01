@@ -3565,7 +3565,7 @@ if PLUGIN_AVAILABLE:
                             for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_groups_to_run)})"
+                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
@@ -4281,7 +4281,7 @@ else:
                             for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_groups_to_run)})"
+                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))

@@ -2377,6 +2377,13 @@ def _validate_syntax(code: str, lang: str, filename: str) -> Tuple[bool, str]:
 
     # --- JavaScript / TypeScript ---
     if lang_l in ("javascript", "js", "typescript", "ts"):
+        # TypeScript files cannot be validated with plain `node --check` (which only
+        # understands JavaScript).  Skip validation for .ts/.tsx files to avoid
+        # false rejections of perfectly valid TypeScript code.
+        if lang_l in ("typescript", "ts"):
+            logger.info("TypeScript file %s: skipping node --check (requires tsc).", filename)
+            return True, "typescript: node --check skipped."
+
         if not _is_tool_available("node"):
             logger.info("Node.js not available; skipping JS/TS syntax validation.")
             return True, "node not available; skipped."
@@ -4884,18 +4891,47 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 '"""Generated module — replace with actual implementation."""\n',
                 "from typing import Any\n",
             ]
-            if has_sqlalchemy_class:
+            # Compute whether any symbols actually need SQLAlchemy ORM vs Pydantic
+            # at the per-symbol level, since Pydantic suffix patterns (e.g. "Create",
+            # "Response") override the SQLAlchemy classification even in models/ dirs.
+            _needs_sqlalchemy = any(
+                sym[0].isupper()
+                and has_sqlalchemy_class
+                and _is_sqlalchemy_module
+                and not any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
+                for sym in symbols
+            )
+            _needs_pydantic = any(
+                sym[0].isupper() and (
+                    _is_pydantic_module
+                    or any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
+                )
+                for sym in symbols
+            ) and not _is_sqlalchemy_module or any(
+                sym[0].isupper()
+                and any(sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES)
+                for sym in symbols
+            )
+            if _needs_sqlalchemy:
                 stub_lines.append("from sqlalchemy import Column, Integer, String\n")
                 stub_lines.append("from app.database import Base\n")
-            elif has_pydantic_class:
+            if _needs_pydantic:
                 stub_lines.append("from pydantic import BaseModel\n")
+            if has_router_in_symbols:
+                stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
             for sym in sorted(symbols):
                 # Uppercase initial → class; router variable → None assignment;
                 # other known variable suffixes → None variable;
                 # otherwise → function returning None.
                 if sym[0].isupper():
-                    if has_sqlalchemy_class and _is_sqlalchemy_module:
+                    # Pydantic suffix patterns (e.g. Response, Schema, Create) win
+                    # even in models/ directories, as those names indicate Pydantic
+                    # request/response schemas rather than SQLAlchemy ORM models.
+                    _sym_has_pydantic_suffix = any(
+                        sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
+                    )
+                    if has_sqlalchemy_class and _is_sqlalchemy_module and not _sym_has_pydantic_suffix:
                         # Issue 1: generate a proper SQLAlchemy ORM stub.
                         tablename = _pluralize_tablename(sym)
                         stub_lines.append(
@@ -4905,12 +4941,10 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             f"    name = Column(String, nullable=False)\n\n\n"
                         )
                     else:
-                        # For generic modules, always generate minimal bare class stubs.
-                        # For other categories, check Pydantic suffix patterns.
-                        _sym_is_pydantic = _stub_category != "generic" and (
-                            _is_pydantic_module or any(
-                                sym.endswith(sfx) for sfx in _PYDANTIC_CLASS_SUFFIXES
-                            )
+                        # Use Pydantic BaseModel when the symbol path or name indicates it.
+                        _sym_is_pydantic = (
+                            _is_pydantic_module
+                            or _sym_has_pydantic_suffix
                         )
                         if _sym_is_pydantic:
                             stub_lines.append(
@@ -4927,7 +4961,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             _stub_class_names.setdefault(module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
-                        f"{sym} = None\n\n\n"
+                        f"{sym} = APIRouter()\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
