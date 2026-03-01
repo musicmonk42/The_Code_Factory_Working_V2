@@ -13,7 +13,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import structlog
 from cryptography.fernet import Fernet, InvalidToken
-from opentelemetry import metrics, trace
+from opentelemetry import metrics
 from redis.asyncio import Redis
 
 # Add this import (install with: pip install asyncpg)
@@ -70,7 +70,6 @@ meter = metrics.get_meter(__name__)
 try:
     from self_fixing_engineer.arbiter.audit_log import AuditLogger, audit_log, verify_audit_chain
 except ImportError:
-    import json
     import warnings
     from pathlib import Path
     

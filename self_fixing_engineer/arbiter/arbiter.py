@@ -52,6 +52,7 @@ else:
     import sys
     import tempfile
     import time
+    import uuid
     import weakref
     from collections import deque
     from datetime import datetime, timezone
@@ -305,11 +306,9 @@ else:
             _sentry_initialized = True
     
     
-    # Type checking imports - only used for type hints, not at runtime
-    # Use string forward references in annotations (e.g., Optional["HumanInLoop"])
-    if TYPE_CHECKING:
-        from self_fixing_engineer.arbiter.human_loop import HumanInLoop, HumanInLoopConfig
-    
+    # HumanInLoop and HumanInLoopConfig are imported lazily at runtime (see __init__).
+    # String forward references (e.g. Optional["HumanInLoop"]) are used in annotations.
+
     # Assuming these are available in the project structure
     try:
         from self_fixing_engineer.arbiter.agent_state import AgentState as AgentStateModel

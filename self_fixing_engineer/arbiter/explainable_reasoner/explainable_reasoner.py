@@ -124,7 +124,6 @@ except ImportError:
     )
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import SpanKind
 
     OTEL_AVAILABLE = True
 except ImportError:
