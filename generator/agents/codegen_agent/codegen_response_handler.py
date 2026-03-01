@@ -1834,7 +1834,7 @@ def _detect_file_package_conflicts(code_files: Dict[str, str]) -> Dict[str, str]
     cleaned: Dict[str, str] = dict(code_files)
 
     # Collect all directory prefixes implied by paths like "app/models/product.py"
-    implied_dirs: set = set()
+    implied_dirs: Set[str] = set()
     for path in list(cleaned.keys()):
         norm = path.replace("\\", "/")
         parts = norm.split("/")

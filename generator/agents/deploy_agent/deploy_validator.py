@@ -1395,10 +1395,9 @@ class DeploymentCompletenessValidator(Validator):
 
         if entrypoint_value and cmd_value:
             # Parse exec-form JSON arrays
-            import json as _json
             try:
-                ep_list = _json.loads(entrypoint_value)
-                cmd_list = _json.loads(cmd_value)
+                ep_list = json.loads(entrypoint_value)
+                cmd_list = json.loads(cmd_value)
                 known_executables = {"uvicorn", "gunicorn", "flask", "celery", "django-admin", "hypercorn"}
                 if (
                     isinstance(ep_list, list)
@@ -1417,7 +1416,7 @@ class DeploymentCompletenessValidator(Validator):
                     report["invalid_files"].append(f"{file_path}: ENTRYPOINT/CMD conflict")
                     report["errors"].append(msg)
                     report["status"] = "failed"
-            except (_json.JSONDecodeError, TypeError):
+            except (json.JSONDecodeError, TypeError):
                 pass
     
     async def _validate_deployment_matches_code(self, report: Dict[str, Any]) -> None:
