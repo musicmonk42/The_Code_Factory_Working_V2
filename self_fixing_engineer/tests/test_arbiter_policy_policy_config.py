@@ -74,7 +74,7 @@ def test_config_defaults_and_field_types(monkeypatch):
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
     # Mock redis to avoid actual connection attempts during tests
-    with patch("redis.asyncio.Redis.from_url") as mock_redis:
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url") as mock_redis:
         mock_conn = MagicMock()
         mock_redis.return_value = mock_conn
 
@@ -149,7 +149,7 @@ def test_env_loading_and_override(monkeypatch, tmp_path):
         "LLM_MODEL", "claude-3-sonnet"
     )  # Use valid anthropic model for override
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig(_env_file=str(env_path))
         assert cfg.OPENAI_API_KEY.get_secret_value() == "from_envvar"
         assert cfg.LLM_PROVIDER == "anthropic"
@@ -172,7 +172,7 @@ def test_secret_redaction_to_dict(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # Fernet key must be 32 url-safe base64-encoded bytes.
         valid_key = b"8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
         cfg = ArbiterConfig(
@@ -202,7 +202,7 @@ def test_get_api_key_for_provider(monkeypatch):
     monkeypatch.setenv("GOOGLE_API_KEY", "gemini789")
     monkeypatch.setenv("LLM_API_KEY", "llm999")
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig()
         assert cfg.get_api_key_for_provider("openai") == "openai123"
         assert cfg.get_api_key_for_provider("anthropic") == "anthro456"
@@ -242,7 +242,7 @@ def test_encryption_key_dict_handling(monkeypatch):
     monkeypatch.setenv("ENCRYPTION_KEY", valid_key)
     monkeypatch.delenv("APP_ENV", raising=False)  # Not in production mode
     
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # Simulate the scenario where pydantic-settings passes a dict
         # by directly calling the validate_secrets method with dict input
         from self_fixing_engineer.arbiter.policy.config import ArbiterConfig
@@ -276,7 +276,7 @@ def test_singleton_thread_safety(monkeypatch):
 
     # Reset for test
     with (
-        patch("redis.asyncio.Redis.from_url"),
+        patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"),
         patch("self_fixing_engineer.arbiter.policy.config._instance", None),
     ):
 
@@ -311,7 +311,7 @@ def test_assignment_validation(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig()
         # Should validate type; assigning wrong type should raise
         with pytest.raises(ValidationError):
@@ -331,7 +331,7 @@ def test_invalid_field_type(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # Should raise error if required secret is set to non-string
         with pytest.raises(ValidationError):
             ArbiterConfig(ENCRYPTION_KEY=12345)
@@ -346,7 +346,7 @@ def test_public_api_symbols(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         from self_fixing_engineer.arbiter.policy.config import ArbiterConfig, get_config
 
         assert callable(get_config)
@@ -362,7 +362,7 @@ def test_no_secrets_in_repr(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         valid_key = b"8TOLo9wUnAz_6Tew0FPEGtI25-3L52L2hYSqk4eRTXI="
         cfg = ArbiterConfig(
             OPENAI_API_KEY="supersecret", ENCRYPTION_KEY=valid_key.decode()
@@ -383,7 +383,7 @@ def test_bad_env_file(monkeypatch, tmp_path):
 
     env_path = tmp_path / ".env"
     env_path.write_text("THIS_IS_NOT_A_VALID_LINE")
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # Should not crash or raise an unhandled exception
         cfg = ArbiterConfig(_env_file=str(env_path))
         assert isinstance(cfg, ArbiterConfig)
@@ -398,7 +398,7 @@ def test_model_reload_and_mutation(monkeypatch, tmp_path):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig()
         old_val = cfg.LLM_MODEL
         cfg.LLM_MODEL = "gpt-4o"
@@ -416,7 +416,7 @@ def test_to_dict_all_branches(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # The DECISION_OPTIMIZER_SETTINGS has default values.
         # We need to check what keys are actually being checked for redaction.
         # Let's try setting the actual keys that exist in the default dict
@@ -457,7 +457,7 @@ def test_all_public_fields_present(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig()
         fields = set(cfg.model_dump().keys())
         # Should include all documented fields
@@ -478,7 +478,7 @@ def test_new_config_fields_present(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         cfg = ArbiterConfig()
         assert hasattr(cfg, "CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL")
         assert cfg.CIRCUIT_BREAKER_VALIDATION_ERROR_INTERVAL == 300.0
@@ -506,7 +506,7 @@ def test_branch_coverage(monkeypatch):
     monkeypatch.delenv("LLM_MODEL", raising=False)
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
 
-    with patch("redis.asyncio.Redis.from_url"):
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url"):
         # .get_api_key_for_provider unknown provider with no fallback env
         monkeypatch.delenv("LLM_API_KEY", raising=False)
         cfg = ArbiterConfig()
