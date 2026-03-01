@@ -515,6 +515,7 @@ class PostgresClient:
         self._connect_lock = asyncio.Lock()
         self._is_closed = True
         self._health_check_task: Optional[asyncio.Task] = None
+        self._warned_missing_tables: set[str] = set()
         logger.info(f"PostgresClient initialized for URL: {_sanitize_dsn(self.db_url)}")
 
         metrics_port = int(os.getenv("METRICS_PORT", "0"))
@@ -573,6 +574,13 @@ class PostgresClient:
                 async with self._pool.acquire() as conn:
                     count = await conn.fetchval(query)
                 DB_TABLE_ROWS.labels(db_type=self.db_type, table=table).set(count)
+            except asyncpg_exceptions.UndefinedTableError:
+                DB_TABLE_ROWS.labels(db_type=self.db_type, table=table).set(0)
+                if table not in self._warned_missing_tables:
+                    self._warned_missing_tables.add(table)
+                    logger.warning(
+                        f"Failed to update row count for {table}: relation \"{table}\" does not exist"
+                    )
             except Exception as e:
                 logger.error(
                     f"Failed to update row count for {table}: {e}", exc_info=True
@@ -694,6 +702,7 @@ class PostgresClient:
                     logger.info("PostgreSQL connection pool warmed up.")
 
                     self._is_closed = False
+                    self._warned_missing_tables = set()
                     DB_CONNECTIONS_CURRENT.labels(db_type=self.db_type).set(
                         self._pool.get_size()
                     )
@@ -726,8 +735,18 @@ class PostgresClient:
                                 f"Failed to apply migrations: {e.stderr}"
                             ) from e
                     else:
+                        verified = 0
+                        async with self._pool.acquire() as conn:
+                            for table, schema in self._TABLE_SCHEMAS.items():
+                                try:
+                                    await conn.execute(schema["schema_sql"])
+                                    verified += 1
+                                except Exception as e:
+                                    logger.warning(
+                                        f"Could not create/verify table {table}: {e}"
+                                    )
                         logger.info(
-                            "AUTO_MIGRATE is disabled. Skipping table schema creation."
+                            f"Created/verified {verified} tables (AUTO_MIGRATE disabled, using embedded DDL)"
                         )
 
                     self._health_check_task = asyncio.create_task(
