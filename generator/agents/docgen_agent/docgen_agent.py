@@ -246,8 +246,9 @@ def scrub_text(text: str) -> str:
                 e,
                 exc_info=True,
             )
-            # Fall through to regex fallback rather than raising, so a Presidio
-            # internal error does not abort documentation generation entirely.
+            raise RuntimeError(
+                "Critical error during sensitive data scrubbing with Presidio"
+            ) from e
 
     # Regex-based fallback (also used when Presidio unavailable)
     scrubbed = text
