@@ -14,7 +14,7 @@ import shutil
 import tempfile
 import zipfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import aiofiles  # For async I/O (add to reqs: aiofiles)
 import yaml
@@ -1718,11 +1718,6 @@ def _repair_double_prefix(output_dir: Path) -> None:
     _APIROUTER_PREFIX_RE = re.compile(
         r'APIRouter\s*\([^)]*prefix\s*=\s*["\']([^"\']+)["\']'
     )
-    # Matches the prefix= kwarg inside include_router(...) — captures the
-    # entire ",\s*prefix=..." fragment so it can be removed.
-    _INCLUDE_ROUTER_PREFIX_RE = re.compile(
-        r',\s*prefix\s*=\s*["\'][^"\']+["\']'
-    )
     # Matches the prefix value inside include_router for comparison
     _INCLUDE_ROUTER_PREFIX_VALUE_RE = re.compile(
         r'include_router\s*\([^,)]+,\s*(?:[^,)]*,\s*)*prefix\s*=\s*["\']([^"\']+)["\']'
@@ -1730,8 +1725,8 @@ def _repair_double_prefix(output_dir: Path) -> None:
 
     python_files = list(output_dir.rglob("*.py"))
 
-    # Collect router file prefixes: prefix -> set of files that define it
-    router_prefixes: set = set()
+    # Collect all prefixes already defined on APIRouter instances
+    router_prefixes: Set[str] = set()
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
@@ -1745,7 +1740,7 @@ def _repair_double_prefix(output_dir: Path) -> None:
     if not router_prefixes:
         return
 
-    # Find main.py or app entry points and remove duplicate prefix= args
+    # For each file that calls include_router, remove duplicate prefix= args
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
@@ -1758,13 +1753,11 @@ def _repair_double_prefix(output_dir: Path) -> None:
         for m in _INCLUDE_ROUTER_PREFIX_VALUE_RE.finditer(content):
             prefix_val = m.group(1).rstrip("/")
             if prefix_val in router_prefixes:
-                # Remove ,\s*prefix="<prefix_val>" from the include_router call
-                new_content = _INCLUDE_ROUTER_PREFIX_RE.sub(
-                    lambda _m, _pv=prefix_val: (
-                        ""
-                        if re.search(r'["\']' + re.escape(_pv) + r'["\']', _m.group(0))
-                        else _m.group(0)
-                    ),
+                # Build a targeted pattern to remove only this specific prefix kwarg
+                escaped = re.escape(prefix_val)
+                new_content = re.sub(
+                    r',\s*prefix\s*=\s*["\']' + escaped + r'["\']',
+                    "",
                     new_content,
                 )
 
