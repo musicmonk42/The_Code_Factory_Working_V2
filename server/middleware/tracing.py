@@ -70,7 +70,11 @@ def setup_tracing(
         OTEL_EXPORTER_OTLP_HEADERS: Headers for OTLP exporter (e.g., "api-key=secret")
         OTEL_SERVICE_NAME: Override service name
         OTEL_RESOURCE_ATTRIBUTES: Additional resource attributes
-        
+        OTEL_LOG_SPANS: Set to "true" to enable console span export when
+            ``console_export=True`` is passed.  Defaults to "false" so that
+            console-span output (which can exceed 500 lines/sec) is suppressed
+            in production even when ``console_export`` is explicitly set.
+            
     Example:
         >>> tracer = setup_tracing("my-service", "1.0.0", "production")
         >>> with tracer.start_as_current_span("operation") as span:
@@ -171,7 +175,7 @@ def setup_tracing(
                 )
         
         # Add console exporter for debugging if requested
-        if console_export:
+        if console_export and os.environ.get("OTEL_LOG_SPANS", "false").lower() == "true":
             console_processor = BatchSpanProcessor(ConsoleSpanExporter())
             provider.add_span_processor(console_processor)
             logger.info("Console trace exporter enabled for debugging")

@@ -761,6 +761,7 @@ class SQLiteContextManager(ContextManager):
         self.fernet = fernet if fernet is not None else get_fernet()
         self.logger = get_logger()
         self._is_production_ready = False  # Not ready until initialized
+        self._write_lock = asyncio.Lock()
 
     @classmethod
     async def create(cls, db_path: str, fernet=None) -> "SQLiteContextManager":
@@ -792,6 +793,7 @@ class SQLiteContextManager(ContextManager):
                     conn.row_factory = sqlite3.Row
                     conn.execute("PRAGMA journal_mode=WAL;")
                     conn.execute("PRAGMA foreign_keys=ON;")
+                    conn.execute("PRAGMA busy_timeout=5000;")
                     conn.execute(
                         "CREATE TABLE IF NOT EXISTS db_info (key TEXT PRIMARY KEY, value TEXT)"
                     )
@@ -951,12 +953,13 @@ class SQLiteContextManager(ContextManager):
         try:
             json_data = json.dumps(data, ensure_ascii=False).encode("utf-8")
             encrypted_data_blob = self.fernet.encrypt(json_data)
-            await asyncio.to_thread(
-                self.conn.execute,
-                "INSERT INTO context (entry_id, encrypted_data) VALUES (?, ?)",
-                (entry_id, encrypted_data_blob),
-            )
-            await asyncio.to_thread(self.conn.commit)
+            async with self._write_lock:
+                await asyncio.to_thread(
+                    self.conn.execute,
+                    "INSERT INTO context (entry_id, encrypted_data) VALUES (?, ?)",
+                    (entry_id, encrypted_data_blob),
+                )
+                await asyncio.to_thread(self.conn.commit)
             await log_action(
                 "context_add", entry_id=entry_id, source="sqlite", status="success"
             )
