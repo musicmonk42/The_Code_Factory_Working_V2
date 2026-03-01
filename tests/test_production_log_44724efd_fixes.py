@@ -527,9 +527,17 @@ def _load_stub_helpers() -> dict:
     _TARGET_FUNCS = frozenset({
         "_is_router_variable",
         "_is_likely_variable",
+        "_is_stub_content",
+        "_classify_stub_module",
+        "_pluralize_tablename",
+        "_render_stub_template",
         "ensure_local_module_stubs",
     })
-    _TARGET_CONSTS = frozenset({"_LOCAL_IMPORT_RE", "_APP_SUBMODULE_IMPORT_RE", "_PYDANTIC_CLASS_SUFFIXES"})
+    _TARGET_CONSTS = frozenset({
+        "_LOCAL_IMPORT_RE", "_APP_SUBMODULE_IMPORT_RE", "_PYDANTIC_CLASS_SUFFIXES",
+        "_REAL_CONTENT_PATTERNS", "_VARIABLE_SUFFIXES",
+        "_ROUTER_VARIABLE_PATTERNS", "_STUB_TABLENAME_IRREGULARS",
+    })
 
     nodes = []
     for node in tree.body:
@@ -548,11 +556,24 @@ def _load_stub_helpers() -> dict:
     _ast.fix_missing_locations(module)
     code = compile(module, str(_CODEGEN_RESPONSE_HANDLER_PATH), "exec")
     import logging as _logging
+    from pathlib import Path as _Path
+    from typing import Any as _Any, List as _List, Optional as _Optional, Tuple as _Tuple
     ns: dict = {
         "ast": _ast, "re": _re,
         "Dict": Dict, "Set": Set,
         "logging": _logging,
         "logger": _logging.getLogger("codegen_response_handler"),
+        "Path": _Path,
+        "Any": _Any,
+        "List": _List,
+        "Optional": _Optional,
+        "Tuple": _Tuple,
+        # Disable Jinja2 in the isolated namespace so _render_stub_template
+        # always returns None and the inline generation path is used.
+        "HAS_JINJA2": False,
+        "_STUB_TEMPLATE_ENV": None,
+        "_STUB_TEMPLATES_DIR": _Path("/nonexistent/stubs"),
+        "__file__": str(_CODEGEN_RESPONSE_HANDLER_PATH),
     }
     exec(code, ns)  # noqa: S102  (trusted internal source)
     return ns
