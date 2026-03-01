@@ -1224,6 +1224,10 @@ def fix_204_no_content_responses(files: Dict[str, str]) -> Dict[str, str]:
 
 _DEPENDS_ELLIPSIS_RE = re.compile(r'Depends\(\s*\.\.\.\s*\)')
 _DEPENDS_NONE_CALLABLE_RE = re.compile(r'Depends\(\s*None\s*\)')
+# Matches an actual `async def _placeholder_dep(` function definition (not a comment or string).
+_PLACEHOLDER_DEP_DEFINED_RE = re.compile(
+    r'(?m)^(?:async\s+)?def\s+_placeholder_dep\s*\('
+)
 _PLACEHOLDER_DEP_STUB = (
     "\n\nasync def _placeholder_dep():\n"
     '    """Auto-generated placeholder dependency — replace with real implementation."""\n'
@@ -1261,7 +1265,7 @@ def fix_depends_ellipsis(code_files: Dict[str, str]) -> Dict[str, str]:
         new_content = _DEPENDS_NONE_CALLABLE_RE.sub('Depends(_placeholder_dep)', new_content)
 
         # Only inject the stub when _placeholder_dep isn't already defined.
-        if '_placeholder_dep' not in content:
+        if not _PLACEHOLDER_DEP_DEFINED_RE.search(content):
             lines = new_content.splitlines(keepends=True)
             insert_idx = 0
             past_imports = False
@@ -5094,7 +5098,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
         # upper-cased symbol carries a DTO suffix (e.g. OrderCreate, ProductRead).
         # Use a separate variable so the loop variable is never silently mutated.
         _uppercase_syms = [sym for sym in symbols if sym and sym[0].isupper()]
-        _all_pydantic = bool(_uppercase_syms) and all(
+        _all_pydantic = _uppercase_syms and all(
             _should_redirect_to_schemas(module_path, sym) for sym in _uppercase_syms
         )
         if _all_pydantic:

@@ -1075,11 +1075,11 @@ class SyntaxAutoRepair:
             if fixes:
                 logger.debug(f"Phase 2 complete: {len(fixes)} string(s) repaired")
 
-            # Phase 5: Fix Depends(...) / Depends(None) ellipsis patterns
+            # Phase 3: Fix Depends(...) / Depends(None) ellipsis patterns
             code, fixes = cls.repair_depends_ellipsis(code, language)
             all_fixes.extend(fixes)
             if fixes:
-                logger.debug(f"Phase 5 complete: {len(fixes)} Depends(ellipsis) pattern(s) repaired")
+                logger.debug(f"Phase 3 complete: {len(fixes)} Depends(ellipsis) pattern(s) repaired")
 
             # Determine if code was modified
             was_modified = code != original_code

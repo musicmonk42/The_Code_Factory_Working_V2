@@ -679,7 +679,7 @@ class TestRepairDependsEllipsis:
         assert fixes == []
 
     def test_depends_ellipsis_fix_applied_in_auto_repair(self):
-        """Phase 5 (repair_depends_ellipsis) must run inside auto_repair()."""
+        """Phase 3 (repair_depends_ellipsis) must run inside auto_repair()."""
         code = (
             "from fastapi import Depends\n\n"
             "async def route(dep=Depends(...)): ...\n"
