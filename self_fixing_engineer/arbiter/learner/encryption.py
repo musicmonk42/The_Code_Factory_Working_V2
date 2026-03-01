@@ -1,7 +1,6 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 # D:\SFE\self_fixing_engineer\arbiter\learner\encryption.py
-import base64
 import json
 import os
 from typing import Any, Dict, Optional

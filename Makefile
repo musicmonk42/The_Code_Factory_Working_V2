@@ -10,6 +10,7 @@
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
 	test-arbiter-policy test-arbiter-integration test-codegen-stubs test-pipeline-fixes \
+	test-evolution test-rl-integration \
 	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
 
 # Default target
@@ -136,9 +137,22 @@ test-evolution: ## Run Genetic Algorithm / Evolution Engine tests (EV-2, EV-3, I
 	@echo "$(BLUE)Running Evolution Engine tests...$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
 		EVOLUTION_POPULATION_SIZE=4 EVOLUTION_GENERATIONS=2 \
+		EVOLUTION_BACKEND=auto \
+		EXPLORER_EVOLUTION_GENERATIONS=2 EXPLORER_EVOLUTION_POPULATION_SIZE=3 \
+		MIN_SUPERVISED_TRAINING_SAMPLES=5 \
 		ENABLE_EXPERIMENTAL_EVOLUTION=true && \
 		pytest -k "evolution or evolve or genetic or deap or gene" -v --tb=short
 	@echo "$(GREEN)Evolution Engine tests complete!$(NC)"
+
+test-rl-integration: ## Run RL stack end-to-end integration tests (arbiter metrics, PPO, GA persistence, arena, meta-learning)
+	@echo "$(BLUE)Running RL integration tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" \
+		EVOLUTION_BACKEND=auto \
+		EXPLORER_EVOLUTION_GENERATIONS=2 EXPLORER_EVOLUTION_POPULATION_SIZE=3 \
+		MIN_SUPERVISED_TRAINING_SAMPLES=5 \
+		ENABLE_EXPERIMENTAL_EVOLUTION=true && \
+		pytest tests/test_arbiter_rl_integration.py -v --tb=short
+	@echo "$(GREEN)RL integration tests complete!$(NC)"
 
 test-dlt: ## Run DLT backend tests (RB-5 EVM support, IB-1 checkpoint bridge, SEC-1 HMAC)
 	@echo "$(BLUE)Running DLT backend tests...$(NC)"

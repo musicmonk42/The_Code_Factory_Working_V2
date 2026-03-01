@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import os
-import random
 import signal
 import time
 import uuid
@@ -246,8 +245,18 @@ class Trainer:
         self.agent_config_service = agent_config_service
         self._trained_models_awaiting_deployment: List[ModelVersion] = []
 
-    async def _evaluate_model(self, model_version: ModelVersion) -> bool:
-        """Evaluates a newly trained model against benchmarks."""
+    async def _evaluate_model(self, model_version: ModelVersion) -> "tuple[bool, ModelVersion]":
+        """Evaluate a newly trained model against benchmarks.
+
+        Calls the ML platform's ``evaluate_model`` endpoint to get fresh
+        post-training metrics rather than re-using training-time numbers.
+        Because ``ModelVersion`` is frozen (immutable), a new instance is
+        returned with the updated ``evaluation_metrics``.
+
+        Returns:
+            (passed, updated_model_version) — *passed* is True when the
+            primary accuracy metric meets ``MODEL_BENCHMARK_THRESHOLD``.
+        """
         with trace.get_tracer(__name__).start_as_current_span("evaluate_model"):
             ML_EVALUATION_COUNT.inc()
             start_time = time.monotonic()
@@ -258,8 +267,34 @@ class Trainer:
                     model_id=model_version.model_id,
                     version=model_version.version,
                 )
-                # Simulate evaluation time
-                await asyncio.sleep(random.uniform(2, 8))
+                # Call the ML platform's real evaluate endpoint to get fresh metrics.
+                fresh_metrics: dict = dict(model_version.evaluation_metrics)
+                try:
+                    eval_response = await self.ml_platform_client.evaluate_model(
+                        model_version.model_id,
+                        {"version": model_version.version},
+                    )
+                    fresh_metrics = eval_response.get(
+                        "metrics", model_version.evaluation_metrics
+                    )
+                    # ModelVersion is frozen — create an updated copy rather than
+                    # attempting an in-place mutation which Pydantic V2 would reject.
+                    model_version = model_version.model_copy(
+                        update={"evaluation_metrics": fresh_metrics}
+                    )
+                    _log_structured(
+                        logging.INFO,
+                        "Received evaluation metrics from ML platform.",
+                        model_id=model_version.model_id,
+                        metrics=fresh_metrics,
+                    )
+                except Exception as eval_err:
+                    _log_structured(
+                        logging.WARNING,
+                        "ML platform evaluation call failed; falling back to training metrics.",
+                        model_id=model_version.model_id,
+                        error=str(eval_err),
+                    )
 
                 primary_metric = model_version.evaluation_metrics.get("accuracy", 0.0)
                 if primary_metric >= self.config.MODEL_BENCHMARK_THRESHOLD:
@@ -271,7 +306,7 @@ class Trainer:
                         metric=primary_metric,
                         threshold=self.config.MODEL_BENCHMARK_THRESHOLD,
                     )
-                    return True
+                    return True, model_version
                 else:
                     _log_structured(
                         logging.WARNING,
@@ -281,7 +316,7 @@ class Trainer:
                         metric=primary_metric,
                         threshold=self.config.MODEL_BENCHMARK_THRESHOLD,
                     )
-                    return False
+                    return False, model_version
             except Exception as e:
                 _log_structured(
                     logging.ERROR,
@@ -291,7 +326,7 @@ class Trainer:
                     exc_info=True,
                 )
                 ML_ORCHESTRATOR_ERRORS.inc()
-                return False
+                return False, model_version
             finally:
                 ML_EVALUATION_LATENCY.observe(time.monotonic() - start_time)
 
@@ -448,15 +483,19 @@ class Trainer:
                     deployment_status="pending",
                 )
 
-                if await self._evaluate_model(model_version):
+                passed, model_version = await self._evaluate_model(model_version)
+                if passed:
                     await self._deploy_model(model_version)
-                    model_version.deployment_status = "deployed"
-                    model_version.deployment_timestamp = datetime.now(
-                        timezone.utc
-                    ).isoformat()
+                    # ModelVersion is frozen — build updated copy via model_copy()
+                    model_version = model_version.model_copy(update={
+                        "deployment_status": "deployed",
+                        "deployment_timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
                     return model_version
                 else:
-                    model_version.deployment_status = "failed_evaluation"
+                    model_version = model_version.model_copy(
+                        update={"deployment_status": "failed_evaluation"}
+                    )
                     return None
             except Exception as e:
                 ML_TRAINING_FAILURE_COUNT.inc()

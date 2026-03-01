@@ -239,6 +239,10 @@ except ImportError as e:
     def validator(*args, **kwargs):
         return lambda f: f
 
+    def field_validator(*args, **kwargs):
+        """No-op fallback for pydantic field_validator when pydantic V2 is unavailable."""
+        return lambda f: f
+
     # gRPC health fallbacks
     health_pb2 = None
     health_pb2_grpc = None

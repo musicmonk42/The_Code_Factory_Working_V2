@@ -105,36 +105,65 @@ class CircuitBreakerListener:
 # --- Concrete Integrations (Replacing Mocks) ---
 class Neo4jKnowledgeGraph:
     """
-    A concrete implementation for interacting with a Neo4j Knowledge Graph.
-    NOTE: This is a simplified example. A real implementation would use the
-    official neo4j-driver and handle connection pooling, transactions, and errors.
+    Concrete adapter for a Neo4j Knowledge Graph.
+
+    When ``knowledge_graph.uri`` is configured this class should be replaced
+    with a full neo4j-driver implementation (connection pooling, transactions,
+    retries).  Until then it persists facts in-memory so the rest of the
+    growth manager can operate correctly in development/test, but it emits a
+    WARNING at init time so operators know no facts reach a real database.
     """
+
+    _warned: bool = False  # class-level flag so we warn once per process
 
     def __init__(self, config_store: ConfigStore):
         self.uri = config_store.get("knowledge_graph.uri")
         self.user = config_store.get("knowledge_graph.user")
         self.password = config_store.get("knowledge_graph.password")
-        logger.info("Initialized Neo4jKnowledgeGraph (simulation).")
+        self._in_memory: Dict[str, List[Dict[str, Any]]] = {}
+
+        if not self.uri:
+            if not Neo4jKnowledgeGraph._warned:
+                logger.warning(
+                    "Neo4jKnowledgeGraph: knowledge_graph.uri is not configured. "
+                    "Facts are stored in-memory only and will be lost on restart. "
+                    "Set knowledge_graph.uri (+ .user / .password) to enable durable storage."
+                )
+                Neo4jKnowledgeGraph._warned = True
+        else:
+            logger.info(
+                f"Neo4jKnowledgeGraph configured (uri={self.uri}). "
+                "NOTE: Full neo4j-driver integration is not yet implemented — "
+                "facts are still in-memory until the driver is wired in."
+            )
 
     async def add_fact(
         self, arbiter_id: str, event_type: str, event_details: Dict[str, Any]
     ) -> None:
-        """Simulates adding a fact to the knowledge graph."""
-        # In a real implementation, this would execute a Cypher query.
-        # Example: MERGE (a:Arbiter {id: $arbiter_id})
-        #          MERGE (s:Skill {name: $skill_name})
-        #          CREATE (a)-[:ACQUIRED]->(s)
-        await asyncio.sleep(0.01)  # Simulate network latency
+        """Persist a fact for *arbiter_id* in the in-memory store.
+
+        A production implementation would execute a parameterised Cypher query:
+            MERGE (a:Arbiter {id: $arbiter_id})
+            MERGE (s:Skill   {name: $skill_name})
+            CREATE (a)-[:ACQUIRED {event_type: $event_type}]->(s)
+        """
+        self._in_memory.setdefault(arbiter_id, []).append(
+            {"event_type": event_type, **event_details}
+        )
         logger.debug(
-            f"[KnowledgeGraph] Added fact for {arbiter_id}: {event_type} -> {event_details.get('skill_name')}"
+            "[KnowledgeGraph] Stored fact for %s: %s -> %s",
+            arbiter_id,
+            event_type,
+            event_details.get("skill_name"),
         )
 
 
 class LoggingFeedbackManager:
     """
-    A concrete implementation that logs feedback events.
-    In a real system, this might write to a database, a message queue,
-    or a dedicated feedback analysis service.
+    Concrete feedback manager that records feedback events to the application log.
+
+    In production, replace or extend this to write to a database, a message
+    queue, or a dedicated feedback-analysis service.
     """
 
     def __init__(self, config_store: ConfigStore):
@@ -144,10 +173,14 @@ class LoggingFeedbackManager:
     async def record_feedback(
         self, arbiter_id: str, event_type: str, event_details: Dict[str, Any]
     ) -> None:
-        """Logs the feedback for analysis."""
-        log_message = f"[Feedback] Arbiter: {arbiter_id}, Event: {event_type}, Details: {event_details}"
-        logger.log(logging.getLevelName(self.log_level), log_message)
-        await asyncio.sleep(0.005)  # Simulate I/O
+        """Log the feedback entry at the configured level."""
+        logger.log(
+            logging.getLevelName(self.log_level),
+            "[Feedback] Arbiter: %s, Event: %s, Details: %s",
+            arbiter_id,
+            event_type,
+            event_details,
+        )
 
 
 # --- Helper Classes ---
@@ -383,14 +416,70 @@ class ArbiterGrowthManager:
                 await asyncio.sleep(300)  # Wait longer after an error
 
     async def _run_evolution_cycle(self) -> None:
-        """Contains the logic for an arbiter's self-improvement cycle."""
+        """Arbiter self-improvement cycle: run an evolutionary experiment via ArbiterExplorer.
+
+        Parameters are read from environment variables so deployments can tune
+        evolutionary pressure without code changes:
+            EXPLORER_EVOLUTION_GENERATIONS    — default 5
+            EXPLORER_EVOLUTION_POPULATION_SIZE — default 10
+        """
         with tracer.start_as_current_span(
-            "arbiter_evolution_cycle", attributes={"self_fixing_engineer.arbiter.id": self.arbiter}
+            "arbiter_evolution_cycle",
+            attributes={"self_fixing_engineer.arbiter.id": self.arbiter},
         ):
-            logger.info(f"Starting evolution cycle for arbiter: {self.arbiter}")
-            # In a real system, this would trigger MLOps pipelines, etc.
-            await self._audit_log("evolution_cycle_completed", {"status": "success"})
-            logger.info(f"Evolution cycle for arbiter '{self.arbiter}' completed.")
+            logger.info("Starting evolution cycle for arbiter: %s", self.arbiter)
+
+            num_generations = int(os.getenv("EXPLORER_EVOLUTION_GENERATIONS", "5"))
+            population_size = int(os.getenv("EXPLORER_EVOLUTION_POPULATION_SIZE", "10"))
+
+            try:
+                from self_fixing_engineer.arbiter.explorer import ArbiterExplorer
+
+                explorer = ArbiterExplorer()
+                evo_result = await explorer.run_evolutionary_experiment(
+                    experiment_name=f"{self.arbiter}_evolution_genetic",
+                    initial_agent={"config": "baseline", "arbiter_id": self.arbiter},
+                    num_generations=num_generations,
+                    population_size=population_size,
+                    metric="perf",
+                )
+                best_score = max(
+                    (gen.get("best_score", 0.0) for gen in evo_result.get("generations", [])),
+                    default=0.0,
+                )
+                logger.info(
+                    "Evolution cycle for arbiter '%s' completed: "
+                    "generations=%d, population=%d, best_score=%.4f",
+                    self.arbiter, num_generations, population_size, best_score,
+                )
+                await self._audit_log(
+                    "evolution_cycle_completed",
+                    {
+                        "status": "success",
+                        "num_generations": num_generations,
+                        "population_size": population_size,
+                        "best_score": best_score,
+                    },
+                )
+            except ImportError:
+                logger.warning(
+                    "ArbiterExplorer not available — evolution cycle skipped for '%s'. "
+                    "Install self_fixing_engineer.arbiter.explorer to enable evolution.",
+                    self.arbiter,
+                )
+                await self._audit_log(
+                    "evolution_cycle_skipped",
+                    {"reason": "ArbiterExplorer not importable"},
+                )
+            except Exception as exc:
+                logger.error(
+                    "Evolution cycle failed for arbiter '%s': %s",
+                    self.arbiter, exc, exc_info=True,
+                )
+                await self._audit_log(
+                    "evolution_cycle_failed",
+                    {"error": str(exc)},
+                )
 
     async def _validate_audit_chain(self) -> None:
         """

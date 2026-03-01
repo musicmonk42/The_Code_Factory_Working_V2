@@ -2803,9 +2803,12 @@ class SFEService:
 
         return {
             "competition_id": f"comp_{abs(hash(code_path)) % 10000}",
-            "status": "completed",
-            "winner": "agent_1",
-            "rounds_completed": rounds,
+            "status": "unavailable",
+            "source": "fallback",
+            "message": (
+                "Arena competition requires the SFE backend to be configured. "
+                "Set OMNICORE_ENDPOINT and ensure the SFE service is running."
+            ),
         }
 
     async def detect_bugs(

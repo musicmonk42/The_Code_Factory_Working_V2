@@ -12,7 +12,6 @@ import jsonschema
 import structlog
 from jsonschema.exceptions import SchemaError
 from jsonschema.exceptions import ValidationError as JsonValidationError
-from opentelemetry import trace
 from self_fixing_engineer.arbiter.otel_config import get_tracer_safe
 from prometheus_client import Counter, Histogram
 from tenacity import retry, stop_after_attempt, wait_exponential
