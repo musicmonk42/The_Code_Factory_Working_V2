@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     app_env: str = Field(default="development")
     log_level: str = Field(default="info")
-    database_url: str = Field(default="sqlite:///./dev.db")
+    database_url: str = Field(default="sqlite+aiosqlite:///./dev.db")
     redis_url: str = Field(default="redis://localhost:6379/0")
     jwt_secret_key: str = Field(default="change-me-in-production")
     cors_origins: str = Field(default="*")
