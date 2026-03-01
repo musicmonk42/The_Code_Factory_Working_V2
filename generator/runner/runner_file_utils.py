@@ -1699,6 +1699,100 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
     return result
 
 
+def _validate_no_double_prefix(output_dir: Path) -> List[str]:
+    """Detect routers that are mounted with a duplicated prefix.
+
+    A double-prefix occurs when:
+
+    1. A router file defines ``APIRouter(prefix="/api/v1/orders")``, AND
+    2. The app's entry point also registers it with
+       ``app.include_router(router, prefix="/api/v1/orders")``.
+
+    This causes all endpoints to be reachable at
+    ``/api/v1/orders/api/v1/orders/...`` which is almost certainly wrong.
+
+    Also detects route decorators that include the full path when the router
+    already has a prefix (e.g. ``@router.get("/api/v1/orders")`` in a file
+    where the router has ``prefix="/api/v1/orders"``).
+
+    Args:
+        output_dir: Root directory of the generated project.
+
+    Returns:
+        A list of actionable error strings.  Empty list means no issues found.
+    """
+    errors: List[str] = []
+    python_files = list(output_dir.rglob("*.py"))
+
+    # Regex patterns
+    _APIROUTER_PREFIX_RE = re.compile(
+        r'APIRouter\s*\([^)]*prefix\s*=\s*["\']([^"\']+)["\']'
+    )
+    _INCLUDE_ROUTER_PREFIX_RE = re.compile(
+        r'include_router\s*\([^,)]+,\s*(?:[^,)]*,\s*)*prefix\s*=\s*["\']([^"\']+)["\']'
+    )
+    _ROUTE_DECORATOR_RE = re.compile(
+        r'@\w+\.(?:get|post|put|delete|patch|head|options)\s*\(\s*["\']([^"\']+)["\']'
+    )
+
+    # Collect router file prefixes: file_path -> prefix
+    router_prefixes: Dict[str, str] = {}
+    for py_file in python_files:
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in _APIROUTER_PREFIX_RE.finditer(content):
+            prefix = m.group(1).rstrip("/")
+            if prefix:
+                router_prefixes[str(py_file.relative_to(output_dir))] = prefix
+
+    # Collect include_router prefixes from main.py or app entry point
+    include_prefixes: Dict[str, str] = {}  # prefix -> source file
+    for py_file in python_files:
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in _INCLUDE_ROUTER_PREFIX_RE.finditer(content):
+            prefix = m.group(1).rstrip("/")
+            if prefix:
+                rel = str(py_file.relative_to(output_dir))
+                include_prefixes[prefix] = rel
+
+    # Check for double-prefix: same prefix in both router def and include_router
+    for router_file, router_prefix in router_prefixes.items():
+        if router_prefix in include_prefixes:
+            errors.append(
+                f"Double-prefix detected: router in '{router_file}' defines "
+                f"prefix='{router_prefix}' AND '{include_prefixes[router_prefix]}' "
+                f"also mounts it with prefix='{router_prefix}'. "
+                f"Remove the prefix from one location to avoid doubled paths."
+            )
+
+    # Check for full-path route decorators in files that already have a prefix
+    for py_file in python_files:
+        rel = str(py_file.relative_to(output_dir))
+        router_prefix = router_prefixes.get(rel)
+        if not router_prefix:
+            continue
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in _ROUTE_DECORATOR_RE.finditer(content):
+            route_path = m.group(1)
+            if route_path.startswith(router_prefix + "/") or route_path == router_prefix:
+                errors.append(
+                    f"Route path conflict in '{rel}': decorator path '{route_path}' "
+                    f"repeats the router prefix '{router_prefix}'. "
+                    f"Use a relative path (e.g. '/{route_path[len(router_prefix):].lstrip('/')}') "
+                    f"instead."
+                )
+
+    return errors
+
+
 def _validate_async_sync_compatibility(output_dir: Path) -> List[str]:
     """Detect incompatible mixing of async and sync SQLAlchemy usage across a project.
 
@@ -3071,6 +3165,15 @@ async def validate_generated_project(
                 result["valid"] = False
         except Exception as e:
             result["warnings"].append(f"Could not validate async/sync compatibility: {e}")
+
+        # Double-prefix router detection
+        try:
+            double_prefix_errors = _validate_no_double_prefix(output_dir)
+            for err in double_prefix_errors:
+                result["errors"].append(err)
+                result["valid"] = False
+        except Exception as e:
+            result["warnings"].append(f"Could not validate router prefix duplication: {e}")
 
         # Router→service dependency injection
         try:
