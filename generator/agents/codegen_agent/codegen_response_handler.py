@@ -966,12 +966,73 @@ def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
     result = dict(files)
     changed_files: List[str] = []
 
+    # Runtime URL rewrite snippet: injected before create_async_engine() calls when
+    # the URL variable originates from os.getenv().  This converts sync driver URLs
+    # (postgresql://, mysql://, sqlite:///) to async equivalents at startup so that
+    # the runtime env var is safe regardless of which driver scheme it uses.
+    _RUNTIME_URL_REWRITE_SNIPPET = (
+        "# Runtime rewrite: ensure async driver URL scheme\n"
+        "_db_url = {var}\n"
+        "if _db_url.startswith(\"postgresql://\"):\n"
+        "    _db_url = \"postgresql+asyncpg://\" + _db_url[len(\"postgresql://\"):]\n"
+        "elif _db_url.startswith(\"postgres://\"):\n"
+        "    _db_url = \"postgresql+asyncpg://\" + _db_url[len(\"postgres://\"):]\n"
+        "elif _db_url.startswith(\"mysql://\"):\n"
+        "    _db_url = \"mysql+aiomysql://\" + _db_url[len(\"mysql://\"):]\n"
+        "elif _db_url.startswith(\"sqlite:///\") and not _db_url.startswith(\"sqlite+aiosqlite:///\"):\n"
+        "    _db_url = \"sqlite+aiosqlite:///\" + _db_url[len(\"sqlite:///\"):]\n"
+    )
+    # Pattern to detect: <VAR> = os.getenv(...) followed (within a few lines) by
+    # create_async_engine(<VAR>, ...) where VAR doesn't already have a runtime rewrite.
+    _GETENV_URL_RE = re.compile(
+        r'^(?P<var>[A-Za-z_][A-Za-z_0-9]*)\s*(?::\s*\w+)?\s*=\s*os\.getenv\s*\([^)]*\)',
+        re.MULTILINE,
+    )
+    _ASYNC_ENGINE_CALL_RE = re.compile(
+        r'create_async_engine\s*\(\s*(?P<url_arg>[A-Za-z_][A-Za-z_0-9]*)\s*[,)]'
+    )
+
     for filename, content in result.items():
         if not filename.endswith(".py"):
             continue
         new_content = content
         for pattern, replacement in _SYNC_TO_ASYNC_URL_REWRITES:
             new_content = pattern.sub(replacement, new_content)
+
+        # Inject runtime URL rewrite when create_async_engine() is called with a
+        # variable that comes from os.getenv() and a rewrite isn't already present.
+        if (
+            "create_async_engine" in new_content
+            and "os.getenv" in new_content
+            and "_db_url" not in new_content
+        ):
+            # Collect variable names assigned from os.getenv().
+            getenv_vars = {m.group("var") for m in _GETENV_URL_RE.finditer(new_content)}
+            for eng_match in _ASYNC_ENGINE_CALL_RE.finditer(new_content):
+                url_arg = eng_match.group("url_arg")
+                if url_arg in getenv_vars:
+                    # Find the line start of the create_async_engine(...) call
+                    # and insert the runtime rewrite snippet just before it.
+                    insert_pos = new_content.rfind("\n", 0, eng_match.start()) + 1
+                    snippet = _RUNTIME_URL_REWRITE_SNIPPET.format(var=url_arg)
+                    # Replace the URL variable name in the engine call with _db_url
+                    engine_old = eng_match.group(0)
+                    engine_new = engine_old.replace(url_arg, "_db_url", 1)
+                    new_content = (
+                        new_content[:insert_pos]
+                        + snippet
+                        + new_content[insert_pos:]
+                    )
+                    # Now replace the variable in the engine call (position has shifted)
+                    new_content = new_content.replace(engine_old, engine_new, 1)
+                    logger.info(
+                        "fix_async_database_url: injected runtime URL rewrite for "
+                        "os.getenv variable '%s' in %s",
+                        url_arg,
+                        filename,
+                    )
+                    break  # One rewrite per file is sufficient
+
         if new_content != content:
             result[filename] = new_content
             changed_files.append(filename)
@@ -1012,6 +1073,151 @@ def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
             "(removed sync drivers, added async driver packages)"
         )
 
+    return result
+
+
+def fix_204_no_content_responses(files: Dict[str, str]) -> Dict[str, str]:
+    """Remove ``response_model`` from FastAPI decorators that use ``status_code=204``.
+
+    FastAPI validates at route-registration time that HTTP 204 (No Content)
+    responses carry no body.  When the LLM generates a decorator that combines
+    ``status_code=204`` with ``response_model=SomeType``, the application raises::
+
+        AssertionError: Status code 204 must not have a response body
+
+    This function scans all ``.py`` files for such conflicting decorators and
+    strips the ``response_model=...`` parameter from them.  It also replaces
+    any non-``None`` return statements in the immediately following function
+    body with ``return None`` and ensures the function has a ``-> None`` return
+    type annotation.
+
+    Args:
+        files: Mapping of filename → source code strings.
+
+    Returns:
+        Updated *files* dict with 204 decorator conflicts resolved.
+    """
+    # Regex to detect a decorator line (possibly spread across continuation lines)
+    # that contains status_code=204 (or HTTP_204_NO_CONTENT) AND response_model=.
+    # We operate line-by-line for simplicity: collect a "decorator block" (lines
+    # starting with @ or that are continuations inside parentheses) and check the
+    # whole block.
+    _204_STATUS_RE = re.compile(
+        r'status_code\s*=\s*(?:204|status\.HTTP_204_NO_CONTENT)'
+    )
+    _RESPONSE_MODEL_RE = re.compile(
+        r',?\s*response_model\s*=\s*[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?'
+    )
+    _RETURN_NON_NONE_RE = re.compile(
+        r'^(\s+)return\s+(?!None\b)(.+)$'
+    )
+    _FUNC_DEF_RE = re.compile(
+        r'^(\s*)async\s+def\s+\w+|^(\s*)def\s+\w+'
+    )
+    _RETURN_TYPE_RE = re.compile(r'(\))\s*(->\s*[^:]+)?(\s*:)')
+
+    result = dict(files)
+    changed_files: List[str] = []
+
+    for filename, content in result.items():
+        if not filename.endswith(".py"):
+            continue
+
+        lines = content.splitlines(keepends=True)
+        new_lines = list(lines)
+        i = 0
+        file_changed = False
+
+        while i < len(new_lines):
+            line = new_lines[i]
+            # Detect start of a decorator block
+            stripped = line.lstrip()
+            if stripped.startswith("@"):
+                # Accumulate all lines that belong to this decorator
+                # (handles multi-line decorators inside parentheses)
+                decorator_start = i
+                decorator_lines = [line]
+                paren_depth = line.count("(") - line.count(")")
+                j = i + 1
+                while paren_depth > 0 and j < len(new_lines):
+                    decorator_lines.append(new_lines[j])
+                    paren_depth += new_lines[j].count("(") - new_lines[j].count(")")
+                    j += 1
+                decorator_end = j  # exclusive
+
+                full_decorator = "".join(decorator_lines)
+
+                if _204_STATUS_RE.search(full_decorator) and _RESPONSE_MODEL_RE.search(full_decorator):
+                    # Remove response_model=... from the decorator block
+                    fixed_decorator = _RESPONSE_MODEL_RE.sub("", full_decorator)
+                    # Re-split into lines (preserve line endings)
+                    fixed_dec_lines = fixed_decorator.splitlines(keepends=True)
+                    # Replace the decorator lines in new_lines
+                    new_lines[decorator_start:decorator_end] = fixed_dec_lines
+                    file_changed = True
+                    logger.info(
+                        "fix_204_no_content_responses: removed response_model from "
+                        "204 decorator in %s (line %d)",
+                        filename,
+                        decorator_start + 1,
+                    )
+
+                    # Now find the function definition immediately after the decorator
+                    k = decorator_start + len(fixed_dec_lines)
+                    # Skip any blank lines or additional decorators between decorator and def
+                    while k < len(new_lines) and not _FUNC_DEF_RE.match(new_lines[k]):
+                        k += 1
+                    if k < len(new_lines):
+                        func_def_line = new_lines[k]
+                        # Add/replace return type annotation with -> None
+                        if "->" not in func_def_line:
+                            func_def_line = _RETURN_TYPE_RE.sub(r'\1 -> None\3', func_def_line)
+                        else:
+                            # Replace existing return type with None
+                            func_def_line = re.sub(
+                                r'->\s*[^:]+(\s*:)',
+                                r'-> None\1',
+                                func_def_line,
+                            )
+                        new_lines[k] = func_def_line
+                        func_indent = len(func_def_line) - len(func_def_line.lstrip())
+
+                        # Replace non-None return statements in the function body
+                        m = k + 1
+                        while m < len(new_lines):
+                            body_line = new_lines[m]
+                            body_stripped = body_line.lstrip()
+                            # Stop at the next top-level definition
+                            if body_stripped and not body_stripped.startswith("#"):
+                                body_indent = len(body_line) - len(body_stripped)
+                                if body_indent <= func_indent and (
+                                    body_stripped.startswith("def ")
+                                    or body_stripped.startswith("async def ")
+                                    or body_stripped.startswith("class ")
+                                    or body_stripped.startswith("@")
+                                ):
+                                    break
+                            ret_match = _RETURN_NON_NONE_RE.match(body_line.rstrip("\n\r"))
+                            if ret_match:
+                                new_lines[m] = ret_match.group(1) + "return None\n"
+                                file_changed = True
+                            m += 1
+
+                    i = decorator_start + len(fixed_dec_lines)
+                    continue
+
+            i += 1
+
+        if file_changed:
+            result[filename] = "".join(new_lines)
+            changed_files.append(filename)
+
+    if changed_files:
+        logger.info(
+            "fix_204_no_content_responses: fixed 204 decorator conflicts in %d file(s): %s",
+            len(changed_files),
+            changed_files,
+        )
     return result
 
 
@@ -1109,6 +1315,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         # Fix async database driver: rewrite sync URLs (postgresql://) to async (postgresql+asyncpg://)
         if lang == "python":
             fixed_files = fix_async_database_url(fixed_files)
+            # Fix 204 No Content: remove response_model from decorators with status_code=204
+            fixed_files = fix_204_no_content_responses(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -4737,6 +4945,48 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     # Consumed by the third pass to inject discovered instance methods.
     _stub_class_names: Dict[str, Set[str]] = {}
 
+    # Class field hints: detect attribute accesses on imported class instances/names
+    # so that stub classes can be generated with the accessed fields pre-defined.
+    # Maps module_path -> {ClassName -> {field_name, ...}}.
+    # Only true Python magic/dunder attributes and standard I/O methods that can
+    # never be user-defined model fields are excluded from the scan results.
+    _COMMON_MAGIC_ATTRS: FrozenSet[str] = frozenset({
+        "__class__", "__dict__", "__doc__", "__module__", "__weakref__",
+        "__init__", "__new__", "__del__", "__repr__", "__str__", "__bytes__",
+        "__hash__", "__bool__", "__len__", "__iter__", "__next__",
+        "__enter__", "__exit__", "__call__", "__getattr__", "__setattr__",
+        "__delattr__", "__getitem__", "__setitem__", "__delitem__",
+        # Pydantic model methods (not field names)
+        "model_dump", "model_validate", "model_json_schema", "model_fields",
+        "model_config", "model_copy", "model_rebuild",
+    })
+    class_field_hints: Dict[str, Dict[str, Set[str]]] = {}
+    for _fh_filename, _fh_content in list(code_files.items()):
+        for _fh_match in _LOCAL_IMPORT_RE.finditer(_fh_content):
+            _fh_module_str = _fh_match.group(1).strip()
+            _fh_imports_str = _fh_match.group(2).strip()
+            _fh_module_path = _fh_module_str.replace(".", "/") + ".py"
+            for _fh_part in _fh_imports_str.split(","):
+                _fh_raw = _fh_part.split(" as ")
+                _fh_name = _fh_raw[0].strip()
+                _fh_alias = _fh_raw[-1].strip() if len(_fh_raw) > 1 else _fh_name
+                if not _fh_name or not _fh_name[0].isupper():
+                    continue
+                # Build accessors: the class name, alias, and lowercase instance name
+                _fh_accessors = {_fh_alias, _fh_name}
+                if len(_fh_name) > 1:
+                    _fh_accessors.add(_fh_name[0].lower() + _fh_name[1:])
+                for _accessor in _fh_accessors:
+                    if not _accessor or not _accessor.isidentifier():
+                        continue
+                    _attr_re = re.compile(r'\b' + re.escape(_accessor) + r'\.([A-Za-z_]\w*)')
+                    for _attr_m in _attr_re.finditer(_fh_content):
+                        _attr = _attr_m.group(1)
+                        if _attr and not _attr.startswith("__") and _attr not in _COMMON_MAGIC_ATTRS:
+                            class_field_hints.setdefault(_fh_module_path, {}).setdefault(
+                                _fh_name, set()
+                            ).add(_attr)
+
     # Second pass: ensure every required module+symbol exists in code_files.
     for module_path, symbols in required_symbols.items():
         if not symbols:
@@ -4820,8 +5070,22 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     'DATABASE_URL: str = os.getenv(\n'
                     '    "DATABASE_URL", "sqlite+aiosqlite:///./app.db"\n'
                     ")\n\n"
+                    "# ---------------------------------------------------------------------------\n"
+                    "# Runtime URL rewrite: convert sync driver URLs to async equivalents.\n"
+                    "# This handles the case where DATABASE_URL is set at runtime to a sync URL\n"
+                    "# such as postgresql://... which requires postgresql+asyncpg://... for async.\n"
+                    "# ---------------------------------------------------------------------------\n"
+                    "_db_url = DATABASE_URL\n"
+                    'if _db_url.startswith("postgresql://"):\n'
+                    '    _db_url = "postgresql+asyncpg://" + _db_url[len("postgresql://"):]\n'
+                    'elif _db_url.startswith("postgres://"):\n'
+                    '    _db_url = "postgresql+asyncpg://" + _db_url[len("postgres://"):]\n'
+                    'elif _db_url.startswith("mysql://"):\n'
+                    '    _db_url = "mysql+aiomysql://" + _db_url[len("mysql://"):]\n'
+                    'elif _db_url.startswith("sqlite:///") and not _db_url.startswith("sqlite+aiosqlite:///"):\n'
+                    '    _db_url = "sqlite+aiosqlite:///" + _db_url[len("sqlite:///"):]\n\n'
                     "engine = create_async_engine(\n"
-                    "    DATABASE_URL,\n"
+                    "    _db_url,\n"
                     "    echo=os.getenv('SQL_ECHO', 'false').lower() == 'true',\n"
                     ")\n\n"
                     "AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(\n"
@@ -4864,9 +5128,16 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # Target 1: Try Jinja2 template for well-known module categories.
             # Categories "service" and "generic" keep the legacy inline approach
             # so that the third-pass method-injection regex continues to work.
+            # When field hints are available for classes in this module, skip the
+            # template and use the inline code that produces spec-aware stubs.
             # ------------------------------------------------------------------
             _stub_category = _classify_stub_module(module_path, symbols)
-            if _stub_category not in ("service", "generic", "database"):
+            _module_field_hints_check = class_field_hints.get(module_path, {})
+            _has_field_hints = any(
+                bool(_module_field_hints_check.get(sym))
+                for sym in symbols if sym and sym[0].isupper()
+            )
+            if _stub_category not in ("service", "generic", "database") and not _has_field_hints:
                 _rendered = _render_stub_template(_stub_category, module_path, symbols)
                 if _rendered is not None:
                     code_files[module_path] = _rendered
@@ -4882,14 +5153,21 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
 
             stub_lines = [
                 '"""Generated module — replace with actual implementation."""\n',
-                "from typing import Any\n",
             ]
             if has_sqlalchemy_class:
+                stub_lines.append("from typing import Any\n")
                 stub_lines.append("from sqlalchemy import Column, Integer, String\n")
                 stub_lines.append("from app.database import Base\n")
             elif has_pydantic_class:
-                stub_lines.append("from pydantic import BaseModel\n")
+                stub_lines.append("from typing import Any, Optional\n")
+                stub_lines.append("from pydantic import BaseModel, ConfigDict\n")
+            else:
+                stub_lines.append("from typing import Any\n")
+            if has_router_in_symbols:
+                stub_lines.append("from fastapi import APIRouter\n")
             stub_lines.append("\n")
+            # Field hints for this module (detected from importing files)
+            _module_field_hints = class_field_hints.get(module_path, {})
             for sym in sorted(symbols):
                 # Uppercase initial → class; router variable → None assignment;
                 # other known variable suffixes → None variable;
@@ -4898,11 +5176,18 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     if has_sqlalchemy_class and _is_sqlalchemy_module:
                         # Issue 1: generate a proper SQLAlchemy ORM stub.
                         tablename = _pluralize_tablename(sym)
+                        _detected_fields = sorted(_module_field_hints.get(sym, set()) - {"id", "name"})
+                        _extra_cols = "".join(
+                            f"    {_f} = Column(String, nullable=True)\n"
+                            for _f in _detected_fields
+                        )
                         stub_lines.append(
                             f"class {sym}(Base):\n"
                             f"    __tablename__ = '{tablename}'\n"
                             f"    id = Column(Integer, primary_key=True, autoincrement=True)\n"
-                            f"    name = Column(String, nullable=False)\n\n\n"
+                            f"    name = Column(String, nullable=False)\n"
+                            + _extra_cols
+                            + "\n\n"
                         )
                     else:
                         # For generic modules, always generate minimal bare class stubs.
@@ -4913,21 +5198,40 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             )
                         )
                         if _sym_is_pydantic:
+                            _detected_fields = sorted(_module_field_hints.get(sym, set()))
+                            if _detected_fields:
+                                _field_lines = (
+                                    "    model_config = ConfigDict(from_attributes=True)\n"
+                                    + "".join(
+                                        f"    {_f}: Optional[Any] = None\n"
+                                        for _f in _detected_fields
+                                    )
+                                )
+                            else:
+                                _field_lines = (
+                                    "    model_config = ConfigDict(from_attributes=True)\n"
+                                )
                             stub_lines.append(
                                 f"class {sym}(BaseModel):\n"
                                 f'    """Stub Pydantic model."""\n'
-                                f"    pass\n\n\n"
+                                + _field_lines
+                                + "\n\n"
                             )
                         else:
+                            _detected_fields = sorted(_module_field_hints.get(sym, set()))
+                            _attr_lines = "".join(
+                                f"    {_f} = None\n" for _f in _detected_fields
+                            )
                             stub_lines.append(
                                 f"class {sym}:\n"
                                 f'    """Stub class."""\n'
-                                f"    pass\n\n\n"
+                                + (_attr_lines if _attr_lines else "    pass\n")
+                                + "\n\n"
                             )
                             _stub_class_names.setdefault(module_path, set()).add(sym)
                 elif _is_router_variable(sym):
                     stub_lines.append(
-                        f"{sym} = None\n\n\n"
+                        f"{sym} = APIRouter()\n\n\n"
                     )
                 elif _is_likely_variable(sym):
                     stub_lines.append(
