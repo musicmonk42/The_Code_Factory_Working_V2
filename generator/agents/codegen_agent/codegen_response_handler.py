@@ -729,6 +729,52 @@ def remove_dead_imports(code: str, filename: str = "") -> str:
     return "".join(cleaned_lines)
 
 
+def _fix_future_import_ordering(files: Dict[str, str]) -> Dict[str, str]:
+    """Ensure ``from __future__ import ...`` lines appear at the top of every Python file.
+
+    Python requires ``from __future__`` imports to be the first statements in a
+    module (after the module docstring).  When the AST merge logic inserts them
+    below other imports a ``SyntaxError: from __future__ imports must occur at
+    the beginning of the file`` is raised at import time.
+
+    This function moves any misplaced ``from __future__`` line to immediately
+    after the module docstring (if present) and before all other imports.
+
+    Args:
+        files: Mapping of relative file path → source code.
+
+    Returns:
+        An updated mapping where every Python file has correct ``from __future__``
+        ordering.  Non-Python files are returned unchanged.
+    """
+    _future_re = re.compile(r'^from\s+__future__\s+import\s+[^\n]+\n?', re.MULTILINE)
+    _docstring_re = re.compile(
+        r'^(?:\'\'\'[\s\S]*?\'\'\'|"""[\s\S]*?""")\s*\n?', re.MULTILINE
+    )
+
+    result = dict(files)
+    for path, content in files.items():
+        if not path.endswith('.py'):
+            continue
+        # Collect all from __future__ lines (deduplicated, preserving order)
+        future_lines = list(dict.fromkeys(
+            line if line.endswith('\n') else line + '\n'
+            for line in _future_re.findall(content)
+        ))
+        if not future_lines:
+            continue
+        # Remove all existing from __future__ lines from the source
+        stripped = _future_re.sub('', content)
+        # Find insertion point: after module docstring if present, else at the start
+        ds_m = _docstring_re.match(stripped)
+        insert_at = ds_m.end() if ds_m else 0
+        future_block = ''.join(future_lines)
+        new_content = stripped[:insert_at] + future_block + stripped[insert_at:]
+        if new_content != content:
+            result[path] = new_content
+    return result
+
+
 def extract_and_populate_requirements(files: Dict[str, str]) -> Dict[str, str]:
     """Extract third-party imports from generated Python files and populate requirements.txt.
 
@@ -1056,6 +1102,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             fixed_files = disambiguate_model_schema_imports(fixed_files)
             # Fix 5: consolidate duplicate Base class definitions to app/database.py
             fixed_files = consolidate_base_definitions(fixed_files)
+            # Fix 6: ensure from __future__ imports always appear at the top of each file
+            fixed_files = _fix_future_import_ordering(fixed_files)
         # Populate requirements.txt with any third-party imports found in the generated code
         fixed_files = extract_and_populate_requirements(fixed_files)
         # Fix async database driver: rewrite sync URLs (postgresql://) to async (postgresql+asyncpg://)
