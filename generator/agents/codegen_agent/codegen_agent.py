@@ -161,8 +161,9 @@ _MULTIPASS_GROUPS = [
             "names/types/constraints (use UUID for IDs if spec says UUID, mark fields Optional only if "
             "spec says optional), schemas.py or app/schemas/*.py with ALL Pydantic schemas matching the "
             "spec (e.g. Product, Order, User, AuditLog) with proper field types and validators, "
-            "__init__.py files, database migration files (alembic/env.py), "
+            "__init__.py files, "
             "and any other foundational modules. "
+            "Do NOT generate alembic/env.py — it will be provided by the framework. "
             "SQLAlchemy imports MUST include: "
             "from sqlalchemy import Column, String, Integer, UUID, DateTime, ForeignKey, Boolean, Numeric "
             "and from sqlalchemy.orm import relationship, DeclarativeBase, Mapped, mapped_column. "
@@ -3621,6 +3622,11 @@ if PLUGIN_AVAILABLE:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
+                                     # Strip protected files always provided by the framework.
+                                     _pass_files = {
+                                         k: v for k, v in _pass_files.items()
+                                         if k != "alembic/env.py"
+                                     }
                                      # AST-aware merge: preserve symbols from earlier passes when
                                      # the new pass overwrites an existing Python file.
                                      for _pf_key, _pf_val in _pass_files.items():
@@ -4337,6 +4343,11 @@ else:
                                          else str(_pass_dict)
                                      )
                                      _pass_files = parse_llm_response(_pass_resp)
+                                     # Strip protected files always provided by the framework.
+                                     _pass_files = {
+                                         k: v for k, v in _pass_files.items()
+                                         if k != "alembic/env.py"
+                                     }
                                      # AST-aware merge: preserve symbols from earlier passes when
                                      # the new pass overwrites an existing Python file.
                                      for _pf_key, _pf_val in _pass_files.items():

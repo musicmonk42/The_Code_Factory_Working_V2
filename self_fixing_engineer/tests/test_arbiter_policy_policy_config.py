@@ -74,9 +74,9 @@ def test_config_defaults_and_field_types(monkeypatch):
     monkeypatch.delenv("PAUSE_CIRCUIT_BREAKER_TASKS", raising=False)
     monkeypatch.delenv("LLM_MODEL", raising=False)
     # Mock redis to avoid actual connection attempts during tests
-    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis.from_url") as mock_redis:
+    with patch("self_fixing_engineer.arbiter.policy.config.redis.Redis") as mock_redis_class:
         mock_conn = MagicMock()
-        mock_redis.return_value = mock_conn
+        mock_redis_class.from_url.return_value = mock_conn
 
         cfg = ArbiterConfig()
         assert isinstance(cfg.POLICY_CONFIG_FILE_PATH, str)

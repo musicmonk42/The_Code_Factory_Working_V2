@@ -133,6 +133,18 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
                     continue
                 module_map[module_name] = import_path
                 logger.debug(f"Mapped module '{module_name}' to import path '{import_path}'")
+                # Also build multi-level mappings for nested modules:
+                # e.g., "app/routers/orders.py" -> also map "routers.orders" -> "app.routers.orders"
+                # Precedence: first-processed file wins for any given partial key.
+                # Two modules with the same leaf/partial path (e.g. app/services/user.py
+                # and app/models/user.py) each map different partial keys
+                # ("services.user" vs "models.user") and will not conflict.
+                if len(import_parts) >= 3:
+                    for start in range(1, len(import_parts) - 1):
+                        partial_key = ".".join(import_parts[start:])
+                        if partial_key and partial_key not in module_map:
+                            module_map[partial_key] = import_path
+                            logger.debug(f"Mapped nested module '{partial_key}' to import path '{import_path}'")
     
     # Pattern to match Python import statements - both "from X import Y" and "import X"
     # Group 1: Leading whitespace (indentation)
@@ -198,7 +210,31 @@ def fix_import_paths(test_files: Dict[str, str], code_files: Optional[Dict[str, 
                     imports_fixed += 1
                     logger.info(f"Fixed import in {filename}: '{old_path}' -> '{new_path}'")
                     return f"{indent}{from_keyword}{new_path}{import_rest}"
-            
+
+            # Handle nested module resolution: "from app.orders import X" when
+            # the actual module is "app.routers.orders" or "app.services.orders".
+            # Check if any multi-level key in module_map matches a suffix of old_path.
+            if '.' in old_path:
+                old_leaf = old_path.split('.')[-1]
+                # Check direct multi-level key match (e.g. "routers.orders")
+                if old_path in module_map:
+                    new_path = module_map[old_path]
+                    if new_path != old_path:
+                        imports_fixed += 1
+                        logger.info(f"Fixed nested import in {filename}: '{old_path}' -> '{new_path}'")
+                        return f"{indent}{from_keyword}{new_path}{import_rest}"
+                # Resolve short paths like "app.orders" -> look for code file ending in "orders.py"
+                # under a path that starts with the first component (e.g. "app/")
+                if code_files and old_leaf in module_map:
+                    candidate = module_map[old_leaf]
+                    old_root = old_path.split('.')[0]
+                    if candidate.startswith(old_root + '.') and candidate != old_path:
+                        imports_fixed += 1
+                        logger.info(
+                            f"Fixed nested import in {filename}: '{old_path}' -> '{candidate}'"
+                        )
+                        return f"{indent}{from_keyword}{candidate}{import_rest}"
+
             # Return unchanged if no fix needed
             return match.group(0)
         
