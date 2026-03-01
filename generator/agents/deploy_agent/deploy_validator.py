@@ -29,7 +29,7 @@ import time
 import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Set, Type
 
 import aiofiles  # For asynchronous file operations
 
@@ -141,6 +141,13 @@ DANGEROUS_CONFIG_PATTERNS = {
     "NoResourceLimits": r"(?i)resources:\s*\{\s*\}",  # Empty resources block in K8s (indicates missing limits/requests)
     "HardcodedCredentials_Pattern": r"(?i)password:\s*\S+|secret:\s*\S+|api_key:\s*\S+",  # Generic pattern for illustrative purposes
 }
+
+# Dockerfile ENTRYPOINT/CMD semantic validation constants
+_BARE_PYTHON_ENTRYPOINTS = (["python"], ["python3"])
+_KNOWN_SERVER_EXECUTABLES = frozenset({
+    "uvicorn", "gunicorn", "flask", "celery",
+    "django-admin", "hypercorn", "daphne", "granian",
+})
 
 # Module-level singleton instances for Presidio to avoid log spam from repeated initialization
 _analyzer: Optional[AnalyzerEngine] = None
@@ -1311,6 +1318,27 @@ class DeploymentCompletenessValidator(Validator):
                             f"Recommended file missing for {target}: {file_path}. "
                             f"This is optional but recommended for production deployments."
                         )
+                    elif file_path.endswith(('.yaml', '.yml')):
+                        # Validate YAML syntax for recommended files that exist
+                        try:
+                            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+                                content = await f.read()
+                            yaml_report: Dict[str, Any] = {
+                                "invalid_files": [],
+                                "errors": [],
+                                "status": "passed",
+                            }
+                            await self._validate_yaml(content, file_path, yaml_report)
+                            if yaml_report["status"] == "failed":
+                                report["warnings"].append(
+                                    f"Recommended file {file_path} has invalid YAML: "
+                                    + "; ".join(yaml_report["errors"])
+                                )
+                                report["invalid_files"].extend(yaml_report["invalid_files"])
+                        except Exception as e:
+                            report["warnings"].append(
+                                f"Could not validate recommended file {file_path}: {e}"
+                            )
         
         # Validate that deployment files match the actual generated code
         await self._validate_deployment_matches_code(report)
@@ -1329,31 +1357,70 @@ class DeploymentCompletenessValidator(Validator):
             report["status"] = "failed"
     
     async def _validate_dockerfile(self, content: str, file_path: str, report: Dict[str, Any]) -> None:
-        """Validate Dockerfile has required instructions."""
+        """Validate Dockerfile has required instructions and sane ENTRYPOINT/CMD semantics."""
         required_instructions = ["FROM"]
-        
+
         lines = content.strip().split('\n')
-        instructions_found = set()
-        
+        instructions_found: Set[str] = set()
+        entrypoint_value: Optional[str] = None
+        cmd_value: Optional[str] = None
+
+        # Single pass: collect required instructions and exec-form ENTRYPOINT/CMD values
         for line in lines:
-            line = line.strip()
-            if not line or line.startswith('#'):
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
                 continue
-            
-            # Get the instruction (first word)
-            parts = line.split()
-            if parts:
-                instruction = parts[0].upper()
-                instructions_found.add(instruction)
-        
+            parts = stripped.split(None, 1)
+            if not parts:
+                continue
+            instr = parts[0].upper()
+            instructions_found.add(instr)
+            if len(parts) == 2:
+                val = parts[1].strip()
+                if instr == "ENTRYPOINT" and val.startswith("["):
+                    entrypoint_value = val
+                elif instr == "CMD" and val.startswith("["):
+                    cmd_value = val
+
         missing_instructions = [inst for inst in required_instructions if inst not in instructions_found]
-        
         if missing_instructions:
             report["invalid_files"].append(f"{file_path}: Missing instructions: {missing_instructions}")
             report["errors"].append(
                 f"Dockerfile validation failed for {file_path}: Missing required instructions {missing_instructions}"
             )
             report["status"] = "failed"
+
+        # Semantic check: ENTRYPOINT + CMD exec-form compatibility.
+        # Catches the common mistake of ENTRYPOINT ["python"] + CMD ["uvicorn", ...]
+        # which produces `python uvicorn ...` instead of `uvicorn ...` or `python -m uvicorn ...`.
+        if entrypoint_value and cmd_value:
+            try:
+                ep_list = json.loads(entrypoint_value)
+                cmd_list = json.loads(cmd_value)
+                # Python interpreters that should not be bare ENTRYPOINT when CMD is a server
+                if (
+                    isinstance(ep_list, list)
+                    and isinstance(cmd_list, list)
+                    and ep_list in _BARE_PYTHON_ENTRYPOINTS
+                    and cmd_list
+                    and cmd_list[0] in _KNOWN_SERVER_EXECUTABLES
+                ):
+                    interpreter = ep_list[0]
+                    executable = cmd_list[0]
+                    msg = (
+                        f"Dockerfile ENTRYPOINT/CMD conflict in {file_path}: "
+                        f"ENTRYPOINT {ep_list} + CMD {cmd_list} produces "
+                        f"`{interpreter} {executable} ...` which is invalid. "
+                        f"Either remove ENTRYPOINT and use CMD directly "
+                        f"(e.g. CMD [\"{executable}\", ...]), "
+                        f"or change CMD to use the -m flag "
+                        f"(e.g. CMD [\"-m\", \"{executable}\", ...])."
+                    )
+                    report["invalid_files"].append(f"{file_path}: ENTRYPOINT/CMD conflict")
+                    report["errors"].append(msg)
+                    report["status"] = "failed"
+            except (json.JSONDecodeError, TypeError):
+                pass
     
     async def _validate_deployment_matches_code(self, report: Dict[str, Any]) -> None:
         """

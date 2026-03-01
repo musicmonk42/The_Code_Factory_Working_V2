@@ -8962,7 +8962,19 @@ class OmniCoreService:
                                     language="python",
                                     output_path=str(output_path_obj)
                                 )
-                                
+
+                                # Ensure all required README sections are present.
+                                # Guard with its own try/except so the README is still
+                                # written to disk even if the import or call fails.
+                                try:
+                                    from generator.main.post_materialize import ensure_readme_sections
+                                    fallback_readme = ensure_readme_sections(fallback_readme, entry_point="app.main:app")
+                                except Exception as section_err:
+                                    logger.warning(
+                                        f"[PIPELINE] Job {job_id} ensure_readme_sections failed, "
+                                        f"writing base fallback README: {section_err}"
+                                    )
+
                                 # Write README to the project directory
                                 readme_path = output_path_obj / "README.md"
                                 readme_path.write_text(fallback_readme, encoding="utf-8")
@@ -9007,7 +9019,19 @@ class OmniCoreService:
                                 language="python",
                                 output_path=str(output_path_obj)
                             )
-                            
+
+                            # Ensure all required README sections are present.
+                            # Guard with its own try/except so the README is still
+                            # written to disk even if the import or call fails.
+                            try:
+                                from generator.main.post_materialize import ensure_readme_sections
+                                fallback_readme = ensure_readme_sections(fallback_readme, entry_point="app.main:app")
+                            except Exception as section_err:
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} ensure_readme_sections failed, "
+                                    f"writing base fallback README: {section_err}"
+                                )
+
                             # Write README to the project directory
                             readme_path = output_path_obj / "README.md"
                             readme_path.write_text(fallback_readme, encoding="utf-8")

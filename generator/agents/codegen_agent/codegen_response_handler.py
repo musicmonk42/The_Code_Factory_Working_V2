@@ -1369,6 +1369,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             # Re-run collision detection after stub generation: stubs may re-introduce
             # module files that collide with package directories already in code_files.
             fixed_files = _detect_module_package_collisions(fixed_files)
+            fixed_files = _detect_file_package_conflicts(fixed_files)
             # Fix 1: rewrite SQLAlchemy model imports to Pydantic schema imports for response_model=
             fixed_files = fix_response_model_type_mismatches(fixed_files)
             # Fix 3: alias ORM imports when models/ and schemas/ share a class name
@@ -1519,6 +1520,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
                 # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
                 code_files = _detect_module_package_collisions(code_files)
+                code_files = _detect_file_package_conflicts(code_files)
 
                 # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
                 shadow_warnings = _detect_name_shadowing(code_files)
@@ -1650,6 +1652,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 
                     # Resolve module/package collisions (e.g., routes.py + routes/__init__.py)
                     code_files = _detect_module_package_collisions(code_files)
+                    code_files = _detect_file_package_conflicts(code_files)
 
                     # Warn about name-shadowing (e.g., handler 'list_products' hides imported name)
                     shadow_warnings = _detect_name_shadowing(code_files)
@@ -1813,6 +1816,45 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
 # ==============================================================================
 # --- Helpers: Cleaning & Syntax Validation ---
 # ==============================================================================
+
+
+def _detect_file_package_conflicts(code_files: Dict[str, str]) -> Dict[str, str]:
+    """
+    Detect and resolve file-path / package-directory conflicts.
+
+    When the LLM generates both a flat module file (e.g. ``app/models.py``) and
+    files inside a same-named package directory (e.g. ``app/models/product.py``),
+    the flat file shadows the package on the filesystem.  This function removes
+    the flat ``.py`` file in favour of the package directory.
+
+    Args:
+        code_files: Mapping of filename → content as returned by the parser.
+
+    Returns:
+        A new mapping with file/package conflicts resolved (flat file removed).
+    """
+    cleaned: Dict[str, str] = dict(code_files)
+
+    # Collect all directory prefixes implied by paths like "app/models/product.py"
+    implied_dirs: Set[str] = set()
+    for path in list(cleaned.keys()):
+        norm = path.replace("\\", "/")
+        parts = norm.split("/")
+        # Every intermediate directory is implied
+        for i in range(1, len(parts)):
+            implied_dirs.add("/".join(parts[:i]))
+
+    for implied_dir in implied_dirs:
+        flat_file = implied_dir + ".py"
+        if flat_file in cleaned:
+            logger.warning(
+                "File/package conflict detected: removing '%s' in favour of package directory '%s/'",
+                flat_file,
+                implied_dir,
+            )
+            del cleaned[flat_file]
+
+    return cleaned
 
 
 def _detect_module_package_collisions(code_files: Dict[str, str]) -> Dict[str, str]:

@@ -147,6 +147,12 @@ section_status_gauge = get_or_create_metric(
     "Presence status of required documentation sections",
     ["output_format", "section_name"],
 )
+docgen_content_quality_score = get_or_create_metric(
+    Gauge,
+    "docgen_content_quality_score",
+    "Content quality score for generated documentation",
+    ["format", "metric_type"],
+)
 # --- NLTK Data Download (Strictly required data for NLP features) ---
 # Use a helper function to avoid polluting global scope
 def setup_nltk_data():

@@ -1397,6 +1397,15 @@ class ExplainAudit:
             self.buffer.clear()
             AUDIT_BUFFER_SIZE_CURRENT.set(0)
 
+        if self._db_client is None:
+            logger.warning(
+                "Audit flush skipped — no database client. %d records will be lost.",
+                len(records_to_flush),
+            )
+            AUDIT_RECORDS_PROCESSED_TOTAL.labels(status="dropped").inc(len(records_to_flush))
+            AUDIT_ERRORS.labels(operation="flush_buffer_no_db_client").inc()
+            return
+
         # Lazy table initialization - ensures database tables exist before first write operation
         # This is a defensive pattern for distributed deployments where database initialization
         # may not be complete when the audit system starts. Industry best practice for resilient
@@ -1513,6 +1522,13 @@ class ExplainAudit:
                     logger.debug(
                         f"Merkle tree updated for record {record.uuid}. New root: {self.system_audit_merkle_tree.get_root()[:10]}..."
                     )
+
+                if self._db_client is None:
+                    logger.warning(
+                        "Audit record dropped — no database client available: %s",
+                        record.uuid,
+                    )
+                    continue
 
                 await self._db_client.save_audit_record(record.model_dump())
 
