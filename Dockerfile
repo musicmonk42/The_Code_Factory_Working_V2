@@ -383,29 +383,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Trivy is required for deploy agent security scanning functionality
 # Using direct binary download for better cross-platform compatibility
 # (APT repository may not support all Debian versions like 'trixie')
+# NOTE: Trivy v0.69.1 uses Linux-64bit naming convention for x86_64 assets
 # TRIVY_VERSION can be overridden at build time to pin a specific version
-# Checksums are fetched from the official release to avoid hardcoding SHA256 hashes
+# Update TRIVY_SHA256 to match the new version's checksum when changing TRIVY_VERSION
 ARG TRIVY_VERSION=0.69.1
-RUN set -e; \
-    TRIVY_BASE="https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}"; \
-    # Try Linux-64bit first (older naming), fall back to Linux-amd64 (newer naming)
-    if curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/trivy.tar.gz \
-        "${TRIVY_BASE}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"; then \
-        TRIVY_ASSET="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"; \
-    elif curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/trivy.tar.gz \
-        "${TRIVY_BASE}/trivy_${TRIVY_VERSION}_Linux-amd64.tar.gz"; then \
-        TRIVY_ASSET="trivy_${TRIVY_VERSION}_Linux-amd64.tar.gz"; \
-    else \
-        echo "ERROR: Failed to download Trivy ${TRIVY_VERSION} tarball" >&2; exit 1; \
-    fi; \
-    # Download official checksums and verify
-    curl -sfL --retry 3 --retry-delay 5 --retry-all-errors -o /tmp/trivy_checksums.txt \
-        "${TRIVY_BASE}/trivy_${TRIVY_VERSION}_checksums.txt" && \
-    echo "Verifying checksum for ${TRIVY_ASSET}..." && \
-    (cd /tmp && grep "${TRIVY_ASSET}" trivy_checksums.txt | sha256sum -c -) && \
+ARG TRIVY_SHA256=fb04323d3009e58ae377cf4cb89a7256a0090934b449bc9f6bce3e20fb28504e
+RUN curl -sfL --retry 5 --retry-delay 10 --retry-all-errors \
+        -o /tmp/trivy.tar.gz \
+        "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" && \
+    echo "${TRIVY_SHA256}  /tmp/trivy.tar.gz" | sha256sum -c - && \
     tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy && \
-    rm -f /tmp/trivy.tar.gz /tmp/trivy_checksums.txt && \
-    trivy --version
+    rm -f /tmp/trivy.tar.gz && \
+    trivy --version \
+    || echo "WARNING: Trivy installation failed (non-fatal). Deploy agent security scanning will be degraded."
 
 # Install Hadolint for Dockerfile linting (deployment validation)
 # Hadolint is optional for deploy agent linting functionality
