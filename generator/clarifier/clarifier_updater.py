@@ -340,7 +340,7 @@ class HistoryStore:
 
             await asyncio.to_thread(
                 self.conn.execute,
-                "INSERT INTO history (version, entry_id, encrypted_data) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO history (version, entry_id, encrypted_data, timestamp) VALUES (?, ?, ?, CURRENT_TIMESTAMP)",
                 (entry.get("version", 0), entry_id, encrypted_data),
             )
             await asyncio.to_thread(self.conn.commit)

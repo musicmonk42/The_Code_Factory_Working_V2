@@ -1699,6 +1699,90 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
     return result
 
 
+def _repair_double_prefix(output_dir: Path) -> None:
+    """Auto-repair double-prefixed router registrations in ``main.py``.
+
+    When the LLM generates both ``APIRouter(prefix="/api/v1/...")`` inside the
+    router module **and** ``app.include_router(router, prefix="/api/v1/...")``
+    in ``main.py``, the routes become doubly-prefixed.
+
+    This function detects that pattern and removes the ``prefix=`` argument from
+    the ``include_router()`` call in ``main.py`` so that the router's own prefix
+    is the single source of truth.  The operation is idempotent.
+
+    Args:
+        output_dir: Root directory of the generated project.
+    """
+    import re
+
+    _APIROUTER_PREFIX_RE = re.compile(
+        r'APIRouter\s*\([^)]*prefix\s*=\s*["\']([^"\']+)["\']'
+    )
+    # Matches the prefix= kwarg inside include_router(...) — captures the
+    # entire ",\s*prefix=..." fragment so it can be removed.
+    _INCLUDE_ROUTER_PREFIX_RE = re.compile(
+        r',\s*prefix\s*=\s*["\'][^"\']+["\']'
+    )
+    # Matches the prefix value inside include_router for comparison
+    _INCLUDE_ROUTER_PREFIX_VALUE_RE = re.compile(
+        r'include_router\s*\([^,)]+,\s*(?:[^,)]*,\s*)*prefix\s*=\s*["\']([^"\']+)["\']'
+    )
+
+    python_files = list(output_dir.rglob("*.py"))
+
+    # Collect router file prefixes: prefix -> set of files that define it
+    router_prefixes: set = set()
+    for py_file in python_files:
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        for m in _APIROUTER_PREFIX_RE.finditer(content):
+            prefix = m.group(1).rstrip("/")
+            if prefix:
+                router_prefixes.add(prefix)
+
+    if not router_prefixes:
+        return
+
+    # Find main.py or app entry points and remove duplicate prefix= args
+    for py_file in python_files:
+        try:
+            content = py_file.read_text(encoding="utf-8")
+        except (OSError, UnicodeDecodeError):
+            continue
+        if "include_router" not in content:
+            continue
+
+        new_content = content
+        for m in _INCLUDE_ROUTER_PREFIX_VALUE_RE.finditer(content):
+            prefix_val = m.group(1).rstrip("/")
+            if prefix_val in router_prefixes:
+                # Remove ,\s*prefix="<prefix_val>" from the include_router call
+                new_content = _INCLUDE_ROUTER_PREFIX_RE.sub(
+                    lambda _m, _pv=prefix_val: (
+                        ""
+                        if re.search(r'["\']' + re.escape(_pv) + r'["\']', _m.group(0))
+                        else _m.group(0)
+                    ),
+                    new_content,
+                )
+
+        if new_content != content:
+            try:
+                py_file.write_text(new_content, encoding="utf-8")
+                logger.info(
+                    "Repaired double-prefix in %s",
+                    py_file.relative_to(output_dir),
+                )
+            except OSError as exc:
+                logger.warning(
+                    "Could not write repaired file %s: %s",
+                    py_file,
+                    exc,
+                )
+
+
 def _validate_no_double_prefix(output_dir: Path) -> List[str]:
     """Detect routers that are mounted with a duplicated prefix.
 
@@ -3166,7 +3250,11 @@ async def validate_generated_project(
         except Exception as e:
             result["warnings"].append(f"Could not validate async/sync compatibility: {e}")
 
-        # Double-prefix router detection
+        # Double-prefix router detection — auto-repair first, then validate
+        try:
+            _repair_double_prefix(output_dir)
+        except Exception as e:
+            result["warnings"].append(f"Could not auto-repair double prefix: {e}")
         try:
             double_prefix_errors = _validate_no_double_prefix(output_dir)
             for err in double_prefix_errors:

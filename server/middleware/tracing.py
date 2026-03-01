@@ -171,7 +171,7 @@ def setup_tracing(
                 )
         
         # Add console exporter for debugging if requested
-        if console_export:
+        if console_export and os.environ.get("OTEL_LOG_SPANS", "false").lower() == "true":
             console_processor = BatchSpanProcessor(ConsoleSpanExporter())
             provider.add_span_processor(console_processor)
             logger.info("Console trace exporter enabled for debugging")
