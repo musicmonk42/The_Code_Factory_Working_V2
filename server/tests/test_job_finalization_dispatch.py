@@ -568,9 +568,13 @@ class TestArbiterBridgeNoOpMode:
 
         await bridge.publish_event("test_event", {"key": "value"})
 
-        # Verify publish was called
+        # Verify publish was called and robustly unpack its arguments
         assert mock_mq.publish.called
-        _topic, payload = mock_mq.publish.call_args[0]
+        call = mock_mq.publish.call_args
+        args = call[0]
+        call_kwargs = call[1]
+        # publish may be called with positional or keyword args
+        payload = args[1] if len(args) >= 2 else call_kwargs.get("message", {})
         assert "arbiter_enabled" in payload
 
     def test_strict_mode_raises_when_stubs_present(self):
@@ -578,7 +582,11 @@ class TestArbiterBridgeNoOpMode:
         import os
         from generator.arbiter_bridge import ArbiterBridge
 
+        class _PolicyEngineStub:
+            def __init__(self, arbiter_instance=None, config=None, *args, **kwargs): pass
+
         with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', False), \
+             patch('generator.arbiter_bridge.PolicyEngine', _PolicyEngineStub), \
              patch.dict(os.environ, {"ARBITER_STRICT": "1"}):
             with pytest.raises(RuntimeError, match="ARBITER_STRICT=1"):
                 ArbiterBridge()  # Will try to create real PolicyEngine but fall back to stub
