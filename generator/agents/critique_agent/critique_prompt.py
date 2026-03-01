@@ -135,7 +135,7 @@ except ImportError as e:
     async def detect_language(text: str) -> str:
         return "en"
 
-    async def translate_text(text: str, target: str = "en") -> str:
+    async def translate_text(text: str, target_lang: str = "en") -> str:
         return text
 
     async def scrub_pii_and_secrets(text: str) -> str:
@@ -759,7 +759,7 @@ async def build_semantic_critique_prompt(
         try:
             translated: Dict[str, Any] = {}
             for k, v in requirements.items():
-                translated[k] = await translate_text(str(v), target="en")
+                translated[k] = await translate_text(str(v), target_lang="en")
             requirements = translated
             state_summary = (
                 state_summary

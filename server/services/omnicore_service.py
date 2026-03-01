@@ -8963,6 +8963,10 @@ class OmniCoreService:
                                     output_path=str(output_path_obj)
                                 )
                                 
+                                # Ensure all required README sections are present
+                                from generator.main.post_materialize import ensure_readme_sections
+                                fallback_readme = ensure_readme_sections(fallback_readme, entry_point="app.main:app")
+                                
                                 # Write README to the project directory
                                 readme_path = output_path_obj / "README.md"
                                 readme_path.write_text(fallback_readme, encoding="utf-8")
@@ -9007,6 +9011,10 @@ class OmniCoreService:
                                 language="python",
                                 output_path=str(output_path_obj)
                             )
+                            
+                            # Ensure all required README sections are present
+                            from generator.main.post_materialize import ensure_readme_sections
+                            fallback_readme = ensure_readme_sections(fallback_readme, entry_point="app.main:app")
                             
                             # Write README to the project directory
                             readme_path = output_path_obj / "README.md"

@@ -1311,6 +1311,27 @@ class DeploymentCompletenessValidator(Validator):
                             f"Recommended file missing for {target}: {file_path}. "
                             f"This is optional but recommended for production deployments."
                         )
+                    elif file_path.endswith(('.yaml', '.yml')):
+                        # Validate YAML syntax for recommended files that exist
+                        try:
+                            async with aiofiles.open(full_path, 'r', encoding='utf-8') as f:
+                                content = await f.read()
+                            yaml_report: Dict[str, Any] = {
+                                "invalid_files": [],
+                                "errors": [],
+                                "status": "passed",
+                            }
+                            await self._validate_yaml(content, file_path, yaml_report)
+                            if yaml_report["status"] == "failed":
+                                report["warnings"].append(
+                                    f"Recommended file {file_path} has invalid YAML: "
+                                    + "; ".join(yaml_report["errors"])
+                                )
+                                report["invalid_files"].extend(yaml_report["invalid_files"])
+                        except Exception as e:
+                            report["warnings"].append(
+                                f"Could not validate recommended file {file_path}: {e}"
+                            )
         
         # Validate that deployment files match the actual generated code
         await self._validate_deployment_matches_code(report)
@@ -1354,6 +1375,50 @@ class DeploymentCompletenessValidator(Validator):
                 f"Dockerfile validation failed for {file_path}: Missing required instructions {missing_instructions}"
             )
             report["status"] = "failed"
+
+        # Semantic check: ENTRYPOINT + CMD compatibility
+        entrypoint_value = None
+        cmd_value = None
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            parts = stripped.split(None, 1)
+            if len(parts) < 2:
+                continue
+            instr = parts[0].upper()
+            val = parts[1].strip()
+            if instr == "ENTRYPOINT" and val.startswith("["):
+                entrypoint_value = val
+            elif instr == "CMD" and val.startswith("["):
+                cmd_value = val
+
+        if entrypoint_value and cmd_value:
+            # Parse exec-form JSON arrays
+            import json as _json
+            try:
+                ep_list = _json.loads(entrypoint_value)
+                cmd_list = _json.loads(cmd_value)
+                known_executables = {"uvicorn", "gunicorn", "flask", "celery", "django-admin", "hypercorn"}
+                if (
+                    isinstance(ep_list, list)
+                    and isinstance(cmd_list, list)
+                    and ep_list == ["python"]
+                    and cmd_list
+                    and cmd_list[0] in known_executables
+                ):
+                    msg = (
+                        f"Dockerfile ENTRYPOINT/CMD conflict in {file_path}: "
+                        f"ENTRYPOINT {ep_list} + CMD {cmd_list} produces "
+                        f"`python {cmd_list[0]} ...` which is invalid. "
+                        f"Either remove ENTRYPOINT and use CMD directly, "
+                        f"or change CMD to use the -m flag (e.g. CMD [\"-m\", \"{cmd_list[0]}\", ...])."
+                    )
+                    report["invalid_files"].append(f"{file_path}: ENTRYPOINT/CMD conflict")
+                    report["errors"].append(msg)
+                    report["status"] = "failed"
+            except (_json.JSONDecodeError, TypeError):
+                pass
     
     async def _validate_deployment_matches_code(self, report: Dict[str, Any]) -> None:
         """

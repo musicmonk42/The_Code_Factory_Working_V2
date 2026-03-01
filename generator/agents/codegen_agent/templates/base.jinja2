@@ -217,6 +217,11 @@ Before submitting, verify EVERY item below. Failure on any item = REJECTION:
   * Missing fields: `missing`
 - NEVER use Pydantic V1 error types like `value_error.any_str.min_length` or `value_error.number.not_gt`
 
+**Router Prefix Convention (CRITICAL):**
+- Define route prefixes ONLY on the router using the `prefix` parameter: `router = APIRouter(prefix="/api/v1/products")`
+- In main.py, include routers with NO additional prefix: `app.include_router(products_router)` — do NOT pass `prefix=` again
+- This prevents double-prefixed routes like `/api/v1/products/api/v1/products/`
+
 **README Completeness (CRITICAL - VALIDATOR REQUIREMENTS):**
 13. ✓ README MUST have these EXACT section headers (with ##):
     NOTE: These exact headers are required by the contract validator in validate_contract_compliance.py

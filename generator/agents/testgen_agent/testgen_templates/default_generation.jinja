@@ -224,6 +224,12 @@ def test_invalid_type():
 - **NEVER use paths starting with `generated.` — those are internal directory names**
 - Import from the module structure as if you're inside the project root
 
+**Import Convention (CRITICAL):**
+- NEVER use placeholder imports like `from my_app import app` or `from main import app`
+- For FastAPI apps, ALWAYS import as: `from app.main import app`
+- For test clients, use: `from fastapi.testclient import TestClient` then `client = TestClient(app)`
+- The application entry point is always `app.main:app` unless explicitly specified otherwise
+
 ## Mocking and External Dependencies
 - DO NOT mock or patch modules that don't exist in the codebase
 - Only use `monkeypatch.setattr()` or `@patch()` on actual functions/modules that are imported in the code under test

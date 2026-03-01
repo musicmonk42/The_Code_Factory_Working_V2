@@ -734,20 +734,23 @@ class PostgresClient:
                             raise RuntimeError(
                                 f"Failed to apply migrations: {e.stderr}"
                             ) from e
-                    else:
-                        verified = 0
-                        async with self._pool.acquire() as conn:
-                            for table, schema in self._TABLE_SCHEMAS.items():
-                                try:
-                                    await conn.execute(schema["schema_sql"])
-                                    verified += 1
-                                except Exception as e:
-                                    logger.warning(
-                                        f"Could not create/verify table {table}: {e}"
-                                    )
-                        logger.info(
-                            f"Created/verified {verified} tables (AUTO_MIGRATE disabled, using embedded DDL)"
-                        )
+
+                    # Always ensure SFE tables exist (idempotent CREATE TABLE IF NOT EXISTS).
+                    # Alembic migrations don't include these tables, so we create them
+                    # unconditionally regardless of the AUTO_MIGRATE setting.
+                    verified = 0
+                    async with self._pool.acquire() as conn:
+                        for table, schema in self._TABLE_SCHEMAS.items():
+                            try:
+                                await conn.execute(schema["schema_sql"])
+                                verified += 1
+                            except Exception as e:
+                                logger.warning(
+                                    f"Could not create/verify table {table}: {e}"
+                                )
+                    logger.info(
+                        f"Created/verified {verified} SFE tables using embedded DDL"
+                    )
 
                     self._health_check_task = asyncio.create_task(
                         self._start_health_check(
