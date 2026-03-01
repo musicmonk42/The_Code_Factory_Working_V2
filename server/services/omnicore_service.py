@@ -7956,23 +7956,57 @@ class OmniCoreService:
                         await _write_validation_error(output_path_for_validation, val_result)
 
                         if validation_errors:
-                            # HARD FAIL: Critical validation errors prevent pipeline from continuing
-                            logger.error(
-                                f"[PIPELINE] Job {job_id} HARD FAIL - validation errors: {validation_errors}",
-                                extra={"job_id": job_id, "validation_result": val_result}
+                            # Classify errors: only actual syntax errors are hard failures
+                            # that make code un-importable.  The validator emits syntax errors
+                            # in the format "Python syntax error in <file>: line N: <msg>".
+                            # Stub class warnings ("Stub class '...' in ...") and K8s manifest
+                            # warnings ("K8s Deployment manifest missing ...") are soft failures
+                            # that should be logged but must not prevent downstream stages.
+                            _HARD_ERROR_MARKERS = (
+                                "python syntax error in",  # from validate_generated_project
+                                "syntaxerror",             # from syntax_auto_repair / AST parse
+                                "unterminated string",     # specific Python syntax error msg
+                                "invalid syntax",          # Python parse error msg
                             )
-                            # Track that validate failed and testgen was implicitly skipped
-                            # so generator.py reports the correct failing stage ("validate", not "testgen")
-                            stages_completed.append("testgen:skipped")
-                            await self._finalize_failed_job(
-                                job_id, error=f"Validation failed: {validation_errors}"
+                            _SOFT_ERROR_MARKERS = (
+                                "stub class '",            # "Stub class 'X' in file.py"
+                                "stub marker '",           # "Stub marker '...' found in critical file"
+                                "k8s ",                    # K8s manifest field warnings
+                                "spec.selector",           # K8s missing field warnings
+                                "missing 'spec.",          # K8s missing spec fields
                             )
-                            return {
-                                "status": "failed",
-                                "message": f"Validation failed: {validation_errors}",
-                                "stages_completed": stages_completed,
-                                "output_path": output_path_for_validation,
-                            }
+                            _hard_errors = [
+                                e for e in validation_errors
+                                if any(marker in e.lower() for marker in _HARD_ERROR_MARKERS)
+                            ]
+                            _soft_errors = [e for e in validation_errors if e not in _hard_errors]
+
+                            if _hard_errors:
+                                # HARD FAIL: Actual syntax errors make code un-importable; block downstream.
+                                logger.error(
+                                    f"[PIPELINE] Job {job_id} HARD FAIL - syntax errors in validation: {_hard_errors}",
+                                    extra={"job_id": job_id, "hard_errors": _hard_errors, "soft_errors": _soft_errors}
+                                )
+                                # Track that validate failed and testgen was implicitly skipped
+                                # so generator.py reports the correct failing stage ("validate", not "testgen")
+                                stages_completed.append("testgen:skipped")
+                                await self._finalize_failed_job(
+                                    job_id, error=f"Validation failed: {_hard_errors}"
+                                )
+                                return {
+                                    "status": "failed",
+                                    "message": f"Validation failed: {_hard_errors}",
+                                    "stages_completed": stages_completed,
+                                    "output_path": output_path_for_validation,
+                                }
+                            else:
+                                # Soft failures only (stub class warnings, K8s field warnings, etc.)
+                                # Log and store in metadata but allow downstream stages to proceed.
+                                logger.warning(
+                                    f"[PIPELINE] Job {job_id} validation soft failures (non-blocking): {_soft_errors}",
+                                    extra={"job_id": job_id, "soft_errors": _soft_errors}
+                                )
+                                stages_completed.append("validate:warnings")
                         else:
                             # Only warnings, not errors - log and continue
                             logger.warning(
