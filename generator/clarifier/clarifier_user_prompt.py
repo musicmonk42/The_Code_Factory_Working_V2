@@ -344,6 +344,12 @@ COMPLIANCE_ANSWERS_RECEIVED = get_or_create_metric(
     "Total compliance answers received",
     ["question_id", "answer_value"],
 )
+PROMPT_LATENCY = get_or_create_metric(
+    Histogram,
+    "clarifier_prompt_latency_seconds",
+    "Latency of prompt handling in seconds",
+    ["channel"],
+)
 # User Profile
 class UserProfile(BaseModel):
     user_id: str

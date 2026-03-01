@@ -159,6 +159,40 @@ SCHEMA_MIGRATIONS = get_or_create_metric(
     "Schema migrations",
     ["from_version", "to_version"],
 )
+SELF_TEST_PASS = get_or_create_metric(
+    Gauge,
+    "clarifier_self_test_pass",
+    "Self-test status (1=pass, 0=fail)",
+)
+UPDATE_CYCLES = get_or_create_metric(
+    Counter,
+    "clarifier_update_cycles_total",
+    "Total update cycles run",
+)
+UPDATE_ERRORS = get_or_create_metric(
+    Counter,
+    "clarifier_update_errors_total",
+    "Errors during update operations",
+    ["category", "error_type"],
+)
+UPDATE_CONFLICTS = get_or_create_metric(
+    Gauge,
+    "clarifier_update_conflicts",
+    "Active update conflicts by type",
+    ["conflict_type"],
+)
+HISTORY_STORAGE_LATENCY = get_or_create_metric(
+    Histogram,
+    "clarifier_history_storage_latency_seconds",
+    "Latency of history storage operations in seconds",
+    ["operation"],
+)
+REDACTION_EVENTS = get_or_create_metric(
+    Counter,
+    "clarifier_redaction_events_total",
+    "Total redaction events by pattern type",
+    ["pattern_type"],
+)
 # --- Schema Definitions ---
 SCHEMAS = {
     1: {

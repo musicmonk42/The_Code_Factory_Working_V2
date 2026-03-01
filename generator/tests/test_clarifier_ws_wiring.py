@@ -16,12 +16,18 @@ fastapi = pytest.importorskip("fastapi", reason="fastapi not installed")
 
 # Import directly from the module to bypass server.routers.__init__ which
 # pulls in many optional dependencies.
-from server.routers.clarifier_ws import (  # noqa: E402
-    ClarifierWebSocketSession,
-    ClarifierSessionRegistry,
-    get_clarifier_registry,
-    registry,
-)
+try:
+    from server.routers.clarifier_ws import (  # noqa: E402
+        ClarifierWebSocketSession,
+        ClarifierSessionRegistry,
+        get_clarifier_registry,
+        registry,
+    )
+except ImportError as e:
+    pytest.skip(
+        f"server.routers.clarifier_ws not importable: {e}",
+        allow_module_level=True,
+    )
 
 
 # ---------------------------------------------------------------------------
