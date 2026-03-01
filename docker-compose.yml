@@ -182,6 +182,17 @@ services:
       - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
       # Number of GA generations per evolution run (IB-2: new kwarg wired from env)
       - EVOLUTION_GENERATIONS=${EVOLUTION_GENERATIONS:-5}
+      # GA backend selector for Arbiter.evolve(): auto | deap | custom
+      # "auto" prefers DEAP when available; falls back to the custom GA.
+      - EVOLUTION_BACKEND=${EVOLUTION_BACKEND:-auto}
+      # ArbiterGrowthManager evolutionary experiment parameters (arbiter_growth_manager.py).
+      # These control the ArbiterExplorer run_evolutionary_experiment() call, which is
+      # separate from the DEAP evolve_configs() call above.
+      - EXPLORER_EVOLUTION_GENERATIONS=${EXPLORER_EVOLUTION_GENERATIONS:-5}
+      - EXPLORER_EVOLUTION_POPULATION_SIZE=${EXPLORER_EVOLUTION_POPULATION_SIZE:-10}
+      # Minimum number of RL action-outcome samples required before learn_from_data()
+      # will train the supervised policy model.  Prevents training on noise.
+      - MIN_SUPERVISED_TRAINING_SAMPLES=${MIN_SUPERVISED_TRAINING_SAMPLES:-50}
       # Enable SelfEvolutionEngine in non-production deployments.
       # Must be "true" to allow SelfEvolutionEngine.start() when PRODUCTION_MODE=1.
       # Leave "false" in dev/staging unless actively testing evolution cycles.

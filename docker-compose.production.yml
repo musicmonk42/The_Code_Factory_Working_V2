@@ -235,6 +235,14 @@ services:
       # IB-2: arbiter.py now reads these env vars to configure evolve_configs() calls.
       - EVOLUTION_POPULATION_SIZE=${EVOLUTION_POPULATION_SIZE:-10}
       - EVOLUTION_GENERATIONS=${EVOLUTION_GENERATIONS:-5}
+      # GA backend selector for Arbiter.evolve(): auto | deap | custom
+      # "auto" prefers DEAP when available; falls back to the custom GA.
+      - EVOLUTION_BACKEND=${EVOLUTION_BACKEND:-auto}
+      # ArbiterGrowthManager evolutionary experiment parameters (arbiter_growth_manager.py).
+      - EXPLORER_EVOLUTION_GENERATIONS=${EXPLORER_EVOLUTION_GENERATIONS:-5}
+      - EXPLORER_EVOLUTION_POPULATION_SIZE=${EXPLORER_EVOLUTION_POPULATION_SIZE:-10}
+      # Minimum RL action-outcome samples before learn_from_data() trains a model.
+      - MIN_SUPERVISED_TRAINING_SAMPLES=${MIN_SUPERVISED_TRAINING_SAMPLES:-50}
       # Guard for the experimental SelfEvolutionEngine: must be "true" to allow
       # SelfEvolutionEngine.start() when PRODUCTION_MODE=1.  Always "false" in
       # production unless the evolution subsystem has passed full QA sign-off.

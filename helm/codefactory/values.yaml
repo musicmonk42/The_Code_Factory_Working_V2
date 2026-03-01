@@ -323,6 +323,20 @@ env:
   # Default 5 keeps cycles fast; increase for production tuning:
   #   helm upgrade --set env.EVOLUTION_GENERATIONS=10 ...
   EVOLUTION_GENERATIONS: "5"
+  # GA backend selector for Arbiter.evolve(): auto | deap | custom
+  # "auto" (default) prefers DEAP when available; falls back to the custom GA.
+  # Override: helm upgrade --set env.EVOLUTION_BACKEND=deap ...
+  EVOLUTION_BACKEND: "auto"
+  # ArbiterGrowthManager evolutionary experiment parameters (arbiter_growth_manager.py).
+  # Govern ArbiterExplorer.run_evolutionary_experiment(), which is separate from the
+  # DEAP evolve_configs() call controlled by EVOLUTION_GENERATIONS above.
+  # Override: helm upgrade --set env.EXPLORER_EVOLUTION_GENERATIONS=10 ...
+  EXPLORER_EVOLUTION_GENERATIONS: "5"
+  EXPLORER_EVOLUTION_POPULATION_SIZE: "10"
+  # Minimum RL action-outcome samples before learn_from_data() trains the supervised model.
+  # Raise to require more real RL-guided data before fitting.
+  # Override: helm upgrade --set env.MIN_SUPERVISED_TRAINING_SAMPLES=100 ...
+  MIN_SUPERVISED_TRAINING_SAMPLES: "50"
 
   # Guard for the experimental SelfEvolutionEngine.
   # When PRODUCTION_MODE=1 this flag MUST be "true" for SelfEvolutionEngine.start()
