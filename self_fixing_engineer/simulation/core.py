@@ -799,6 +799,7 @@ def run_job(job_config: Dict[str, Any]):
 
 @correlated
 def watch_mode(files_to_watch: List[str], callback: Callable):
+    under_pytest = UNDER_PYTEST or os.getenv("PYTEST_CURRENT_TEST") is not None
     if not WATCHDOG_AVAILABLE:
         logger.critical(
             "Critical Error: Watchdog package not found. Watch mode cannot be enabled. "
@@ -812,7 +813,7 @@ def watch_mode(files_to_watch: List[str], callback: Callable):
 
     logger.info(f"Entering watch mode. Monitoring files: {files_to_watch}")
 
-    if UNDER_PYTEST:
+    if under_pytest:
         raise KeyboardInterrupt
 
     event_handler = FileChangeHandler(callback)
@@ -830,7 +831,7 @@ def watch_mode(files_to_watch: List[str], callback: Callable):
 
     observer.start()
     try:
-        if UNDER_PYTEST:
+        if under_pytest:
             # Immediately emulate Ctrl+C so pytest sees KeyboardInterrupt
             raise KeyboardInterrupt
         while True:
