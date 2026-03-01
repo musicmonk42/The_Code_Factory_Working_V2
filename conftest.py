@@ -433,6 +433,7 @@ def pytest_collection_finish(session):
 # ============================================================================
 
 import pytest
+import pytest_asyncio
 import asyncio
 
 
@@ -617,7 +618,7 @@ def sample_config():
     }
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def async_client():
     """Provide an async HTTP client for API testing."""
     try:
