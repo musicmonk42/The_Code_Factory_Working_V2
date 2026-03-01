@@ -1222,6 +1222,68 @@ def fix_204_no_content_responses(files: Dict[str, str]) -> Dict[str, str]:
     return result
 
 
+_DEPENDS_ELLIPSIS_RE = re.compile(r'Depends\(\s*\.\.\.\s*\)')
+_DEPENDS_NONE_CALLABLE_RE = re.compile(r'Depends\(\s*None\s*\)')
+_PLACEHOLDER_DEP_STUB = (
+    "\n\nasync def _placeholder_dep():\n"
+    '    """Auto-generated placeholder dependency — replace with real implementation."""\n'
+    "    return None\n"
+)
+
+
+def fix_depends_ellipsis(code_files: Dict[str, str]) -> Dict[str, str]:
+    """Replace ``Depends(...)`` and ``Depends(None)`` with a safe callable stub.
+
+    ``Depends(...)`` passes the Python Ellipsis singleton as a FastAPI
+    dependency, which raises a ``TypeError`` at runtime because Ellipsis is
+    not callable.  ``Depends(None)`` has the same problem.
+
+    This function:
+    1. Detects both patterns in every Python file.
+    2. Replaces them with ``Depends(_placeholder_dep)``.
+    3. Injects an ``async def _placeholder_dep(): return None`` stub after
+       the last import statement in any file that needed the replacement.
+
+    Args:
+        code_files: Mapping of relative file path → file content.
+
+    Returns:
+        Updated mapping with fixes applied where necessary.
+    """
+    result = dict(code_files)
+    for filename, content in code_files.items():
+        if not filename.endswith(".py"):
+            continue
+        if not (_DEPENDS_ELLIPSIS_RE.search(content) or _DEPENDS_NONE_CALLABLE_RE.search(content)):
+            continue
+
+        new_content = _DEPENDS_ELLIPSIS_RE.sub('Depends(_placeholder_dep)', content)
+        new_content = _DEPENDS_NONE_CALLABLE_RE.sub('Depends(_placeholder_dep)', new_content)
+
+        # Only inject the stub when _placeholder_dep isn't already defined.
+        if '_placeholder_dep' not in content:
+            lines = new_content.splitlines(keepends=True)
+            insert_idx = 0
+            past_imports = False
+            for i, line in enumerate(lines):
+                stripped = line.strip()
+                if past_imports:
+                    break
+                if stripped.startswith('import ') or stripped.startswith('from '):
+                    insert_idx = i + 1
+                elif stripped and not stripped.startswith('#'):
+                    past_imports = True
+            lines.insert(insert_idx, _PLACEHOLDER_DEP_STUB)
+            new_content = "".join(lines)
+
+        result[filename] = new_content
+        logger.info(
+            "fix_depends_ellipsis: patched Depends(...)/Depends(None) in %s", filename
+        )
+
+    return result
+
+
 def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
     """
     Parses the LLM response, handling both multi-file JSON and single-file code.
@@ -1318,6 +1380,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             fixed_files = fix_async_database_url(fixed_files)
             # Fix 204 No Content: remove response_model from decorators with status_code=204
             fixed_files = fix_204_no_content_responses(fixed_files)
+            # Fix Depends(...) / Depends(None): replace Ellipsis/None callables with a stub
+            fixed_files = fix_depends_ellipsis(fixed_files)
         return fixed_files
 
     # Handle dict response from OpenAI API
@@ -3924,6 +3988,25 @@ _PYDANTIC_CLASS_SUFFIXES: tuple = (
     "Params", "Filter", "Detail", "Summary", "List",
 )
 
+# Suffixes that strongly indicate a Pydantic DTO/schema even when the stub is
+# being generated for a path under ``app/models/``.
+_PYDANTIC_SCHEMA_SUFFIXES: tuple = (
+    "Create", "Read", "Update", "Response", "Schema", "Input", "Output",
+    "Base", "InDB",
+)
+
+
+def _should_redirect_to_schemas(module_path: str, symbol: str) -> bool:
+    """Return ``True`` if *symbol* looks like a Pydantic schema but the target
+    stub file is under ``app/models/``.
+
+    When ``True``, the caller should redirect the stub to ``app/schemas/``
+    instead so that Pydantic DTOs are not generated as SQLAlchemy model files.
+    """
+    if "/models/" not in module_path or "/schemas/" in module_path:
+        return False
+    return any(symbol.endswith(sfx) for sfx in _PYDANTIC_SCHEMA_SUFFIXES)
+
 # Irregular English plurals used when deriving SQLAlchemy ``__tablename__``
 # from a class name.  Stored at module scope to avoid re-constructing the
 # dictionary on every ``_pluralize_tablename`` call.
@@ -5006,6 +5089,34 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
     for module_path, symbols in required_symbols.items():
         if not symbols:
             continue
+
+        # Redirect Pydantic schema stubs away from app/models/ when all upper-cased
+        # symbols look like DTOs.  E.g. app/models/ordercreate.py → app/schemas/order.py
+        if (
+            "/models/" in module_path
+            and "/schemas/" not in module_path
+            and all(
+                not sym[0].isupper() or _should_redirect_to_schemas(module_path, sym)
+                for sym in symbols
+                if sym and sym[0].isupper()
+            )
+            and any(sym[0].isupper() for sym in symbols if sym)
+        ):
+            # Derive entity base name by stripping the Pydantic suffix from the stem.
+            _stem = module_path.rsplit("/", 1)[-1].removesuffix(".py")
+            for _sfx in _PYDANTIC_SCHEMA_SUFFIXES:
+                _sfx_lower = _sfx.lower()
+                if _stem.endswith(_sfx_lower):
+                    _stem = _stem[: -len(_sfx_lower)]
+                    break
+            _redirected_path = "app/schemas/" + _stem + ".py"
+            logger.info(
+                "ensure_local_module_stubs: redirecting Pydantic schema stub from"
+                " %s → %s",
+                module_path,
+                _redirected_path,
+            )
+            module_path = _redirected_path  # noqa: PLW2901
 
         if module_path not in code_files:
             # Module file is entirely missing — generate a stub.

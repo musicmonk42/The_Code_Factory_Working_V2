@@ -1477,8 +1477,25 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         )
 
     # ---- routers ----------------------------------------------------------
+    # Stems for utility/health routes that should NOT get an /api/v1/ prefix.
+    _NO_PREFIX_STEMS: FrozenSet[str] = frozenset(
+        {"health", "healthz", "readyz", "root", "index", "ws", "websocket"}
+    )
+    # Detect whether this project uses /api/v1/ paths (REST API heuristic).
+    _has_api_v1 = any(
+        "/api/v1/" in content
+        for content in updated.values()
+    )
     for rm in router_modules:
-        prefix_kwarg = (', prefix="' + rm['prefix'] + '"') if rm['prefix'] else ""
+        if rm['prefix']:
+            # LLM specified an explicit prefix — use it as-is.
+            prefix_kwarg = ', prefix="' + rm['prefix'] + '"'
+        else:
+            stem = rm["module"].rsplit(".", 1)[-1]
+            if _has_api_v1 and stem not in _NO_PREFIX_STEMS:
+                prefix_kwarg = f', prefix="/api/v1/{stem}"'
+            else:
+                prefix_kwarg = ""
         main_lines.append(f"app.include_router({rm['alias']}{prefix_kwarg})")
 
     # ---- preserved health/version/ping routes from old main.py -----------
@@ -1809,9 +1826,27 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     # 7. Inject stubs for undefined Depends() callables in router files   #
     # ------------------------------------------------------------------ #
     _depends_re = re.compile(r'\bDepends\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)')
+    _depends_ellipsis_re = re.compile(r'\bDepends\(\s*\.\.\.\s*\)')
+    _depends_none_re = re.compile(r'\bDepends\(\s*None\s*\)')
     _router_file_re = re.compile(r'^app/(?:routers|routes)/(?!__init__)[^/]+\.py$')
     import builtins as _builtins_mod
     _python_builtins: FrozenSet[str] = frozenset(dir(_builtins_mod))
+
+    # First sub-pass: replace Depends(...) / Depends(None) with a named callable
+    # so the main stub-injection pass below can handle it uniformly.
+    for path, content in list(updated.items()):
+        if not _router_file_re.match(path):
+            continue
+        if not (_depends_ellipsis_re.search(content) or _depends_none_re.search(content)):
+            continue
+        new_content = _depends_ellipsis_re.sub('Depends(_placeholder_dep)', content)
+        new_content = _depends_none_re.sub('Depends(_placeholder_dep)', new_content)
+        updated[path] = new_content
+        logger.warning(
+            "[CODEGEN] _reconcile_app_wiring: replaced Depends(...)/Depends(None)"
+            " with _placeholder_dep in %s",
+            path,
+        )
 
     for path, content in list(updated.items()):
         if not _router_file_re.match(path):

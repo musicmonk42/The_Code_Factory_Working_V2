@@ -1321,15 +1321,17 @@ def validate_spec_fidelity(
         def normalize_path(path: str) -> str:
             """Normalize a path for comparison.
 
-            Strips trailing slashes, lowercases, removes the ``/api/v{N}``
-            version prefix (so ``/api/v1/orders`` and ``/orders`` compare as
-            equal), and replaces path parameters with a canonical placeholder.
+            Strips leading/trailing whitespace and slashes, lowercases, removes
+            the ``/api/v{N}`` version prefix (so ``/api/v1/orders`` and
+            ``/orders`` compare as equal), and replaces path parameters with a
+            canonical placeholder so ``{id}`` and ``{product_id}`` compare as
+            equal.
             """
-            normalized = path.rstrip('/').lower()
+            normalized = path.strip().rstrip('/').lower()
             # Strip /api/v{N} prefix so /api/v1/orders and /orders compare as equal
             normalized = re.sub(r'^/api/v\d+', '', normalized)
             # Normalize path parameters so {id}, {product_id}, {order_id} etc. compare as equal
-            normalized = re.sub(r'\{[^}]+\}', '{_param}', normalized)
+            normalized = re.sub(r'\{[^}]+\}', '{_}', normalized)
             return normalized or '/'
 
         # Build lookup set of found endpoints

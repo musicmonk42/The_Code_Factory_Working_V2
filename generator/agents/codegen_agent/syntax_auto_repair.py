@@ -901,6 +901,55 @@ class SyntaxAutoRepair:
             # Safe default: return original code
             return code, []
 
+    @staticmethod
+    def repair_depends_ellipsis(code: str, language: str) -> Tuple[str, List[str]]:
+        """Repair ``Depends(...)`` / ``Depends(None)`` patterns in FastAPI router code.
+
+        ``Depends(...)`` passes the Ellipsis singleton as a dependency callable,
+        which raises a ``TypeError`` at runtime because Ellipsis is not callable.
+        This is a semantic error that AST parsing does not catch.
+
+        The fix replaces every occurrence with ``Depends(lambda: None)`` which is
+        the safest no-op substitute that keeps the signature valid while the
+        developer supplies a real dependency.
+
+        Args:
+            code: Source code string.
+            language: Programming language identifier (only ``"python"`` is handled).
+
+        Returns:
+            Tuple of (repaired_code, list_of_fix_descriptions).
+        """
+        if language.lower() != "python":
+            return code, []
+
+        if not isinstance(code, str):
+            return code, []
+
+        fixes: List[str] = []
+        _depends_ellipsis_re = re.compile(r'Depends\(\s*\.\.\.\s*\)')
+        _depends_none_re = re.compile(r'Depends\(\s*None\s*\)')
+
+        repaired = code
+        for match in _depends_ellipsis_re.finditer(code):
+            fixes.append(f"Replaced Depends(...) with Depends(lambda: None) at position {match.start()}")
+        if fixes:
+            repaired = _depends_ellipsis_re.sub('Depends(lambda: None)', repaired)
+
+        none_fixes: List[str] = []
+        for match in _depends_none_re.finditer(repaired):
+            none_fixes.append(f"Replaced Depends(None) with Depends(lambda: None) at position {match.start()}")
+        if none_fixes:
+            repaired = _depends_none_re.sub('Depends(lambda: None)', repaired)
+            fixes.extend(none_fixes)
+
+        if fixes:
+            logger.info(
+                f"repair_depends_ellipsis: applied {len(fixes)} fix(es) in python code"
+            )
+
+        return repaired, fixes
+
     @classmethod
     def auto_repair(cls, code: str, language: str) -> Dict[str, Any]:
         """
@@ -1025,6 +1074,12 @@ class SyntaxAutoRepair:
             all_fixes.extend(fixes)
             if fixes:
                 logger.debug(f"Phase 2 complete: {len(fixes)} string(s) repaired")
+
+            # Phase 5: Fix Depends(...) / Depends(None) ellipsis patterns
+            code, fixes = cls.repair_depends_ellipsis(code, language)
+            all_fixes.extend(fixes)
+            if fixes:
+                logger.debug(f"Phase 5 complete: {len(fixes)} Depends(ellipsis) pattern(s) repaired")
 
             # Determine if code was modified
             was_modified = code != original_code

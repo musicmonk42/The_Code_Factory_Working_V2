@@ -376,13 +376,40 @@ def _auto_wire_routers(output_dir: Path, result: PostMaterializeResult) -> None:
 
     dir_name = routers_dir.name  # "routers" or "routes"
 
+    # Stems for utility/health routes that should NOT get an /api/v1/ prefix.
+    _NO_PREFIX_STEMS = frozenset(
+        {"health", "healthz", "readyz", "root", "index", "ws", "websocket"}
+    )
+
     # Only wire modules not yet imported from this specific directory.
     unwired_modules = [
         mod for mod in router_modules
         if f"from app.{dir_name}.{mod} import" not in main_content
     ]
     if not unwired_modules:
-        return  # All discovered routers are already wired — nothing to do.
+        # All routers are imported — but some may be wired WITHOUT a prefix.
+        # Do a second pass to inject missing prefixes into existing include_router calls.
+        updated_content = main_content
+        for mod in router_modules:
+            if mod in _NO_PREFIX_STEMS:
+                continue
+            bare_pattern = f"app.include_router({mod}_router)"
+            prefixed_pattern = f"app.include_router({mod}_router, prefix="
+            if bare_pattern in updated_content and prefixed_pattern not in updated_content:
+                updated_content = updated_content.replace(
+                    bare_pattern,
+                    f'app.include_router({mod}_router, prefix="/api/v1/{mod}")',
+                )
+                logger.info(
+                    "%s Added missing prefix to existing include_router(%s_router) in main.py",
+                    _STAGE,
+                    mod,
+                    extra={"output_dir": str(output_dir), "router_module": mod},
+                )
+        if updated_content != main_content:
+            main_py.write_text(updated_content, encoding="utf-8")
+            result.files_created.append(str(main_py.relative_to(output_dir)))
+        return
 
     # Build the import and wire-up lines.
     import_lines = [

@@ -1119,3 +1119,94 @@ class TestRoutesDirectoryDiscovery:
         assert "app/routes/products.py" not in result["unwired_routers"], (
             "_validate_wiring must not flag already-wired routers in app/routes/"
         )
+
+
+class TestReconcileApiV1PrefixInjection:
+    """_reconcile_app_wiring must auto-inject /api/v1/{stem} prefixes."""
+
+    @pytest.fixture(scope="class")
+    def reconcile_fn(self):
+        mod = _load_agent_module()
+        return mod._reconcile_app_wiring  # type: ignore[attr-defined]
+
+    def test_prefix_injected_when_api_v1_in_files(self, reconcile_fn):
+        """When any file contains /api/v1/, empty-prefix routers get prefix=/api/v1/{stem}."""
+        files = {
+            "app/routers/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/api/v1/products')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = reconcile_fn(files)
+        main = result.get("app/main.py", "")
+        assert 'prefix="/api/v1/products"' in main, (
+            "Expected prefix='/api/v1/products' to be injected; got:\n" + main
+        )
+
+    def test_explicit_prefix_preserved(self, reconcile_fn):
+        """When LLM already set prefix= on APIRouter(), that prefix is used verbatim."""
+        files = {
+            "app/routers/orders.py": (
+                "from fastapi import APIRouter\n"
+                'router = APIRouter(prefix="/orders")\n'
+                "@router.get('/')\n"
+                "async def list_orders(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = reconcile_fn(files)
+        main = result.get("app/main.py", "")
+        assert 'prefix="/orders"' in main, (
+            "Explicit APIRouter prefix should be preserved; got:\n" + main
+        )
+        assert 'prefix="/api/v1/orders"' not in main, (
+            "Should not override explicit prefix; got:\n" + main
+        )
+
+    def test_health_router_gets_no_prefix(self, reconcile_fn):
+        """Health/utility router stems should not get an /api/v1/ prefix."""
+        files = {
+            "app/routers/health.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/health')\n"
+                "async def health_check(): ...\n"
+            ),
+            "app/routers/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/api/v1/products')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = reconcile_fn(files)
+        main = result.get("app/main.py", "")
+        # health router must NOT have a prefix
+        assert "health_router)" in main or 'include_router(health_router)' in main, (
+            "health router should be wired without prefix; got:\n" + main
+        )
+        # products router must have a prefix
+        assert 'prefix="/api/v1/products"' in main, (
+            "products router should get /api/v1/ prefix; got:\n" + main
+        )
+
+    def test_no_prefix_when_no_api_v1_content(self, reconcile_fn):
+        """When no file contains /api/v1/, empty-prefix routers stay without prefix."""
+        files = {
+            "app/routers/items.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/items')\n"
+                "async def list_items(): ...\n"
+            ),
+            "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+        }
+        result = reconcile_fn(files)
+        main = result.get("app/main.py", "")
+        assert 'prefix="/api/v1/items"' not in main, (
+            "Should not inject prefix when no /api/v1/ content detected; got:\n" + main
+        )
