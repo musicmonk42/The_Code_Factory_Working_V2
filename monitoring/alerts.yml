@@ -350,6 +350,49 @@ groups:
           runbook_url: "https://runbooks.example.com/AuditLogFailure"
           action: "Check audit log storage and permissions"
 
+      - alert: AuditRecordsDroppedNoDatabaseClient
+        expr: |
+          increase(omnicore_audit_records_processed_total{status="dropped"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Audit records are being dropped — no database client"
+          description: >
+            {{ $value }} audit record(s) were dropped in the last 5 minutes because
+            the OmniCore audit system has no database client configured or the client
+            is unavailable. These records are permanently lost and cannot be recovered.
+          runbook_url: "https://runbooks.example.com/AuditRecordsDropped"
+          action: >
+            1. Verify DATABASE_URL is set and the database is reachable from the pod.
+            2. Check the audit subsystem logs for connection errors.
+            3. Confirm the PostgreSQL client initialised successfully at startup
+               (look for 'PostgreSQL connection pool created' in the logs).
+            4. If using ENABLE_DATABASE=0, ensure audit logging is also disabled or
+               redirected to a file-based backend.
+
+      - alert: AuditFlushNoDatabaseClient
+        expr: |
+          increase(omnicore_audit_errors_total{operation="flush_buffer_no_db_client"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+          component: security
+        annotations:
+          summary: "Audit flush is failing — database client unavailable"
+          description: >
+            The OmniCore audit buffer flush is being skipped repeatedly because the
+            database client is None. This indicates the audit persistence layer never
+            connected or was torn down unexpectedly. Audit records are being silently
+            discarded on every flush cycle.
+          runbook_url: "https://runbooks.example.com/AuditFlushNoDatabaseClient"
+          action: >
+            1. Check DATABASE_URL and confirm the PostgreSQL service is running.
+            2. Look for 'OmniCoreDBClient' initialisation errors at pod startup.
+            3. Review ENABLE_DATABASE and AUDIT_CRYPTO_ALLOW_INIT_FAILURE settings.
+            4. Restart the pod if the database client was lost due to a transient fault.
+
   # ===========================================================================
   # AI/LLM Service Alerts
   # ===========================================================================
