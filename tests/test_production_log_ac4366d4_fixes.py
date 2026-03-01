@@ -227,8 +227,8 @@ def _strip_inline_comment(line: str) -> str:
     return line
 
 
-EXPECTED_GEMINI_MODEL = "gemini-2.0-flash-001"
-STALE_GEMINI_MODEL = "gemini-2.0-flash"
+EXPECTED_GEMINI_MODEL = "gemini-2.0-flash"
+STALE_GEMINI_MODEL = "gemini-2.0-flash-001"
 
 
 class TestFix4GeminiModelUpdate:
@@ -242,7 +242,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_llm_client_no_stale_model(self):
-        """llm_client.py must not assign the stale gemini-2.0-flash identifier in code."""
+        """llm_client.py must not assign the stale gemini-2.0-flash-001 identifier in code."""
         content = _LLM_CLIENT.read_text(encoding="utf-8")
         # Strip full-line and inline comments to avoid false positives from historical notes
         code_lines = [
@@ -252,7 +252,7 @@ class TestFix4GeminiModelUpdate:
         ]
         stale_in_code = [
             line for line in code_lines
-            if re.search(r'["\']gemini-2\.0-flash["\']', line)
+            if re.search(r'["\']gemini-2\.0-flash-001["\']', line)
         ]
         assert stale_in_code == [], (
             f"llm_client.py code still assigns stale '{STALE_GEMINI_MODEL}': "
@@ -260,7 +260,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_google_model_field(self):
-        """server/config.py google_model Field default must be gemini-2.0-flash-001."""
+        """server/config.py google_model Field default must be gemini-2.0-flash."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Accept both single and double-quoted string values
         match = re.search(r'google_model.*?default\s*=\s*["\']([^"\']+)["\']', content, re.DOTALL)
@@ -271,7 +271,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_get_default_model_for_provider(self):
-        """get_default_model_for_provider('google') must return gemini-2.0-flash-001."""
+        """get_default_model_for_provider('google') must return gemini-2.0-flash."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Use the ast module to reliably extract the function body
         import ast
@@ -292,7 +292,7 @@ class TestFix4GeminiModelUpdate:
         )
 
     def test_server_config_no_stale_model(self):
-        """server/config.py must not assign bare gemini-2.0-flash in code (non-comment) lines."""
+        """server/config.py must not assign gemini-2.0-flash-001 in code (non-comment) lines."""
         content = _SERVER_CONFIG.read_text(encoding="utf-8")
         # Strip full-line and inline comments to avoid false positives from historical notes
         code_lines = [
@@ -302,7 +302,7 @@ class TestFix4GeminiModelUpdate:
         ]
         stale_in_code = [
             line for line in code_lines
-            if re.search(r'["\']gemini-2\.0-flash["\']', line)
+            if re.search(r'["\']gemini-2\.0-flash-001["\']', line)
         ]
         assert stale_in_code == [], (
             f"server/config.py code still assigns stale '{STALE_GEMINI_MODEL}': "

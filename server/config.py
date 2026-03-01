@@ -88,7 +88,7 @@ class LLMProviderConfig(BaseSettings):
         description="Google API key for Gemini models"
     )
     google_model: str = Field(
-        default="gemini-2.0-flash-001",  # Updated from gemini-2.0-flash (no longer available to new users)
+        default="gemini-2.0-flash",  # Updated from gemini-2.0-flash-001 (no longer available to new users)
         description="Default Gemini model to use"
     )
     
@@ -580,7 +580,7 @@ def get_default_model_for_provider(provider: str) -> str:
         "openai": "gpt-4o",
         "anthropic": "claude-3-sonnet-20240229",
         "grok": "grok-beta",
-        "google": "gemini-2.0-flash-001",  # Updated from gemini-2.0-flash (no longer available to new users)
+        "google": "gemini-2.0-flash",  # Updated from gemini-2.0-flash-001 (no longer available to new users)
         "ollama": "codellama",
     }
     return model_defaults.get(provider, "gpt-4o")
