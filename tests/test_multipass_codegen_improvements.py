@@ -1210,3 +1210,365 @@ class TestReconcileApiV1PrefixInjection:
         assert 'prefix="/api/v1/items"' not in main, (
             "Should not inject prefix when no /api/v1/ content detected; got:\n" + main
         )
+
+
+# ---------------------------------------------------------------------------
+# Defects 1, 2, 3 — _validate_wiring new checks (unresolved imports,
+# duplicate prefixes, AST stub detection)
+# ---------------------------------------------------------------------------
+
+class TestValidateWiringNewChecks:
+    """Tests for the three new checks added to _validate_wiring (Defects 1-3)."""
+
+    @pytest.fixture(scope="class")
+    def fn(self):
+        mod = _load_agent_module()
+        return mod._validate_wiring  # type: ignore[attr-defined]
+
+    # -- Defect 1: unresolved imports --
+
+    def test_existing_symbol_not_flagged(self, fn):
+        """A symbol that exists in the target module is NOT in unresolved_imports."""
+        files = {
+            "app/routers/products.py": (
+                "from app.schemas.product import ProductCreate\n"
+                "router = APIRouter()\n"
+            ),
+            "app/schemas/product.py": (
+                "from pydantic import BaseModel\n"
+                "class ProductCreate(BaseModel):\n"
+                "    name: str\n"
+            ),
+        }
+        result = fn(files)
+        assert "unresolved_imports" in result
+        for importing_file, _mod, _missing in result["unresolved_imports"]:
+            if importing_file == "app/routers/products.py":
+                assert "ProductCreate" not in _missing
+
+    def test_missing_symbol_flagged(self, fn):
+        """A symbol absent from the target module IS reported in unresolved_imports."""
+        files = {
+            "app/routers/products.py": (
+                "from app.schemas.product import ProductResponse\n"
+                "router = APIRouter()\n"
+            ),
+            "app/schemas/product.py": (
+                "from pydantic import BaseModel\n"
+                "class ProductCreate(BaseModel):\n"
+                "    name: str\n"
+            ),
+        }
+        result = fn(files)
+        assert "unresolved_imports" in result
+        flagged = [
+            (f, m, missing)
+            for f, m, missing in result["unresolved_imports"]
+            if f == "app/routers/products.py"
+        ]
+        assert flagged, "Expected app/routers/products.py to have unresolved_imports"
+        assert "ProductResponse" in flagged[0][2]
+
+    def test_external_package_imports_skipped(self, fn):
+        """Imports from non-app packages (e.g. fastapi, sqlalchemy) are not checked."""
+        files = {
+            "app/routers/orders.py": (
+                "from fastapi import APIRouter, Depends\n"
+                "from sqlalchemy.orm import Session\n"
+                "router = APIRouter()\n"
+            ),
+        }
+        result = fn(files)
+        # No unresolved_imports for non-app imports
+        app_flagged = [
+            (f, m, ms) for f, m, ms in result.get("unresolved_imports", [])
+            if not m.startswith("app.")
+        ]
+        assert not app_flagged
+
+    def test_unresolved_imports_key_always_present(self, fn):
+        """The result dict always contains the 'unresolved_imports' key."""
+        result = fn({"app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"})
+        assert "unresolved_imports" in result
+
+    # -- Defect 2: duplicate prefix detection --
+
+    def test_duplicate_prefix_detected(self, fn):
+        """A route decorator that duplicates the mount prefix is flagged."""
+        files = {
+            "app/routers/version.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/api/v1/version')\n"
+                "async def get_version(): return {'v': '1'}\n"
+            ),
+            "app/main.py": (
+                "from app.routers.version import router\n"
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n"
+                "app.include_router(router, prefix='/api/v1/version')\n"
+            ),
+        }
+        result = fn(files)
+        assert "duplicate_prefixes" in result
+        dups = result["duplicate_prefixes"]
+        assert any(
+            dup_file == "app/routers/version.py" and "/api/v1/version" in dec_path
+            for dup_file, _prefix, dec_path in dups
+        ), f"Expected duplicate prefix to be flagged, got: {dups}"
+
+    def test_no_duplicate_prefix_clean(self, fn):
+        """When the decorator path does NOT start with the mount prefix, no flag."""
+        files = {
+            "app/routers/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/')\n"
+                "async def list_products(): ...\n"
+            ),
+            "app/main.py": (
+                "from app.routers.products import router\n"
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n"
+                "app.include_router(router, prefix='/api/v1/products')\n"
+            ),
+        }
+        result = fn(files)
+        dups = result.get("duplicate_prefixes", [])
+        assert not any(
+            dup_file == "app/routers/products.py"
+            for dup_file, _, _ in dups
+        )
+
+    def test_duplicate_prefixes_key_always_present(self, fn):
+        """The result dict always contains the 'duplicate_prefixes' key."""
+        result = fn({"app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n"})
+        assert "duplicate_prefixes" in result
+
+    # -- Defect 3: AST-based stub detection (return None + docstring) --
+
+    def test_stub_with_docstring_and_return_none_detected(self, fn):
+        """Functions that only have a docstring then return None are detected as stubs."""
+        svc = (
+            "async def create_product():\n"
+            '    """Create a product in the database."""\n'
+            "    return None\n\n"
+            "async def update_product():\n"
+            '    """Update a product."""\n'
+            "    return None\n\n"
+            "async def delete_product():\n"
+            '    """Delete a product."""\n'
+            "    return None\n"
+        )
+        files = {"app/services/product.py": svc}
+        result = fn(files)
+        paths = [t[0] for t in result["placeholder_services"]]
+        assert "app/services/product.py" in paths, (
+            f"Expected stub detection for service with docstring+return None. "
+            f"placeholder_services={result['placeholder_services']}"
+        )
+
+    def test_real_function_with_docstring_not_flagged(self, fn):
+        """A real function (docstring + DB logic) should not be flagged as a stub."""
+        svc = (
+            "from sqlalchemy.orm import Session\n\n"
+            "async def get_product(db: Session, product_id: int):\n"
+            '    """Retrieve a product from the database."""\n'
+            "    return db.query(Product).filter(Product.id == product_id).first()\n"
+        )
+        files = {"app/services/product.py": svc}
+        result = fn(files)
+        paths = [t[0] for t in result["placeholder_services"]]
+        assert "app/services/product.py" not in paths
+
+
+# ---------------------------------------------------------------------------
+# Defect 8 — _reconcile_app_wiring auto-fix for duplicate prefixes
+# ---------------------------------------------------------------------------
+
+class TestReconcileAppWiringDuplicatePrefixFix:
+    """_reconcile_app_wiring must strip duplicate prefixes from route decorators."""
+
+    @pytest.fixture(scope="class")
+    def fn(self):
+        mod = _load_agent_module()
+        return mod._reconcile_app_wiring  # type: ignore[attr-defined]
+
+    def test_duplicate_prefix_stripped_from_decorator(self, fn):
+        """When main.py applies prefix='/api/v1/items' and the decorator also
+        has '/api/v1/items', the decorator should be rewritten to just '/'."""
+        files = {
+            "app/routers/items.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/api/v1/items')\n"
+                "async def list_items(): return []\n"
+            ),
+            "app/main.py": (
+                "from app.routers.items import router\n"
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n"
+                "app.include_router(router, prefix='/api/v1/items')\n"
+            ),
+        }
+        result = fn(files)
+        router_content = result.get("app/routers/items.py", "")
+        # The full duplicate path must be absent from the router file after reconciliation
+        assert "@router.get('/api/v1/items')" not in router_content, (
+            "Duplicate prefix decorator '/api/v1/items' must be stripped from the router. "
+            f"Router content:\n{router_content}"
+        )
+
+    def test_non_duplicate_prefix_unchanged(self, fn):
+        """When the router prefix is correct (no duplication), decorators stay as-is."""
+        files = {
+            "app/routers/products.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+                "@router.get('/')\n"
+                "async def list_products(): return []\n"
+            ),
+            "app/main.py": (
+                "from app.routers.products import router\n"
+                "from fastapi import FastAPI\n"
+                "app = FastAPI()\n"
+                "app.include_router(router, prefix='/api/v1/products')\n"
+            ),
+        }
+        result = fn(files)
+        router_content = result.get("app/routers/products.py", "")
+        assert "@router.get('/')" in router_content
+
+
+# ---------------------------------------------------------------------------
+# Defect 9 — ensure_local_module_stubs __init__.py re-export generation
+# ---------------------------------------------------------------------------
+
+def _load_response_handler_module() -> types.ModuleType:
+    """Load codegen_response_handler.py with stubs for heavy deps."""
+    pkg_name = "generator.agents.codegen_agent"
+    mod_name = f"{pkg_name}.codegen_response_handler"
+    if mod_name in sys.modules and hasattr(sys.modules[mod_name], "ensure_local_module_stubs"):
+        return sys.modules[mod_name]
+
+    # Ensure package hierarchy is present as real package objects so that
+    # relative imports (``from .syntax_auto_repair import ...``) resolve.
+    for part_name in ("generator", "generator.agents", pkg_name):
+        if part_name not in sys.modules:
+            pkg_mod = _make_stub_module(part_name)
+            pkg_mod.__path__ = []  # mark as package so relative imports work
+            pkg_mod.__package__ = part_name
+            sys.modules[part_name] = pkg_mod
+        else:
+            # Ensure existing stub has __path__ so it is treated as a package
+            existing = sys.modules[part_name]
+            if not hasattr(existing, "__path__"):
+                existing.__path__ = []
+
+    # Pre-stub the relative sibling module so the relative import resolves.
+    _sar_mod_name = f"{pkg_name}.syntax_auto_repair"
+    if _sar_mod_name not in sys.modules:
+        sys.modules[_sar_mod_name] = _make_stub_module(
+            _sar_mod_name,
+            SyntaxAutoRepair=type("SyntaxAutoRepair", (), {"repair": lambda self, c: c}),
+        )
+
+    # Stub out other heavy transitive dependencies of codegen_response_handler
+    import contextlib
+    _null_tracer = _make_stub_module(
+        "tracer",
+        start_as_current_span=lambda *a, **kw: contextlib.nullcontext(),
+    )
+    rh_deps: Dict[str, Any] = {
+        "jinja2": _make_stub_module("jinja2", TemplateNotFound=Exception, Environment=object),
+        "opentelemetry.trace": _make_stub_module(
+            "opentelemetry.trace",
+            get_tracer=lambda *a, **kw: _null_tracer,
+        ),
+    }
+    for name, mod in rh_deps.items():
+        sys.modules.setdefault(name, mod)
+
+    spec = importlib.util.spec_from_file_location(
+        mod_name,
+        PROJECT_ROOT / "generator/agents/codegen_agent/codegen_response_handler.py",
+        submodule_search_locations=[],
+    )
+    mod = importlib.util.module_from_spec(spec)  # type: ignore[arg-type]
+    mod.__package__ = pkg_name
+    sys.modules[mod_name] = mod
+    try:
+        spec.loader.exec_module(mod)  # type: ignore[union-attr]
+    except Exception:
+        sys.modules.pop(mod_name, None)
+        raise
+    return mod
+
+
+class TestEnsureLocalModuleStubsInitReexport:
+    """ensure_local_module_stubs must add re-exports to __init__.py when a symbol
+    exists in a submodule but not in the package __init__."""
+
+    @pytest.fixture(scope="class")
+    def fn(self):
+        mod = _load_response_handler_module()
+        return mod.ensure_local_module_stubs  # type: ignore[attr-defined]
+
+    def test_reexport_added_when_symbol_in_submodule(self, fn):
+        """If 'from app.schemas import TokenResponse' is needed and
+        TokenResponse is in app/schemas/auth.py, a re-export should be added
+        to app/schemas/__init__.py."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.schemas import TokenResponse\n"
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+            ),
+            "app/schemas/__init__.py": "# empty\n",
+            "app/schemas/auth.py": (
+                "from pydantic import BaseModel\n"
+                "class TokenResponse(BaseModel):\n"
+                "    access_token: str\n"
+            ),
+        }
+        result = fn(files)
+        init_content = result.get("app/schemas/__init__.py", "")
+        assert "TokenResponse" in init_content, (
+            f"Expected TokenResponse re-export in __init__.py, got:\n{init_content}"
+        )
+
+    def test_stub_added_when_symbol_not_in_any_submodule(self, fn):
+        """If the symbol is not found in any submodule, a stub should be added
+        to __init__.py directly."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.schemas import UnknownType\n"
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+            ),
+            "app/schemas/__init__.py": "# empty\n",
+        }
+        result = fn(files)
+        init_content = result.get("app/schemas/__init__.py", "")
+        assert "UnknownType" in init_content, (
+            f"Expected UnknownType stub in __init__.py, got:\n{init_content}"
+        )
+
+    def test_existing_symbol_in_init_not_duplicated(self, fn):
+        """When the symbol already exists in __init__.py, nothing extra is added."""
+        files = {
+            "app/routers/auth.py": (
+                "from app.schemas import TokenResponse\n"
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n"
+            ),
+            "app/schemas/__init__.py": (
+                "from pydantic import BaseModel\n"
+                "class TokenResponse(BaseModel):\n"
+                "    access_token: str\n"
+            ),
+        }
+        result = fn(files)
+        init_content = result.get("app/schemas/__init__.py", "")
+        # Should not contain duplicate definitions
+        assert init_content.count("class TokenResponse") == 1

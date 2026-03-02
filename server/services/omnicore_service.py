@@ -8651,6 +8651,7 @@ class OmniCoreService:
                 # NOTE: Only testgen can have failed at this point since critique runs before deploy/docgen
                 # Deploy and docgen failures will be detected in later pipeline runs
                 stages_failed = []
+                _deploy_validation_errors: List[str] = []
                 if payload.get("include_tests", True) and "testgen" not in stages_completed:
                     stages_failed.append("testgen")
                 
@@ -8861,11 +8862,15 @@ class OmniCoreService:
                             )
                             
                             if validation_result.get("status") == "failed":
+                                _deploy_errors = validation_result.get('errors', [])
                                 logger.error(
                                     f"[PIPELINE] Job {job_id} deployment validation failed - "
-                                    f"errors: {validation_result.get('errors', [])} - continuing pipeline"
+                                    f"errors: {_deploy_errors} - continuing pipeline"
                                 )
                                 stages_completed.append("deploy:validation_failed")
+                                stages_failed.append("deploy:validation")
+                                # Store errors to surface in the result
+                                _deploy_validation_errors.extend(_deploy_errors)
                             else:
                                 logger.info(f"[PIPELINE] Job {job_id} deployment validation passed")
                                 
@@ -9050,7 +9055,8 @@ class OmniCoreService:
             output_path = codegen_result.get("output_path")
             
             # FIX Bug 5: Validate deployment artifacts and raise errors for missing required files
-            validation_warnings = []
+            # Include any deploy validation errors collected earlier in the pipeline
+            validation_warnings = list(_deploy_validation_errors)
             validation_errors = []
             
             if output_path:
@@ -9200,9 +9206,20 @@ class OmniCoreService:
             # Finalization is handled by finalize_job_success() in generator.py
             # to avoid double-finalization and inconsistent state.
 
+            # If deploy validation failed, mark the job as completed_with_warnings
+            # so callers can distinguish a fully-valid build from one with known issues.
+            _final_status = "completed"
+            if "deploy:validation_failed" in stages_completed:
+                _final_status = "completed_with_warnings"
+                logger.warning(
+                    "[PIPELINE] Job %s completed with warnings: deploy validation failed",
+                    job_id,
+                )
+
             return {
-                "status": "completed",
+                "status": _final_status,
                 "stages_completed": stages_completed,
+                "stages_failed": stages_failed,
                 "output_path": output_path,
                 "validation_warnings": validation_warnings,
                 "sfe_analysis": sfe_result if sfe_result is not None else {},  # Include SFE results in pipeline return

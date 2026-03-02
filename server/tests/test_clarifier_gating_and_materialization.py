@@ -34,7 +34,7 @@ class TestJobStatusEnum:
 
     def test_all_statuses_present(self):
         """All expected statuses should be present in the enum."""
-        expected = {"pending", "running", "needs_clarification", "completed", "failed", "cancelled"}
+        expected = {"pending", "running", "needs_clarification", "completed", "completed_with_warnings", "failed", "cancelled"}
         actual = {s.value for s in JobStatus}
         assert expected == actual
 

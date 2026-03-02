@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import aiofiles
 from opentelemetry import trace
+from opentelemetry.trace import StatusCode
 from prometheus_client import Counter, Gauge, Histogram
 
 # --- TOML Compatibility (Python 3.10/3.11+, optional in tests/CI) ---
@@ -1043,7 +1044,7 @@ async def run_single_lint(
             }
         }
 
-    with tracer.start_as_current_span(f"lint.{tool_cfg['tool']}"):
+    with tracer.start_as_current_span(f"lint.{tool_cfg['tool']}") as _lint_span:
         start = time.time()
         # Skip optional tools when Docker is unavailable and tool is not installed locally
         if tool_cfg.get("optional") and tool_cfg.get("use_container"):
@@ -1116,6 +1117,29 @@ async def run_single_lint(
             LINT_ERRORS_COUNT.labels(language, sev).set(count)
             LINT_TRENDS.labels(language, sev).observe(count)
 
+        # Set OpenTelemetry span attributes with lint diagnostic data
+        _lint_span.set_attribute("lint.tool", tool_cfg["tool"])
+        _lint_span.set_attribute("lint.language", language)
+        _lint_span.set_attribute("lint.file", filename)
+        _lint_errors_count = sum(
+            1 for e in parsed_errors if e.get("severity") in ("error", "critical")
+        )
+        _lint_warnings_count = sum(
+            1 for e in parsed_errors if e.get("severity") == "warning"
+        )
+        _lint_span.set_attribute("lint.errors_count", _lint_errors_count)
+        _lint_span.set_attribute("lint.warnings_count", _lint_warnings_count)
+        _lint_span.set_attribute("lint.exit_code", raw_result.get("returncode", -1))
+        _lint_span.set_attribute("lint.latency_ms", round(latency * 1000, 2))
+        if parsed_errors:
+            _lint_span.add_event("lint_issues_found", {"count": len(parsed_errors)})
+        # Mark span as ERROR only when the linter itself crashed (not when it found issues)
+        if not raw_result.get("success") and raw_result.get("returncode") not in (0, 1, 2):
+            _lint_span.set_status(
+                StatusCode.ERROR,
+                description=raw_result.get("stderr", "")[:200],
+            )
+
         for err in parsed_errors:
             # Simple suggested fix generation
             err["suggested_fix"] = {
@@ -1124,7 +1148,7 @@ async def run_single_lint(
                 "no-unused-vars": "Remove the declared variable if it's not used, or use it.",
                 "indent": "Adjust indentation to match style guidelines, typically 2 or 4 spaces.",
                 "MissingJavadocMethod": "Add a Javadoc comment explaining the method's purpose, parameters, and return value.",
-                "clippy::unused_variable": "Remove the unused variable declaration.",
+                "clippy::unused_variable": "Remove the unused variable declarations.",
                 "golint": "Review the code for style issues and apply idiomatic Go formatting (e.g., `go fmt`).",
                 "errcheck": "Handle the error returned by the function call, or explicitly ignore it if intended.",
             }.get(
@@ -1142,7 +1166,7 @@ async def run_all_lints_and_checks(
     hitl_callback: Optional[Callable] = None,
     project_dir: Optional[str] = None,
 ) -> Dict[str, Any]:
-    with tracer.start_as_current_span("run_lints", attributes={"language": language}):
+    with tracer.start_as_current_span("run_lints", attributes={"language": language}) as _all_span:
         time.monotonic()
         if (
             not isinstance(code_files, dict)
@@ -1260,6 +1284,14 @@ async def run_all_lints_and_checks(
 
         total_errors = len(final_errors)
         errors_by_severity = CollectionsCounter(e["severity"] for e in final_errors)
+        # Set aggregate span attributes on the parent span
+        _all_span.set_attribute("lint.total_files", len(code_files))
+        _all_span.set_attribute("lint.total_errors", sum(
+            1 for e in final_errors if e.get("severity") in ("error", "critical")
+        ))
+        _all_span.set_attribute("lint.total_warnings", sum(
+            1 for e in final_errors if e.get("severity") == "warning"
+        ))
         # Use runner-provided audit logging utility
         await log_action(
             "All Lints and Checks Completed",
