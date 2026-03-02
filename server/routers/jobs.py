@@ -626,7 +626,7 @@ async def download_job_files(job_id: str):
     else:
         job = jobs_db[job_id]
 
-    if job.status != JobStatus.COMPLETED:
+    if job.status not in (JobStatus.COMPLETED, JobStatus.COMPLETED_WITH_WARNINGS):
         raise HTTPException(
             status_code=400,
             detail=f"Job {job_id} is {job.status.value}, cannot download until completed",
