@@ -254,24 +254,42 @@ class TestFixAsyncDatabaseUrlRuntimeInjection:
         }
         result = self._crh.fix_async_database_url(files)
         content = result["app/database.py"]
-        assert "_db_url" in content, "Runtime rewrite variable must be injected"
+        assert "Ensure async driver" in content, "Runtime rewrite comment must be injected"
+        assert "DATABASE_URL.startswith" in content, "Runtime rewrite check must be injected"
+        # Rewrite must appear BEFORE the engine creation, not after
+        assert content.index("Ensure async driver") < content.index("create_async_engine(")
 
     def test_no_double_injection_when_already_rewritten(self):
-        """If ``_db_url`` is already present, do NOT inject a second rewrite."""
+        """If the rewrite is already present, do NOT inject a second one."""
         files = {
             "app/database.py": (
                 "import os\n"
                 "from sqlalchemy.ext.asyncio import create_async_engine\n\n"
                 'DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./app.db")\n'
-                "_db_url = DATABASE_URL\n"
-                'if _db_url.startswith("postgresql://"):\n'
-                '    _db_url = "postgresql+asyncpg://" + _db_url[len("postgresql://"):]\n'
-                "engine = create_async_engine(_db_url)\n"
+                "# Ensure async driver for SQLAlchemy asyncio extension\n"
+                'if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):\n'
+                '    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+asyncpg://", 1)\n'
+                "engine = create_async_engine(DATABASE_URL)\n"
             )
         }
         result = self._crh.fix_async_database_url(files)
-        # _db_url must appear exactly once (not duplicated)
-        assert result["app/database.py"].count("_db_url = DATABASE_URL") == 1
+        # Rewrite comment must appear exactly once (not duplicated)
+        assert result["app/database.py"].count("Ensure async driver") == 1
+
+    def test_injects_runtime_rewrite_for_inline_getenv(self):
+        """Inline ``os.getenv()`` inside ``create_async_engine()`` must be extracted."""
+        files = {
+            "app/database.py": (
+                "import os\n"
+                "from sqlalchemy.ext.asyncio import create_async_engine\n\n"
+                'engine = create_async_engine(os.getenv("DATABASE_URL", "postgresql://localhost/db"))\n'
+            )
+        }
+        result = self._crh.fix_async_database_url(files)
+        content = result["app/database.py"]
+        assert "_db_url" in content, "Inline os.getenv must be extracted to _db_url"
+        assert "create_async_engine(_db_url" in content, "_db_url must be passed to engine"
+        assert "if _db_url and _db_url.startswith" in content, "None-safe rewrite must be injected"
 
     def test_no_effect_on_files_without_async_engine(self):
         """Files that do not use ``create_async_engine`` must be left unchanged."""
