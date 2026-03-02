@@ -3,6 +3,7 @@
 import ast
 import asyncio
 import collections
+import contextlib
 import fnmatch
 import importlib
 import importlib.util
@@ -278,6 +279,13 @@ except ImportError as e:
     logging.debug(f"Optional dependency missing: {e} (mypy)")
 
 try:
+    import filelock as _filelock_mod
+
+    MYPY_LOCK = _filelock_mod.FileLock(os.path.join(tempfile.gettempdir(), "mypy.lock"))
+except ImportError:
+    MYPY_LOCK = None
+
+try:
     from bandit.core import config as bandit_config_mod
     from bandit.core import manager as bandit_manager
 
@@ -318,6 +326,12 @@ tracer = get_tracer(__name__)
 # Do NOT call basicConfig() or add handlers at module level to avoid duplicate logs.
 # The application entry point should configure the root logger.
 logger = logging.getLogger(__name__)
+
+# Environment variable overrides for SFE linting behaviour
+_SFE_SKIP_MYPY = os.getenv("SFE_SKIP_MYPY", "").lower() in ("1", "true", "yes")
+_SFE_SKIP_PYLINT = os.getenv("SFE_SKIP_PYLINT", "").lower() in ("1", "true", "yes")
+_SFE_FAST_MODE = os.getenv("SFE_FAST_MODE", "").lower() in ("1", "true", "yes")
+_nullcontext = contextlib.nullcontext
 
 
 class _DedupLogFilter(logging.Filter):
@@ -1000,7 +1014,7 @@ class CodebaseAnalyzer:
             if not tool["available"]:
                 continue
             try:
-                if tool["name"] == "Pylint" and PYLINT_AVAILABLE:
+                if tool["name"] == "Pylint" and PYLINT_AVAILABLE and not _SFE_SKIP_PYLINT and not _SFE_FAST_MODE:
                     from pylint.lint import Run
                     from pylint.reporters import BaseReporter
 
@@ -1093,8 +1107,10 @@ class CodebaseAnalyzer:
                             for issue in b_mgr.get_issue_list()
                         ]
                     )
-                elif tool["name"] == "Mypy" and MYPY_AVAILABLE:
-                    stdout, stderr, _ = mypy_run([str(file_path)])
+                elif tool["name"] == "Mypy" and MYPY_AVAILABLE and not _SFE_SKIP_MYPY and not _SFE_FAST_MODE:
+                    _mypy_ctx = MYPY_LOCK if MYPY_LOCK is not None else _nullcontext()
+                    with _mypy_ctx:
+                        stdout, stderr, _ = mypy_run([str(file_path)])
                     
                     # FIX 3: Filter mypy INTERNAL ERROR lines before parsing
                     # mypy v1.17.1 on Python 3.11 produces INTERNAL ERROR messages

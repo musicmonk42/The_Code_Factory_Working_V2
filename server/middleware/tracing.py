@@ -148,12 +148,18 @@ def setup_tracing(
                     headers=headers if headers else None
                 )
                 
-                # Add batch processor for OTLP export
+                # Add batch processor for OTLP export.
+                # Defaults are tuned to stay under Railway's 500 logs/sec limit:
+                #   OTEL_BSP_MAX_EXPORT_BATCH_SIZE  – batch ceiling   (default 100, SDK default 512)
+                #   OTEL_BSP_SCHEDULE_DELAY         – export interval in ms (default 5000)
+                #   OTEL_BSP_MAX_QUEUE_SIZE         – in-memory span queue (default 2048)
+                # All three respect the corresponding standard OTel env vars so operators
+                # can tune them without rebuilding the image.
                 processor = BatchSpanProcessor(
                     otlp_exporter,
-                    max_queue_size=2048,
-                    max_export_batch_size=512,
-                    schedule_delay_millis=5000,
+                    max_queue_size=int(os.getenv("OTEL_BSP_MAX_QUEUE_SIZE", "2048")),
+                    max_export_batch_size=int(os.getenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "100")),
+                    schedule_delay_millis=int(os.getenv("OTEL_BSP_SCHEDULE_DELAY", "5000")),
                 )
                 provider.add_span_processor(processor)
                 

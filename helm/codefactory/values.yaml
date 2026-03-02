@@ -478,6 +478,13 @@ env:
   # preventing Railway's 500 logs/sec rate-limit hits during burst lint operations.
   # Override per release: helm upgrade --set env.OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
   OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  # OpenTelemetry Batch Span Processor tuning — keeps export bursts well under
+  # Railway's 500 logs/sec rate limit.  Defaults are more conservative than the
+  # OTel SDK defaults (512 batch / 5 s delay) to avoid log-rate spikes.
+  # Override per release: helm upgrade --set env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE=200 ...
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "100"
+  OTEL_BSP_SCHEDULE_DELAY: "5000"
+  OTEL_BSP_MAX_QUEUE_SIZE: "2048"
 
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"
@@ -487,6 +494,21 @@ env:
   # Override with a mounted ConfigMap path if you need environment-specific config.
   # Example: helm upgrade --set env.REFACTOR_AGENT_CONFIG=/app/config/refactor_prod.yaml
   REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
+
+  # ============================================
+  # SFE Arbiter Analysis Configuration
+  # ============================================
+  # Wall-clock budget for a single full codebase scan (default 300 s = 5 min).
+  # Raise for repositories with 100+ Python files where linting takes longer.
+  # Override: helm upgrade --set env.SFE_ANALYSIS_TIMEOUT_SECONDS=600 ...
+  SFE_ANALYSIS_TIMEOUT_SECONDS: "300"
+  # Skip individual linters to speed up analysis in resource-constrained pods.
+  # Both default to "false" (all linters enabled).
+  SFE_SKIP_MYPY: "false"
+  SFE_SKIP_PYLINT: "false"
+  # Fast-mode skips both Pylint and Mypy, running only Bandit (security) and Radon (complexity).
+  # Useful for CI pipelines that prioritise speed over completeness.
+  SFE_FAST_MODE: "false"
 
   # ============================================
   # Self-Healing Import Fixer (SHIF) Settings

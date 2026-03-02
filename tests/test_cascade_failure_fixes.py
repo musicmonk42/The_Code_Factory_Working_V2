@@ -277,17 +277,17 @@ class TestColdStartNameError:
 
 
 # ---------------------------------------------------------------------------
-# Fix 5: DEFAULT_SFE_ANALYSIS_TIMEOUT default is 120s
+# Fix 5: DEFAULT_SFE_ANALYSIS_TIMEOUT default is 300s
 # ---------------------------------------------------------------------------
 
 
-def test_default_sfe_timeout_is_120(monkeypatch):
-    """DEFAULT_SFE_ANALYSIS_TIMEOUT env-variable default should be 120 seconds."""
+def test_default_sfe_timeout_is_300(monkeypatch):
+    """DEFAULT_SFE_ANALYSIS_TIMEOUT env-variable default should be 300 seconds."""
     # Temporarily unset the env var to test the hard-coded default
     monkeypatch.delenv("SFE_ANALYSIS_TIMEOUT_SECONDS", raising=False)
     import importlib
     import server.services.omnicore_service as svc
     importlib.reload(svc)
-    assert svc.DEFAULT_SFE_ANALYSIS_TIMEOUT == 120, (
-        f"Expected 120, got {svc.DEFAULT_SFE_ANALYSIS_TIMEOUT}"
+    assert svc.DEFAULT_SFE_ANALYSIS_TIMEOUT == 300, (
+        f"Expected 300, got {svc.DEFAULT_SFE_ANALYSIS_TIMEOUT}"
     )
