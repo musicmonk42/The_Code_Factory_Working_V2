@@ -152,7 +152,7 @@ def setup_tracing(
                 processor = BatchSpanProcessor(
                     otlp_exporter,
                     max_queue_size=2048,
-                    max_export_batch_size=512,
+                    max_export_batch_size=100,
                     schedule_delay_millis=5000,
                 )
                 provider.add_span_processor(processor)
