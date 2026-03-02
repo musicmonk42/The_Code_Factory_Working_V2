@@ -245,9 +245,9 @@ class TestCustomLLMProvider:
         fallback_provider = AsyncMock()
         fallback_provider._acall = AsyncMock(return_value="Fallback response")
 
-        # Mock _get_fallback_provider to return our fallback
+        # Mock _get_fallback_provider to return our fallback (async method)
         with patch.object(
-            llm_provider, "_get_fallback_provider", return_value=fallback_provider
+            llm_provider, "_get_fallback_provider", new=AsyncMock(return_value=fallback_provider)
         ):
             # Mock _make_request to raise ClientError
             with patch.object(
@@ -255,29 +255,37 @@ class TestCustomLLMProvider:
                 "_make_request",
                 side_effect=ClientError("Connection failed"),
             ):
-                from langchain_core.messages import HumanMessage
+                # Prevent cache from returning a stale result from a previous test
+                with patch.object(
+                    llm_provider, "_get_cached_response", new=AsyncMock(return_value=None)
+                ):
+                    from langchain_core.messages import HumanMessage
 
-                messages = [HumanMessage(content="Test")]
+                    messages = [HumanMessage(content="Test")]
 
-                # Call the method and expect it to use fallback
-                result = await llm_provider._acall(messages)
+                    # Call the method and expect it to use fallback
+                    result = await llm_provider._acall(messages)
 
-                # Verify the result came from fallback
-                assert result == "Fallback response"
-                fallback_provider._acall.assert_called_once()
+                    # Verify the result came from fallback
+                    assert result == "Fallback response"
+                    fallback_provider._acall.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_astream_yields_chunks(self, llm_provider):
         """Test that streaming yields chunks properly."""
 
-        # Mock streaming response
+        # Mock streaming response - must return (session, response) tuple as implementation expects
+        mock_session = AsyncMock()
+
         async def mock_async_generator():
             yield '{"choices": [{"delta": {"content": "Hello"}}]}'
             yield '{"choices": [{"delta": {"content": " world"}}]}'
             yield '{"choices": [{"delta": {"content": ""}}]}'
 
         with patch.object(
-            llm_provider, "_make_streaming_request", return_value=mock_async_generator()
+            llm_provider,
+            "_make_streaming_request",
+            new=AsyncMock(return_value=(mock_session, mock_async_generator())),
         ):
             from langchain_core.messages import HumanMessage
 
@@ -293,13 +301,18 @@ class TestCustomLLMProvider:
     async def test_astream_handles_malformed_data(self, llm_provider):
         """Test that streaming handles malformed JSON gracefully."""
 
+        # Must return (session, response) tuple as implementation expects
+        mock_session = AsyncMock()
+
         async def mock_async_generator():
             yield '{"choices": [{"delta": {"content": "Valid"}}]}'
             yield "{malformed json}"
             yield '{"choices": [{"delta": {"content": " data"}}]}'
 
         with patch.object(
-            llm_provider, "_make_streaming_request", return_value=mock_async_generator()
+            llm_provider,
+            "_make_streaming_request",
+            new=AsyncMock(return_value=(mock_session, mock_async_generator())),
         ):
             from langchain_core.messages import HumanMessage
 

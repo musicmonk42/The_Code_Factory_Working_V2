@@ -43,7 +43,6 @@ def mock_plugin_and_result_dirs():
     # Write a dummy plugin file
     with open(os.path.join(plugins_dir, "my_dummy_plugin.py"), "w") as f:
         f.write("""
-import streamlit as st
 def register_my_dashboard_panels(register_func):
     register_func('my_panel', 'My Panel', lambda s, d: s.write('Panel content'), live_data_supported=True)
 def render_sidebar_component(sidebar):
