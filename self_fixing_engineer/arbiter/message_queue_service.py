@@ -230,6 +230,13 @@ class PermissionError(MessageQueueServiceError):
     pass
 
 
+def get_secret_string(value: Any) -> str:
+    """Extract string value from SecretStr or return string as-is."""
+    if hasattr(value, "get_secret_value"):
+        return value.get_secret_value()
+    return str(value)
+
+
 class MessageQueueService:
     """
     Ultra Gold Standard Async Message Queue Service
@@ -308,7 +315,7 @@ class MessageQueueService:
                     f"Invalid Fernet encryption key format. Key must be 32 url-safe base64-encoded bytes: {e}"
                 ) from e
         elif self.config.ENCRYPTION_KEY and CRYPTOGRAPHY_AVAILABLE:
-            key = self.config.ENCRYPTION_KEY.get_secret_value()
+            key = get_secret_string(self.config.ENCRYPTION_KEY)
             if isinstance(key, str):
                 key = key.encode("utf-8")
             try:
