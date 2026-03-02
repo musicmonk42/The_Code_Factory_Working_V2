@@ -3902,6 +3902,54 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     filename,
                 )
 
+            # Fix: Ensure field_validator is imported when @field_validator decorator is used.
+            # The LLM sometimes generates @field_validator without adding it to the pydantic
+            # import, causing a NameError at runtime.  Handles all common import layouts:
+            #   • single-line:      from pydantic import BaseModel, Field
+            #   • single-line parens: from pydantic import (BaseModel, Field)
+            #   • multiline parens: from pydantic import (\n    BaseModel,\n    Field\n)
+            #   • pydantic.v1 shim: from pydantic.v1 import BaseModel, Field
+            if _re.search(r'@field_validator\b', content):
+                _fv_imported = _re.search(
+                    r'from\s+pydantic(?:\.[a-z0-9_]+)?\s+import\s+'
+                    r'(?:[^\n(#]*\bfield_validator\b'    # single-line (no parens)
+                    r'|\([^)]*\bfield_validator\b)',     # parenthesized (any layout)
+                    content, _re.DOTALL,
+                )
+                if not _fv_imported:
+                    # Case 1: parenthesized (possibly multiline) import block
+                    _paren_match = _re.search(
+                        r'(from\s+pydantic(?:\.[a-z0-9_]+)?\s+import\s*\([^)]*)\)',
+                        content, _re.DOTALL,
+                    )
+                    if _paren_match:
+                        inner = _paren_match.group(1)
+                        _indent_match = _re.search(r'\n([ \t]+)\w', inner)
+                        indent = _indent_match.group(1) if _indent_match else '    '
+                        trailing_comma = '' if inner.rstrip().endswith(',') else ','
+                        insert_at = _paren_match.start(0) + len(inner)
+                        content = (
+                            content[:insert_at]
+                            + f"{trailing_comma}\n{indent}field_validator"
+                            + content[insert_at:]
+                        )
+                    elif _re.search(
+                        r'from\s+pydantic(?:\.[a-z0-9_]+)?\s+import\s+[^\n(#]', content
+                    ):
+                        # Case 2: single-line import without parentheses
+                        content = _re.sub(
+                            r'(from\s+pydantic(?:\.[a-z0-9_]+)?\s+import\s+)([^\n(#][^\n]*)',
+                            lambda m: m.group(1) + 'field_validator, ' + m.group(2),
+                            content,
+                        )
+                    else:
+                        # Case 3: no pydantic import at all — prepend a minimal one
+                        content = 'from pydantic import field_validator\n' + content
+                    logger.info(
+                        "auto_fix_pydantic_v1_imports: added missing field_validator import in %s",
+                        filename,
+                    )
+
             # Fix: class Config: inside BaseModel/BaseSettings → model_config = ConfigDict(...)
             if "class Config:" in content and ("BaseModel" in content or "BaseSettings" in content):
                 new_content = _fix_class_config_to_model_config(content)

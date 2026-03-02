@@ -3365,6 +3365,17 @@ async def validate_generated_project(
                         logger.error(
                             "Cold-start import check failed for '%s': %s", entry_module, import_error
                         )
+                    elif "NameError" in import_error:
+                        # NameError means a name (e.g. a decorator like @field_validator) is used
+                        # without being imported — the application cannot start.  Treat as hard failure
+                        # to prevent the pipeline from continuing with broken code.
+                        result["errors"].append(
+                            f"Cold-start import check failed for '{entry_module}': {import_error}"
+                        )
+                        result["valid"] = False
+                        logger.error(
+                            "Cold-start import check failed for '%s': %s", entry_module, import_error
+                        )
                     elif "ValidationError" in import_error and (
                         "pydantic" in import_error or "settings" in import_error.lower()
                     ):

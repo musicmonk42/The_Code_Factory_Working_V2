@@ -1250,8 +1250,19 @@ Agent --> Dev : Deliver Report
         
         basic_tests = {}
         
+        # Files that pytest cannot meaningfully test or that have naming conflicts
+        _SKIP_FILES = {"__init__.py", "conftest.py", "__main__.py"}
+
         if language.lower() == "python":
             for file_path, content in code_files.items():
+                # Skip utility/infrastructure files — generating tests for them produces
+                # nonsensical test___init__.py / test_conftest.py and confuses pytest.
+                if Path(file_path).name in _SKIP_FILES:
+                    logger.debug(
+                        f"[TESTGEN] Skipping test generation for utility file: {file_path}",
+                        extra={"run_id": run_id}
+                    )
+                    continue
                 try:
                     # Parse the Python file to extract functions and classes
                     tree = ast.parse(content, filename=file_path)
