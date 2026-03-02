@@ -12,6 +12,7 @@ Tests cover:
 - save_population / load_population round-trip
 """
 
+import importlib
 import json
 import os
 import sys
@@ -31,6 +32,7 @@ from self_fixing_engineer.evolution import (
     _MAX_TOKENS_RANGE,
     _REWARD_WEIGHT_RANGE,
     _TEMPERATURE_RANGE,
+    _TOP_P_RANGE,
 )
 
 
@@ -54,6 +56,17 @@ class TestGenome:
         """Default genome has valid parameter ranges."""
         genome = Genome()
         assert genome.is_valid(), "Default genome should be valid"
+
+    def test_genome_top_p_in_range(self):
+        """Genome llm_top_p is within [0.0, 1.0]."""
+        genome = Genome()
+        assert _TOP_P_RANGE[0] <= genome.llm_top_p <= _TOP_P_RANGE[1]
+
+    def test_genome_top_p_invalid(self):
+        """Genome with out-of-range llm_top_p fails is_valid()."""
+        genome = Genome()
+        genome.llm_top_p = 1.5
+        assert not genome.is_valid()
 
     def test_genome_temperature_in_range(self):
         """Genome temperature is within [0.0, 1.5]."""
@@ -136,9 +149,9 @@ class TestGeneticEvolutionEngine:
         metrics = make_metrics(**input_vals)
         fitness = self.engine.evaluate_fitness(genome, metrics)
         # Expected value computed from GeneticEvolutionEngine.FITNESS_WEIGHTS so
-        # this test stays correct if the weights change.
+        # this test stays correct if the weights change. Missing keys default to 0.
         expected = sum(
-            GeneticEvolutionEngine.FITNESS_WEIGHTS[k] * input_vals[k]
+            GeneticEvolutionEngine.FITNESS_WEIGHTS[k] * input_vals.get(k, 0.0)
             for k in GeneticEvolutionEngine.FITNESS_WEIGHTS
         )
         assert abs(fitness - expected) < 0.01, f"Expected {expected}, got {fitness}"
@@ -269,17 +282,293 @@ class TestGeneticEvolutionEngine:
                 os.unlink(tmp_path)
 
     def test_apply_genome_to_config(self):
-        """apply_genome_to_config() updates config reward_weights."""
+        """apply_genome_to_config() updates all config fields from genome."""
         genome = Genome(
             reward_weights={"pass_rate": 3.0, "code_coverage": 2.0},
             critique_threshold=0.8,
+            llm_temperature=0.9,
+            llm_top_p=0.85,
+            llm_max_tokens=2048,
+            action_cooldowns={"run_linter": 7, "run_tests": 12, "run_formatter": 4, "apply_patch": 20, "noop": 2},
         )
 
         class MockConfig:
             reward_weights = {}
             critique_threshold = 0.5
+            llm_temperature = 0.7
+            llm_top_p = 1.0
+            llm_max_tokens = 1024
+            action_cooldowns = {}
 
         config = MockConfig()
         self.engine.apply_genome_to_config(genome, config)
         assert config.reward_weights["pass_rate"] == 3.0
         assert config.critique_threshold == 0.8
+        assert config.llm_temperature == 0.9
+        assert config.llm_top_p == 0.85
+        assert config.llm_max_tokens == 2048
+        assert config.action_cooldowns["run_linter"] == 7
+
+
+class TestPromptTemplateEvolution:
+    """Test prompt template evolution features."""
+
+    def test_default_genome_has_prompt_templates(self):
+        """Default genome should have prompt templates."""
+        genome = Genome()
+        assert hasattr(genome, "prompt_templates")
+        assert isinstance(genome.prompt_templates, dict)
+        assert len(genome.prompt_templates) > 0
+        assert "system_prompt" in genome.prompt_templates
+
+    def test_prompt_creativity_in_range(self):
+        """Prompt creativity should be within valid range."""
+        genome = Genome()
+        assert 0.0 <= genome.prompt_creativity <= 1.0
+
+    def test_prompt_verbosity_in_range(self):
+        """Prompt verbosity should be within valid range."""
+        genome = Genome()
+        assert 0.0 <= genome.prompt_verbosity <= 1.0
+
+    def test_default_genome_is_valid_with_prompts(self):
+        """Default genome including prompt templates should pass is_valid()."""
+        genome = Genome()
+        assert genome.is_valid()
+
+    def test_invalid_prompt_creativity_fails_validation(self):
+        """Genome with out-of-range prompt_creativity fails is_valid()."""
+        genome = Genome()
+        genome.prompt_creativity = 1.5
+        assert not genome.is_valid()
+
+    def test_invalid_prompt_verbosity_fails_validation(self):
+        """Genome with out-of-range prompt_verbosity fails is_valid()."""
+        genome = Genome()
+        genome.prompt_verbosity = -0.1
+        assert not genome.is_valid()
+
+    def test_invalid_prompt_template_too_short_fails_validation(self):
+        """Genome with too-short prompt template fails is_valid()."""
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Hi"
+        assert not genome.is_valid()
+
+    def test_prompt_templates_preserved_after_serialization(self):
+        """Prompt templates should survive to_dict/from_dict round-trip."""
+        genome = Genome()
+        genome.prompt_templates["custom"] = "Custom prompt: {code}"
+        d = genome.to_dict()
+        restored = Genome.from_dict(d)
+        assert "custom" in restored.prompt_templates
+        assert restored.prompt_templates["custom"] == "Custom prompt: {code}"
+
+    def test_mutation_preserves_placeholders(self):
+        """Mutation should preserve required placeholders like {code}."""
+        engine = GeneticEvolutionEngine(mutation_rate=1.0)
+        genome = Genome()
+        genome.prompt_templates["test"] = "Review this code carefully: {code}"
+        for _ in range(10):
+            engine.mutate(genome)
+            assert "{code}" in genome.prompt_templates["test"], (
+                "Placeholder {code} was lost during mutation"
+            )
+
+    def test_mutation_preserves_validity(self):
+        """mutate() keeps prompt fields within valid bounds."""
+        engine = GeneticEvolutionEngine(mutation_rate=1.0)
+        genome = Genome()
+        for _ in range(20):
+            genome = engine.mutate(genome)
+        assert genome.is_valid(), "Genome should remain valid after multiple mutations"
+
+    def test_crossover_produces_valid_prompts(self):
+        """Crossover should produce non-empty prompt templates."""
+        engine = GeneticEvolutionEngine(crossover_rate=1.0)
+        parent1 = Genome()
+        parent1.prompt_templates["system_prompt"] = "You are helpful. Be precise."
+        parent2 = Genome()
+        parent2.prompt_templates["system_prompt"] = "You are an expert. Be thorough."
+        child1, child2 = engine.crossover(parent1, parent2)
+        assert len(child1.prompt_templates["system_prompt"]) > 0
+        assert len(child2.prompt_templates["system_prompt"]) > 0
+
+    def test_apply_genome_updates_prompt_templates(self):
+        """apply_genome_to_config should update prompt templates."""
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Evolved system prompt."
+
+        class MockConfig:
+            prompt_templates: dict = {}
+            prompt_creativity: float = 0.0
+            prompt_verbosity: float = 0.0
+
+        config = MockConfig()
+        engine.apply_genome_to_config(genome, config)
+        assert config.prompt_templates["system_prompt"] == "Evolved system prompt."
+
+    def test_apply_genome_updates_prompt_registry(self):
+        """apply_genome_to_config should update a prompt_registry when present."""
+        from self_fixing_engineer.prompt_registry import PromptRegistry
+
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Registry updated prompt."
+
+        class MockConfig:
+            prompt_templates: dict = {}
+            prompt_creativity: float = 0.0
+            prompt_verbosity: float = 0.0
+            prompt_registry = PromptRegistry()
+
+        config = MockConfig()
+        engine.apply_genome_to_config(genome, config)
+        assert config.prompt_registry.get_template("system_prompt") == "Registry updated prompt."
+
+    def test_fitness_weights_include_prompt_metrics(self):
+        """FITNESS_WEIGHTS should include prompt-related metric keys."""
+        assert "prompt_effectiveness" in GeneticEvolutionEngine.FITNESS_WEIGHTS
+        assert "prompt_token_efficiency" in GeneticEvolutionEngine.FITNESS_WEIGHTS
+        assert "prompt_consistency" in GeneticEvolutionEngine.FITNESS_WEIGHTS
+
+
+class TestPromptRegistry:
+    """Test the PromptRegistry singleton."""
+
+    def setup_method(self):
+        """Reset singleton state between tests."""
+        from self_fixing_engineer.prompt_registry import PromptRegistry
+        instance = PromptRegistry()
+        with instance._template_lock:
+            instance._templates = {}
+            instance._generation = 0
+            instance._fitness = 0.0
+
+    def test_singleton_instance(self):
+        """PromptRegistry should be a singleton."""
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+        registry1 = get_prompt_registry()
+        registry2 = get_prompt_registry()
+        assert registry1 is registry2
+
+    def test_update_and_get_template(self):
+        """Should be able to update and retrieve a template."""
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        registry.update_template("test_template", "Hello {name}")
+        assert registry.get_template("test_template") == "Hello {name}"
+
+    def test_get_missing_template_returns_default(self):
+        """get_template should return the default when the key is absent."""
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        assert registry.get_template("nonexistent", default="fallback") == "fallback"
+
+    def test_update_all(self):
+        """update_all should replace all templates and update stats."""
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        templates = {"a": "Template A.", "b": "Template B."}
+        registry.update_all(templates, generation=3, fitness=7.5)
+        assert registry.get_template("a") == "Template A."
+        stats = registry.get_stats()
+        assert stats["generation"] == 3
+        assert stats["fitness"] == 7.5
+        assert stats["template_count"] == 2
+
+    def test_get_all_returns_copy(self):
+        """get_all should return an independent copy."""
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+        registry = get_prompt_registry()
+        registry.update_template("x", "X template.")
+        copy = registry.get_all()
+        copy["x"] = "modified"
+        assert registry.get_template("x") == "X template."
+
+    def test_thread_safety(self):
+        """Registry should be thread-safe."""
+        import concurrent.futures
+        from self_fixing_engineer.prompt_registry import get_prompt_registry
+
+        registry = get_prompt_registry()
+
+        def update_and_read(i: int) -> bool:
+            registry.update_template(f"template_{i}", f"Content {i}")
+            return registry.get_template(f"template_{i}") is not None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            results = list(executor.map(update_and_read, range(50)))
+
+        assert all(results)
+
+
+class TestEnvironmentConfigIntegration:
+    """Tests that EnvironmentConfig carries prompt fields used by apply_genome_to_config."""
+
+    def _get_env_config(self):
+        """Return a real EnvironmentConfig if the envs module is importable."""
+        try:
+            mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
+            EnvironmentConfig = getattr(mod, "EnvironmentConfig")
+            cfg = EnvironmentConfig()
+            # Return None if we got the lightweight stub (it has no observation_keys field)
+            return cfg if hasattr(cfg, "observation_keys") else None
+        except Exception:
+            return None
+
+    def test_environment_config_has_prompt_fields(self):
+        """EnvironmentConfig should expose the prompt fields written by apply_genome_to_config."""
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        assert hasattr(cfg, "prompt_templates"), "prompt_templates field missing"
+        assert hasattr(cfg, "prompt_creativity"), "prompt_creativity field missing"
+        assert hasattr(cfg, "prompt_verbosity"), "prompt_verbosity field missing"
+        assert hasattr(cfg, "prompt_registry"), "prompt_registry field missing"
+
+    def test_apply_genome_writes_to_environment_config(self):
+        """apply_genome_to_config should write evolved prompts to EnvironmentConfig fields."""
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Evolved system prompt for test."
+        genome.prompt_creativity = 0.8
+        engine.apply_genome_to_config(genome, cfg)
+        assert cfg.prompt_templates["system_prompt"] == "Evolved system prompt for test."
+        assert cfg.prompt_creativity == 0.8
+
+    def test_apply_genome_updates_registry_via_environment_config(self):
+        """When EnvironmentConfig.prompt_registry is set, apply_genome_to_config updates it."""
+        from self_fixing_engineer.prompt_registry import PromptRegistry
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        cfg.prompt_registry = PromptRegistry()
+        # Reset state
+        with cfg.prompt_registry._template_lock:
+            cfg.prompt_registry._templates = {}
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Via config registry."
+        engine.apply_genome_to_config(genome, cfg)
+        assert cfg.prompt_registry.get_template("system_prompt") == "Via config registry."
+
+    def test_system_metrics_has_prompt_metric_fields(self):
+        """SystemMetrics should expose the prompt metric fields referenced in FITNESS_WEIGHTS."""
+        try:
+            mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
+            SystemMetrics = getattr(mod, "SystemMetrics")
+            m = SystemMetrics()
+            if not hasattr(m, "pass_rate"):
+                pytest.skip("SystemMetrics stub active — heavy deps unavailable")
+        except Exception:
+            pytest.skip("SystemMetrics not importable in this environment")
+        assert hasattr(m, "prompt_effectiveness"), "prompt_effectiveness field missing"
+        assert hasattr(m, "prompt_token_efficiency"), "prompt_token_efficiency field missing"
+        assert hasattr(m, "prompt_consistency"), "prompt_consistency field missing"
+        assert "prompt_effectiveness" in m.to_dict()
+        assert "prompt_token_efficiency" in m.to_dict()
+        assert "prompt_consistency" in m.to_dict()

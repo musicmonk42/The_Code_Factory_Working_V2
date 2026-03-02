@@ -193,6 +193,15 @@ class GrokProvider(LLMProvider):
 
         messages = [{"role": "user", "content": processed_prompt}]
 
+        # Prepend evolved system prompt from PromptRegistry when available
+        try:
+            from self_fixing_engineer.prompt_registry import get_prompt_registry
+            _sys = get_prompt_registry().get_template("system_prompt")
+            if _sys:
+                messages = [{"role": "system", "content": _sys}] + messages
+        except Exception:
+            pass  # Registry unavailable — proceed without system message
+
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",

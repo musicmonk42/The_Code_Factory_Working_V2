@@ -277,6 +277,15 @@ class ClaudeProvider(LLMProvider):
         # Apply any registered pre-processing hooks
         processed_prompt = self._apply_pre_hooks(prompt)
 
+        # Inject evolved system prompt from PromptRegistry when available
+        try:
+            from self_fixing_engineer.prompt_registry import get_prompt_registry
+            _sys = get_prompt_registry().get_template("system_prompt")
+            if _sys:
+                kwargs.setdefault("system", _sys)
+        except Exception:
+            pass  # Registry unavailable — proceed without system message
+
         try:
             api_response, is_stream = await self._api_call(
                 model, processed_prompt, stream, **kwargs

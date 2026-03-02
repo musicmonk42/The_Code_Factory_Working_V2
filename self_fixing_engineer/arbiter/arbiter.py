@@ -1890,6 +1890,20 @@ else:
                         self.evolution_engine.initialize_population()
                 else:
                     self.evolution_engine.initialize_population()
+                # Wire the PromptRegistry singleton into code_health_env.config so that
+                # apply_genome_to_config() can push evolved templates into the registry.
+                try:
+                    from self_fixing_engineer.prompt_registry import get_prompt_registry
+                    _registry = get_prompt_registry()
+                    if (
+                        self.code_health_env is not None
+                        and hasattr(self.code_health_env, "config")
+                        and hasattr(self.code_health_env.config, "prompt_registry")
+                    ):
+                        self.code_health_env.config.prompt_registry = _registry
+                        logger.info(f"[{name}] PromptRegistry wired into code_health_env.config")
+                except Exception as _reg_err:
+                    logger.debug(f"[{name}] Could not wire PromptRegistry: {_reg_err}")
                 logger.info(f"[{name}] GeneticEvolutionEngine initialized")
             except Exception as e:
                 logger.warning(f"[{name}] Could not initialize GeneticEvolutionEngine: {e}")
@@ -2584,6 +2598,11 @@ else:
                             await self.publish_to_omnicore(
                                 "ga_result", {"agent": self.name, "config": best_config}
                             )
+                            if best_config and self.code_health_env and hasattr(self.code_health_env, "config"):
+                                for key, value in best_config.items():
+                                    if hasattr(self.code_health_env.config, key):
+                                        setattr(self.code_health_env.config, key, value)
+                                logger.info(f"[{self.name}] Applied DEAP best_config to code_health_env.config")
                         except Exception as e:
                             sentry_sdk.capture_exception(e)
                             self.log_event(f"GA-driven evolution failed: {e}", "ga_failure")

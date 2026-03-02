@@ -533,6 +533,11 @@ env:
   # Arbiter loses track of generator-produced files on every restart.
   # Override: helm upgrade --set env.ARBITER_PROVENANCE_PATH=/data/provenance.json ...
   ARBITER_PROVENANCE_PATH: "/app/data/provenance.json"
+  # Reports directory — used by the Genetic Evolution Engine to persist the GA
+  # population (evolution_population.json) across pod restarts. Genomes now include
+  # evolved prompt templates, making population persistence more valuable.
+  # MUST be on the data PVC. Override: helm upgrade --set env.REPORTS_DIRECTORY=/data/reports ...
+  REPORTS_DIRECTORY: "/app/data/reports"
 
   # SFE Checkpoint Manager Paths (container-friendly defaults)
   # These use relative paths that resolve to /app/logs/checkpoint/ in containers
