@@ -78,11 +78,16 @@ except ImportError:
             "This is acceptable in development/test but must be resolved before production.",
         )
 
-        async def log_action(action: str, **kwargs) -> None:  # type: ignore[misc]
+        async def log_action(action: str, data=None, **kwargs) -> None:  # type: ignore[misc]
             """
             Degraded log_action — writes to application log only.
             NOT a compliant audit trail; for development/testing only.
             """
+            if data is not None:
+                if isinstance(data, dict):
+                    kwargs.update(data)
+                else:
+                    kwargs["data"] = data
             get_logger().warning(
                 "DEGRADED log_action (audit trail unavailable): %s kwargs=%s",
                 action,

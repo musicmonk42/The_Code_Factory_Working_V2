@@ -257,6 +257,35 @@ PARSE_ERRORS = get_or_create_metric(
     "Total errors during parsing",
     ["stage", "error_type"],
 )
+FORMAT_DETECTION_COUNT = get_or_create_metric(
+    Counter,
+    "intent_parser_format_detections_total",
+    "Count of detected or attempted input formats",
+    ["format"],
+)
+EXTRACTION_COUNT = get_or_create_metric(
+    Counter,
+    "intent_parser_extractions_total",
+    "Count of extraction attempts by strategy and language",
+    ["extractor_type", "language"],
+)
+LLM_CLIENT_CALLS = get_or_create_metric(
+    Counter,
+    "intent_parser_llm_client_calls_total",
+    "LLM client API call attempts",
+    ["provider", "model", "call_type"],
+)
+LLM_CLIENT_CACHE_HITS = get_or_create_metric(
+    Counter,
+    "intent_parser_llm_client_cache_hits_total",
+    "LLM client cache hits",
+)
+LLM_CLIENT_FALLBACKS = get_or_create_metric(
+    Counter,
+    "intent_parser_llm_client_fallbacks_total",
+    "LLM client fallbacks and recovery paths",
+    ["reason"],
+)
 # --- Config Schema ---
 class LLMConfig(BaseModel):
     provider: str
