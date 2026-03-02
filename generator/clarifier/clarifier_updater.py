@@ -159,6 +159,22 @@ SCHEMA_MIGRATIONS = get_or_create_metric(
     "Schema migrations",
     ["from_version", "to_version"],
 )
+UPDATE_ERRORS = get_or_create_metric(
+    Counter,
+    "clarifier_update_errors_total",
+    "Errors during requirements update",
+    ["category", "type"],
+)
+UPDATE_CYCLES = get_or_create_metric(
+    Counter,
+    "clarifier_update_cycles_total",
+    "Total requirements update cycles",
+)
+SELF_TEST_PASS = get_or_create_metric(
+    Gauge,
+    "clarifier_updater_self_test_pass",
+    "Whether the last updater self-test passed (1=pass, 0=fail)",
+)
 # --- Schema Definitions ---
 SCHEMAS = {
     1: {
