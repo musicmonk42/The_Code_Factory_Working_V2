@@ -966,28 +966,28 @@ def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
     result = dict(files)
     changed_files: List[str] = []
 
-    # Runtime URL rewrite snippet: injected before create_async_engine() calls when
-    # the URL variable originates from os.getenv().  This converts sync driver URLs
-    # (postgresql://, mysql://, sqlite:///) to async equivalents at startup so that
-    # the runtime env var is safe regardless of which driver scheme it uses.
+    # Runtime URL rewrite snippet: injected immediately after <VAR> = os.getenv(...)
+    # to convert sync driver URLs to async equivalents before create_async_engine()
+    # is called.  Uses a None-safe guard so that unset env vars do not crash.
     _RUNTIME_URL_REWRITE_SNIPPET = (
-        "# Runtime rewrite: ensure async driver URL scheme\n"
-        "_db_url = {var}\n"
-        "if _db_url.startswith(\"postgresql://\"):\n"
-        "    _db_url = \"postgresql+asyncpg://\" + _db_url[len(\"postgresql://\"):]\n"
-        "elif _db_url.startswith(\"postgres://\"):\n"
-        "    _db_url = \"postgresql+asyncpg://\" + _db_url[len(\"postgres://\"):]\n"
-        "elif _db_url.startswith(\"mysql://\"):\n"
-        "    _db_url = \"mysql+aiomysql://\" + _db_url[len(\"mysql://\"):]\n"
-        "elif _db_url.startswith(\"sqlite:///\"):\n"
-        "    # sqlite:/// can never equal sqlite+aiosqlite:/// so no guard needed.\n"
-        "    _db_url = \"sqlite+aiosqlite:///\" + _db_url[len(\"sqlite:///\"):]\n"
+        "# Ensure async driver for SQLAlchemy asyncio extension\n"
+        "if {var} and {var}.startswith(\"postgresql://\"):\n"
+        "    {var} = {var}.replace(\"postgresql://\", \"postgresql+asyncpg://\", 1)\n"
+        "elif {var} and {var}.startswith(\"postgres://\"):\n"
+        "    {var} = {var}.replace(\"postgres://\", \"postgresql+asyncpg://\", 1)\n"
+        "elif {var} and {var}.startswith(\"mysql://\"):\n"
+        "    {var} = {var}.replace(\"mysql://\", \"mysql+aiomysql://\", 1)\n"
+        "elif {var} and {var}.startswith(\"sqlite:///\"):\n"
+        "    {var} = {var}.replace(\"sqlite:///\", \"sqlite+aiosqlite:///\", 1)\n"
     )
-    # Pattern to detect: <VAR> = os.getenv(...) followed (within a few lines) by
-    # create_async_engine(<VAR>, ...) where VAR doesn't already have a runtime rewrite.
+    # Pattern to detect: <VAR> = os.getenv(...) where VAR doesn't already have a rewrite.
     _GETENV_URL_RE = re.compile(
         r'^(?P<var>[A-Za-z_][A-Za-z_0-9]*)\s*(?::\s*\w+)?\s*=\s*os\.getenv\s*\([^)]*\)',
         re.MULTILINE,
+    )
+    # Pattern to detect inline os.getenv() inside create_async_engine().
+    _ASYNC_ENGINE_INLINE_GETENV_RE = re.compile(
+        r'create_async_engine\s*\(\s*os\.getenv\s*\([^)]*\)'
     )
     _ASYNC_ENGINE_CALL_RE = re.compile(
         r'create_async_engine\s*\(\s*(?P<url_arg>[A-Za-z_][A-Za-z_0-9]*)\s*[,)]'
@@ -1000,32 +1000,63 @@ def fix_async_database_url(files: Dict[str, str]) -> Dict[str, str]:
         for pattern, replacement in _SYNC_TO_ASYNC_URL_REWRITES:
             new_content = pattern.sub(replacement, new_content)
 
-        # Inject runtime URL rewrite when create_async_engine() is called with a
-        # variable that comes from os.getenv() and a rewrite isn't already present.
+        # Handle inline os.getenv() inside create_async_engine(): extract to a
+        # variable first so the runtime rewrite can be applied.
+        if (
+            "create_async_engine" in new_content
+            and _ASYNC_ENGINE_INLINE_GETENV_RE.search(new_content)
+            and "_db_url" not in new_content
+        ):
+            def _replace_inline_getenv(m: re.Match) -> str:
+                # Replace create_async_engine(os.getenv(...)) with a two-step
+                # pattern: assign to _db_url, rewrite URL scheme, then call engine.
+                full_match = m.group(0)
+                # Find the os.getenv(...) call and its matching closing paren
+                getenv_start = full_match.index("os.getenv")
+                search_start = getenv_start + len("os.getenv")
+                depth, end_idx = 0, search_start
+                for abs_pos, ch in enumerate(full_match[search_start:], start=search_start):
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        depth -= 1
+                        if depth == 0:
+                            end_idx = abs_pos + 1
+                            break
+                getenv_call = full_match[getenv_start:end_idx]
+                snippet = _RUNTIME_URL_REWRITE_SNIPPET.format(var="_db_url")
+                return f"_db_url = {getenv_call}\n{snippet}create_async_engine(_db_url"
+            new_content = _ASYNC_ENGINE_INLINE_GETENV_RE.sub(_replace_inline_getenv, new_content)
+            logger.info(
+                "fix_async_database_url: rewrote inline os.getenv() in create_async_engine() in %s",
+                filename,
+            )
+
+        # Inject runtime URL rewrite immediately after <VAR> = os.getenv(...) when
+        # create_async_engine() is called with that variable and no rewrite exists yet.
         if (
             "create_async_engine" in new_content
             and "os.getenv" in new_content
-            and "_db_url" not in new_content
+            and "Ensure async driver" not in new_content
         ):
             # Collect variable names assigned from os.getenv().
-            getenv_vars = {m.group("var") for m in _GETENV_URL_RE.finditer(new_content)}
+            getenv_vars = {m.group("var"): m for m in _GETENV_URL_RE.finditer(new_content)}
             for eng_match in _ASYNC_ENGINE_CALL_RE.finditer(new_content):
                 url_arg = eng_match.group("url_arg")
                 if url_arg in getenv_vars:
-                    # Find the line start of the create_async_engine(...) call
-                    # and insert the runtime rewrite snippet just before it.
-                    insert_pos = new_content.rfind("\n", 0, eng_match.start()) + 1
+                    # Find the end of the os.getenv() assignment line and inject
+                    # the rewrite snippet immediately after it.
+                    genv_match = getenv_vars[url_arg]
+                    insert_pos = new_content.find("\n", genv_match.end()) + 1
+                    if insert_pos == 0:
+                        # No newline after the getenv line; append at end
+                        insert_pos = len(new_content)
                     snippet = _RUNTIME_URL_REWRITE_SNIPPET.format(var=url_arg)
-                    # Replace the URL variable name in the engine call with _db_url
-                    engine_old = eng_match.group(0)
-                    engine_new = engine_old.replace(url_arg, "_db_url", 1)
                     new_content = (
                         new_content[:insert_pos]
                         + snippet
                         + new_content[insert_pos:]
                     )
-                    # Now replace the variable in the engine call (position has shifted)
-                    new_content = new_content.replace(engine_old, engine_new, 1)
                     logger.info(
                         "fix_async_database_url: injected runtime URL rewrite for "
                         "os.getenv variable '%s' in %s",

@@ -705,13 +705,36 @@ class PostgresClient:
                         env,
                     )
 
+                    # Detect Railway internal network (uses self-signed certificates)
+                    # and explicit certificate verification override.
+                    _is_railway_internal = "railway.internal" in self.db_url
+                    _pg_ssl_verify = os.getenv("PG_SSL_VERIFY", "true").lower()
+                    _skip_cert_verify = (
+                        _is_railway_internal or _pg_ssl_verify in ("false", "0", "no")
+                    )
+
                     ssl_context = None
                     if ssl_mode == "require" or (ssl_mode == "allow" and env == "prod"):
-                        ssl_context = ssl.create_default_context(
-                            purpose=ssl.Purpose.SERVER_AUTH
-                        )
-                        ssl_context.check_hostname = True
-                        ssl_context.verify_mode = ssl.CERT_REQUIRED
+                        if _skip_cert_verify:
+                            if _is_railway_internal:
+                                logger.info(
+                                    "Detected Railway internal network - using SSL "
+                                    "without certificate verification."
+                                )
+                            else:
+                                logger.warning(
+                                    "PG_SSL_VERIFY=false: SSL certificate verification "
+                                    "disabled by environment variable."
+                                )
+                            ssl_context = ssl.create_default_context()
+                            ssl_context.check_hostname = False
+                            ssl_context.verify_mode = ssl.CERT_NONE
+                        else:
+                            ssl_context = ssl.create_default_context(
+                                purpose=ssl.Purpose.SERVER_AUTH
+                            )
+                            ssl_context.check_hostname = True
+                            ssl_context.verify_mode = ssl.CERT_REQUIRED
                     elif ssl_mode == "allow":
                         logger.warning(
                             "PG_SSL_MODE='allow' is insecure and should only be used in development."
