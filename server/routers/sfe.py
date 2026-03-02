@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Path as FastAPIPath, Query
 
 from server.schemas import (
     ArbiterControlRequest,
@@ -43,6 +43,11 @@ from server.storage import fixes_db, jobs_db
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sfe", tags=["Self-Fixing Engineer"])
+
+# UUID v4 pattern used to constrain all /{job_id}/... path parameters so that
+# static routes registered later (e.g. /codebase/analyze) are never captured
+# by the dynamic wildcard when FastAPI evaluates routes in declaration order.
+_UUID_PATTERN = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 
 # ---------------------------------------------------------------------------
 # RL action map — single source of truth lives in code_health_env.
@@ -110,7 +115,7 @@ def get_sfe_service_instance() -> SFEService:
 
 @router.post("/{job_id}/analyze")
 async def analyze_code(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -161,7 +166,7 @@ async def analyze_code(
 
 @router.get("/{job_id}/analysis-report")
 async def get_analysis_report(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -229,7 +234,7 @@ async def get_analysis_report(
 
 @router.get("/{job_id}/errors")
 async def get_errors(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -568,7 +573,7 @@ async def rollback_fix(
 
 @router.get("/{job_id}/metrics")
 async def get_sfe_metrics(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -621,7 +626,7 @@ async def get_learning_insights(
 
 @router.get("/{job_id}/status")
 async def get_sfe_status(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """
@@ -654,7 +659,7 @@ async def get_sfe_status(
 
 @router.get("/{job_id}/logs")
 async def get_sfe_logs(
-    job_id: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
     limit: int = Query(100, ge=1, le=1000, description="Maximum number of log entries"),
     level: Optional[str] = Query(
         None, description="Filter by log level (ERROR, WARNING, INFO, DEBUG)"
@@ -689,8 +694,8 @@ async def get_sfe_logs(
 
 @router.post("/{job_id}/interact")
 async def interact_with_sfe(
-    job_id: str,
-    command: str,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
+    command: str = Query(...),
     params: Dict[str, Any] = {},
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
@@ -1085,8 +1090,8 @@ async def prioritize_bugs_by_body(
 
 @router.post("/{job_id}/bugs/prioritize")
 async def prioritize_bugs(
-    job_id: str,
-    request: BugPrioritizationRequest,
+    job_id: str = FastAPIPath(..., pattern=_UUID_PATTERN),
+    request: BugPrioritizationRequest = Body(...),
     sfe_service: SFEService = Depends(get_sfe_service),
 ):
     """

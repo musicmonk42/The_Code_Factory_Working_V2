@@ -70,6 +70,31 @@ def _stable_hash(text: str, length: int = 8) -> str:
     return hashlib.md5(text.encode()).hexdigest()[:length]
 
 
+class _NullDbClient:
+    """
+    Sentinel database client passed to CodebaseAnalyzer to skip the expensive
+    PostgreSQL connection retries (3 attempts × 15 s each + backoff ≈ 48–103 s)
+    that always fall back to in-memory storage anyway for one-shot analyses.
+
+    By satisfying ``external_db_client is not None``, the analyzer's
+    ``__aenter__`` returns immediately without touching the network.  Any
+    unexpected attribute access is handled gracefully via ``__getattr__`` so
+    that code paths guarded by ``self.db_client`` never raise ``AttributeError``.
+    """
+
+    async def connect(self) -> None:  # pragma: no cover
+        """No-op — connection is intentionally skipped."""
+
+    async def disconnect(self) -> None:  # pragma: no cover
+        """No-op — nothing to disconnect."""
+
+    def __getattr__(self, name: str):  # pragma: no cover
+        """Return a no-op coroutine for any other DB method the analyzer calls."""
+        async def _noop(*args, **kwargs):
+            return None
+        return _noop
+
+
 class SFEService:
     """
     Service for interacting with the Self-Fixing Engineer (SFE).
@@ -2274,7 +2299,11 @@ class SFEService:
         ml = self._sfe_components.get("meta_learning")
         if ml is not None:
             ml_insights = ml.get_insights()
-            if ml_insights is not None:
+            # Only use MetaLearning data if it has actual insights or experiences
+            if ml_insights and (
+                bool(ml_insights.get("insights")) or
+                ml_insights.get("statistics", {}).get("total_experiences", 0) > 0
+            ):
                 ml_insights["job_id"] = job_id
                 ml_insights["meta_learning_module"] = (
                     "self_fixing_engineer.simulation.agent_core.MetaLearning"
@@ -2606,6 +2635,7 @@ class SFEService:
                 async with CodebaseAnalyzer(
                     root_dir=root,
                     ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                    external_db_client=_NullDbClient(),
                 ) as analyzer:
                     if code_path_obj.is_dir():
                         summary = await analyzer.scan_codebase(root)
