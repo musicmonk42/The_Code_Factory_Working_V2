@@ -231,7 +231,7 @@ class TestUtilityFunctions:
 
         # Fix: Use correct module path
         with patch("self_fixing_engineer.arbiter.knowledge_graph.utils.logger") as mock_logger:
-            result = await async_with_retry(test_func, retries=3)
+            result = await async_with_retry(test_func, retries=3, delay=0.01)
 
             assert result == "success"
             assert call_count == 3

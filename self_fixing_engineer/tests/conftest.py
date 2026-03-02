@@ -4,7 +4,9 @@
 import asyncio
 import gc
 import os
+from contextlib import ExitStack
 from pathlib import Path
+from unittest.mock import patch
 
 import psutil
 import pytest
@@ -44,6 +46,44 @@ def ensure_checkpoint_test_paths():
             dlq_file.touch(exist_ok=True)
     
     yield
+
+
+@pytest.fixture(autouse=True, scope="function")
+def mock_external_connections():
+    """Mock external service connections by default to prevent tests from hanging.
+
+    Patches Redis, HTTP, and database connection factories so that any test
+    that does not explicitly set up its own mock will receive a mock object
+    instead of attempting a real network connection.  Tests that register their
+    own patch for any of these targets will override this fixture automatically
+    (innermost patch wins), so existing test-level mocks are not affected.
+
+    Note: ``patch()`` automatically uses ``AsyncMock`` for coroutine functions
+    (e.g. ``asyncpg.connect``) and ``MagicMock`` for regular callables, which
+    is sufficient to block accidental real connections in tests that lack their
+    own explicit mocking.
+    """
+    _patches = [
+        # Redis async helpers
+        "redis.asyncio.from_url",
+        "redis.from_url",
+        # HTTP clients
+        "httpx.AsyncClient",
+        "aiohttp.ClientSession",
+        # PostgreSQL async driver
+        "asyncpg.connect",
+        "asyncpg.create_pool",
+        # etcd client
+        "etcd3.client",
+    ]
+
+    with ExitStack() as stack:
+        for target in _patches:
+            try:
+                stack.enter_context(patch(target))
+            except (ImportError, AttributeError, ModuleNotFoundError):
+                pass  # Module not installed; skip silently
+        yield
 
 
 @pytest.fixture(autouse=True, scope="function")
