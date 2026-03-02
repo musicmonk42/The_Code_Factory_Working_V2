@@ -500,3 +500,76 @@ class TestPromptRegistry:
             results = list(executor.map(update_and_read, range(50)))
 
         assert all(results)
+
+
+class TestEnvironmentConfigIntegration:
+    """Tests that EnvironmentConfig carries prompt fields used by apply_genome_to_config."""
+
+    def _get_env_config(self):
+        """Return a real EnvironmentConfig if the envs module is importable."""
+        try:
+            import importlib
+            mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
+            EnvironmentConfig = getattr(mod, "EnvironmentConfig")
+            cfg = EnvironmentConfig()
+            # Return None if we got the lightweight stub (it has no observation_keys field)
+            return cfg if hasattr(cfg, "observation_keys") else None
+        except Exception:
+            return None
+
+    def test_environment_config_has_prompt_fields(self):
+        """EnvironmentConfig should expose the prompt fields written by apply_genome_to_config."""
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        assert hasattr(cfg, "prompt_templates"), "prompt_templates field missing"
+        assert hasattr(cfg, "prompt_creativity"), "prompt_creativity field missing"
+        assert hasattr(cfg, "prompt_verbosity"), "prompt_verbosity field missing"
+        assert hasattr(cfg, "prompt_registry"), "prompt_registry field missing"
+
+    def test_apply_genome_writes_to_environment_config(self):
+        """apply_genome_to_config should write evolved prompts to EnvironmentConfig fields."""
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Evolved system prompt for test."
+        genome.prompt_creativity = 0.8
+        engine.apply_genome_to_config(genome, cfg)
+        assert cfg.prompt_templates["system_prompt"] == "Evolved system prompt for test."
+        assert cfg.prompt_creativity == 0.8
+
+    def test_apply_genome_updates_registry_via_environment_config(self):
+        """When EnvironmentConfig.prompt_registry is set, apply_genome_to_config updates it."""
+        from self_fixing_engineer.prompt_registry import PromptRegistry
+        cfg = self._get_env_config()
+        if cfg is None:
+            pytest.skip("EnvironmentConfig not importable in this environment")
+        cfg.prompt_registry = PromptRegistry()
+        # Reset state
+        with cfg.prompt_registry._template_lock:
+            cfg.prompt_registry._templates = {}
+        engine = GeneticEvolutionEngine()
+        genome = Genome()
+        genome.prompt_templates["system_prompt"] = "Via config registry."
+        engine.apply_genome_to_config(genome, cfg)
+        assert cfg.prompt_registry.get_template("system_prompt") == "Via config registry."
+
+    def test_system_metrics_has_prompt_metric_fields(self):
+        """SystemMetrics should expose the prompt metric fields referenced in FITNESS_WEIGHTS."""
+        try:
+            import importlib
+            mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
+            SystemMetrics = getattr(mod, "SystemMetrics")
+            m = SystemMetrics()
+            if not hasattr(m, "pass_rate"):
+                pytest.skip("SystemMetrics stub active — heavy deps unavailable")
+        except Exception:
+            pytest.skip("SystemMetrics not importable in this environment")
+        assert hasattr(m, "prompt_effectiveness"), "prompt_effectiveness field missing"
+        assert hasattr(m, "prompt_token_efficiency"), "prompt_token_efficiency field missing"
+        assert hasattr(m, "prompt_consistency"), "prompt_consistency field missing"
+        assert "prompt_effectiveness" in m.to_dict()
+        assert "prompt_token_efficiency" in m.to_dict()
+        assert "prompt_consistency" in m.to_dict()

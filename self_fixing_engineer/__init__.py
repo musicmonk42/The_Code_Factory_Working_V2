@@ -42,6 +42,7 @@ _MODULE_ALIASES = [
     "guardrails",
     "test_generation",
     "intent_capture",
+    "prompt_registry",
 ]
 
 

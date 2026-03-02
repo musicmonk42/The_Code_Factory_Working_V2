@@ -169,6 +169,19 @@ else:
         enable_auto_rollback: bool = True
         latency_normalization_factor: float = 10000.0
         render_dpi: int = 100
+        # Prompt template evolution fields (written by GeneticEvolutionEngine.apply_genome_to_config)
+        prompt_templates: Dict[str, str] = field(
+            default_factory=lambda: {
+                "system_prompt": "You are a helpful AI assistant that writes clean, maintainable code.",
+                "critique_prompt": "Review the following code for bugs, security issues, and best practices:\n{code}",
+                "fix_prompt": "Fix the following issues in the code:\n{issues}\n\nOriginal code:\n{code}",
+                "test_generation_prompt": "Generate comprehensive unit tests for the following code:\n{code}",
+                "refactor_prompt": "Refactor the following code to improve readability and maintainability:\n{code}",
+            }
+        )
+        prompt_creativity: float = 0.3
+        prompt_verbosity: float = 0.5
+        prompt_registry: Optional[Any] = field(default=None, repr=False)
     
         def validate(self) -> None:
             """Validate configuration parameters"""
@@ -199,6 +212,10 @@ else:
         generation_success_rate: float = 0.0  # Ratio of successful code generations
         critique_score: float = 0.0  # Quality score from critique agent (0-1)
         test_coverage_delta: float = 0.0  # Change in test coverage from generation
+        # Prompt-related metrics (populated by evaluation; used in GeneticEvolutionEngine.FITNESS_WEIGHTS)
+        prompt_effectiveness: float = 0.0   # How often prompts lead to successful outcomes
+        prompt_token_efficiency: float = 0.0  # Reward shorter prompts that work well
+        prompt_consistency: float = 0.0     # Reward consistent output formatting
         timestamp: float = field(default_factory=time.time)
     
         def __post_init__(self):
@@ -211,6 +228,9 @@ else:
                 "generation_success_rate",
                 "critique_score",
                 "test_coverage_delta",
+                "prompt_effectiveness",
+                "prompt_token_efficiency",
+                "prompt_consistency",
             ]:
                 value = getattr(self, field_name)
                 if not 0 <= value <= 1:
@@ -235,6 +255,10 @@ else:
                 "generation_success_rate": self.generation_success_rate,
                 "critique_score": self.critique_score,
                 "test_coverage_delta": self.test_coverage_delta,
+                # Prompt-related fitness metrics
+                "prompt_effectiveness": self.prompt_effectiveness,
+                "prompt_token_efficiency": self.prompt_token_efficiency,
+                "prompt_consistency": self.prompt_consistency,
                 "timestamp": self.timestamp,
             }
     

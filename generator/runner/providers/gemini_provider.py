@@ -261,7 +261,19 @@ class GeminiProvider(LLMProvider):
 
         # Get the actual Gemini model name from alias, or use the provided name
         gemini_model = self.custom_models.get(model, model)
-        client = GenerativeModel(gemini_model)
+
+        # Build system instruction from PromptRegistry when available
+        _system_instruction = None
+        try:
+            from self_fixing_engineer.prompt_registry import get_prompt_registry
+            _system_instruction = get_prompt_registry().get_template("system_prompt")
+        except Exception:
+            pass  # Registry unavailable — proceed without system instruction
+
+        client = GenerativeModel(
+            gemini_model,
+            **({} if not _system_instruction else {"system_instruction": _system_instruction}),
+        )
 
         # A run_id just for this call, in case _api_call needs it for logging retries
         run_id = str(uuid.uuid4())[:8]
