@@ -3,17 +3,16 @@
 """
 Genetic Algorithm Platform Evolution
 
-Evolves the platform's own configuration and agent hyperparameters
-using a genetic algorithm.
+Evolves the platform's own configuration, agent hyperparameters, and
+prompt templates using a genetic algorithm.
 
 Genome represents:
 - Agent reward weights (from EnvironmentConfig.reward_weights)
 - LLM sampling parameters (temperature, top_p, max_tokens)
 - Cooldown values for RL actions
 - Critique thresholds
-
-Note: prompt template evolution is a future enhancement and is not
-currently implemented.
+- Prompt templates (system, critique, fix, test generation, refactor)
+- Prompt style parameters (creativity, verbosity)
 
 Fitness function evaluates genome quality based on metrics provided by
 the caller (e.g. the Arbiter), which is responsible for collecting real
@@ -45,6 +44,48 @@ _MAX_TOKENS_RANGE = (256, 4096)
 _COOLDOWN_RANGE = (1, 100)
 _CRITIQUE_THRESHOLD_RANGE = (0.0, 1.0)
 
+# Prompt template bounds
+_PROMPT_CREATIVITY_RANGE = (0.0, 1.0)
+_PROMPT_VERBOSITY_RANGE = (0.0, 1.0)
+_MAX_PROMPT_LENGTH = 2000  # characters
+_MIN_PROMPT_LENGTH = 10
+
+# Creativity multipliers for _mutate_prompt_template strategies
+_CREATIVITY_ADD_MODIFIER_FACTOR = 0.5    # probability of adding a modifier phrase
+_CREATIVITY_REORDER_FACTOR = 0.3         # probability of reordering sentences
+_CREATIVITY_REMOVE_FACTOR = 0.2          # probability of removing a sentence
+
+# Template mutation building blocks
+_PROMPT_MODIFIERS: Dict[str, List[str]] = {
+    "precision": [
+        "Be precise and specific.",
+        "Provide detailed explanations.",
+        "Focus on accuracy.",
+        "Be thorough in your analysis.",
+    ],
+    "style": [
+        "Use clear, concise language.",
+        "Explain your reasoning step by step.",
+        "Structure your response clearly.",
+        "Be direct and actionable.",
+    ],
+    "constraints": [
+        "Follow best practices.",
+        "Consider edge cases.",
+        "Prioritize security.",
+        "Optimize for maintainability.",
+    ],
+    "output_format": [
+        "Format code with proper indentation.",
+        "Include comments where helpful.",
+        "Provide examples when relevant.",
+        "Use markdown formatting.",
+    ],
+}
+
+# Placeholder tokens that must be preserved during mutation
+_PROTECTED_PLACEHOLDERS = ["{code}", "{issues}", "{context}", "{language}", "{requirements}"]
+
 
 @dataclass
 class Genome:
@@ -72,6 +113,17 @@ class Genome:
         }
     )
     critique_threshold: float = 0.6
+    prompt_templates: Dict[str, str] = field(
+        default_factory=lambda: {
+            "system_prompt": "You are a helpful AI assistant that writes clean, maintainable code.",
+            "critique_prompt": "Review the following code for bugs, security issues, and best practices:\n{code}",
+            "fix_prompt": "Fix the following issues in the code:\n{issues}\n\nOriginal code:\n{code}",
+            "test_generation_prompt": "Generate comprehensive unit tests for the following code:\n{code}",
+            "refactor_prompt": "Refactor the following code to improve readability and maintainability:\n{code}",
+        }
+    )
+    prompt_creativity: float = 0.3
+    prompt_verbosity: float = 0.5
     generation: int = 0
     fitness: float = 0.0
     genome_id: str = field(default_factory=lambda: str(uuid.uuid4())[:8])
@@ -98,6 +150,15 @@ class Genome:
                 return False
         for c in self.action_cooldowns.values():
             if not (_COOLDOWN_RANGE[0] <= c <= _COOLDOWN_RANGE[1]):
+                return False
+        if not (_PROMPT_CREATIVITY_RANGE[0] <= self.prompt_creativity <= _PROMPT_CREATIVITY_RANGE[1]):
+            return False
+        if not (_PROMPT_VERBOSITY_RANGE[0] <= self.prompt_verbosity <= _PROMPT_VERBOSITY_RANGE[1]):
+            return False
+        for template_text in self.prompt_templates.values():
+            if not isinstance(template_text, str):
+                return False
+            if not (_MIN_PROMPT_LENGTH <= len(template_text) <= _MAX_PROMPT_LENGTH):
                 return False
         return True
 
@@ -135,6 +196,9 @@ class GeneticEvolutionEngine:
         "complexity": -0.5,
         "generation_success_rate": 2.5,
         "critique_score": 1.0,
+        "prompt_effectiveness": 1.5,
+        "prompt_token_efficiency": 0.5,
+        "prompt_consistency": 0.3,
     }
 
     def __init__(
@@ -210,7 +274,7 @@ class GeneticEvolutionEngine:
         return max(competitors, key=lambda g: g.fitness)
 
     def crossover(self, parent1: Genome, parent2: Genome) -> Tuple[Genome, Genome]:
-        """Uniform crossover of all numeric and dict fields from both parents."""
+        """Uniform crossover of all numeric, dict, and prompt template fields from both parents."""
         if random.random() > self.crossover_rate:
             return parent1, parent2
 
@@ -248,6 +312,29 @@ class GeneticEvolutionEngine:
         child1_crit = parent1.critique_threshold if random.random() < 0.5 else parent2.critique_threshold
         child2_crit = parent2.critique_threshold if random.random() < 0.5 else parent1.critique_threshold
 
+        # Crossover prompt templates
+        child1_prompts: Dict[str, str] = {}
+        child2_prompts: Dict[str, str] = {}
+        all_prompt_keys = set(parent1.prompt_templates.keys()) | set(parent2.prompt_templates.keys())
+        for k in all_prompt_keys:
+            p1_t = parent1.prompt_templates.get(k, "")
+            p2_t = parent2.prompt_templates.get(k, "")
+            if random.random() < 0.3 and p1_t and p2_t:
+                child1_prompts[k] = self._crossover_prompt_sentences(p1_t, p2_t)
+                child2_prompts[k] = self._crossover_prompt_sentences(p2_t, p1_t)
+            elif random.random() < 0.5:
+                child1_prompts[k] = p1_t
+                child2_prompts[k] = p2_t
+            else:
+                child1_prompts[k] = p2_t
+                child2_prompts[k] = p1_t
+
+        # Crossover prompt style scalars
+        child1_creativity = parent1.prompt_creativity if random.random() < 0.5 else parent2.prompt_creativity
+        child2_creativity = parent2.prompt_creativity if random.random() < 0.5 else parent1.prompt_creativity
+        child1_verbosity = parent1.prompt_verbosity if random.random() < 0.5 else parent2.prompt_verbosity
+        child2_verbosity = parent2.prompt_verbosity if random.random() < 0.5 else parent1.prompt_verbosity
+
         child1 = Genome(
             reward_weights=child1_rw,
             llm_temperature=child1_temp,
@@ -255,6 +342,9 @@ class GeneticEvolutionEngine:
             llm_max_tokens=child1_tokens,
             action_cooldowns=child1_cd,
             critique_threshold=child1_crit,
+            prompt_templates=child1_prompts,
+            prompt_creativity=child1_creativity,
+            prompt_verbosity=child1_verbosity,
             generation=self.generation + 1,
         )
         child2 = Genome(
@@ -264,9 +354,32 @@ class GeneticEvolutionEngine:
             llm_max_tokens=child2_tokens,
             action_cooldowns=child2_cd,
             critique_threshold=child2_crit,
+            prompt_templates=child2_prompts,
+            prompt_creativity=child2_creativity,
+            prompt_verbosity=child2_verbosity,
             generation=self.generation + 1,
         )
         return child1, child2
+
+    def _crossover_prompt_sentences(self, prompt1: str, prompt2: str) -> str:
+        """Perform sentence-level crossover between two prompts."""
+        sentences1 = [s.strip() for s in prompt1.split(".") if s.strip()]
+        sentences2 = [s.strip() for s in prompt2.split(".") if s.strip()]
+
+        result = []
+        max_len = max(len(sentences1), len(sentences2))
+        for i in range(max_len):
+            if i % 2 == 0 and i < len(sentences1):
+                result.append(sentences1[i])
+            elif i < len(sentences2):
+                result.append(sentences2[i])
+            elif i < len(sentences1):
+                result.append(sentences1[i])
+
+        crossed = ". ".join(result)
+        if crossed and not crossed.endswith("."):
+            crossed += "."
+        return crossed if _MIN_PROMPT_LENGTH <= len(crossed) <= _MAX_PROMPT_LENGTH else prompt1
 
     def mutate(self, genome: Genome) -> Genome:
         """Apply Gaussian noise to floats (σ=0.1), ±1 to ints, clip to valid ranges."""
@@ -319,11 +432,93 @@ class GeneticEvolutionEngine:
             )
             genome.critique_threshold = round(genome.critique_threshold, 4)
 
+        # Mutate prompt creativity and verbosity
+        if random.random() < self.mutation_rate:
+            genome.prompt_creativity = _clip(
+                genome.prompt_creativity + random.gauss(0, 0.1),
+                *_PROMPT_CREATIVITY_RANGE,
+            )
+            genome.prompt_creativity = round(genome.prompt_creativity, 4)
+
+        if random.random() < self.mutation_rate:
+            genome.prompt_verbosity = _clip(
+                genome.prompt_verbosity + random.gauss(0, 0.1),
+                *_PROMPT_VERBOSITY_RANGE,
+            )
+            genome.prompt_verbosity = round(genome.prompt_verbosity, 4)
+
+        # Mutate a single prompt template (lower probability to avoid breaking working prompts)
+        if random.random() < self.mutation_rate * 0.5:
+            template_key = random.choice(list(genome.prompt_templates.keys()))
+            genome.prompt_templates[template_key] = self._mutate_prompt_template(
+                genome.prompt_templates[template_key],
+                genome.prompt_creativity,
+            )
+
         # Validate after mutation (defensive check)
         if not genome.is_valid():
             logger.warning(f"Genome {genome.genome_id} failed validation after mutation")
 
         return genome
+
+    def _mutate_prompt_template(self, template: str, creativity: float) -> str:
+        """Mutate a prompt template while preserving required placeholders.
+
+        Mutation strategies:
+        1. Add/remove modifier phrases
+        2. Reorder sentences
+        3. Add/remove formatting instructions
+        """
+        # Protect placeholders by replacing them temporarily
+        placeholder_map: Dict[str, str] = {}
+        protected = template
+        for i, placeholder in enumerate(_PROTECTED_PLACEHOLDERS):
+            if placeholder in protected:
+                token = f"__PLACEHOLDER_{i}__"
+                placeholder_map[token] = placeholder
+                protected = protected.replace(placeholder, token)
+
+        sentences = [s.strip() for s in protected.split(".") if s.strip()]
+
+        if random.random() < creativity * _CREATIVITY_ADD_MODIFIER_FACTOR:
+            # Add a random modifier phrase
+            category = random.choice(list(_PROMPT_MODIFIERS.keys()))
+            modifier = random.choice(_PROMPT_MODIFIERS[category])
+            insert_pos = random.randint(0, len(sentences))
+            sentences.insert(insert_pos, modifier)
+
+        if random.random() < creativity * _CREATIVITY_REORDER_FACTOR and len(sentences) > 2:
+            # Reorder sentences (keep first sentence as intro)
+            intro = sentences[0]
+            rest = sentences[1:]
+            random.shuffle(rest)
+            sentences = [intro] + rest
+
+        if random.random() < creativity * _CREATIVITY_REMOVE_FACTOR and len(sentences) > 3:
+            # Remove a random non-placeholder sentence
+            removable = [
+                i for i, s in enumerate(sentences)
+                if not any(p in s for p in placeholder_map)
+            ]
+            if removable:
+                sentences.pop(random.choice(removable))
+
+        mutated = ". ".join(sentences)
+        if mutated and not mutated.endswith("."):
+            mutated += "."
+
+        # Restore placeholders
+        for token, placeholder in placeholder_map.items():
+            mutated = mutated.replace(token, placeholder)
+
+        # Enforce length constraints
+        _ellipsis = "..."
+        if len(mutated) > _MAX_PROMPT_LENGTH:
+            mutated = mutated[:_MAX_PROMPT_LENGTH - len(_ellipsis)] + _ellipsis
+        if len(mutated) < _MIN_PROMPT_LENGTH:
+            mutated = template  # Fall back to original if too short
+
+        return mutated
 
     def evolve_generation(self, current_metrics: Any) -> Genome:
         """
@@ -404,8 +599,21 @@ class GeneticEvolutionEngine:
             config.llm_max_tokens = genome.llm_max_tokens
         if hasattr(config, "action_cooldowns"):
             config.action_cooldowns = dict(genome.action_cooldowns)
+        if hasattr(config, "prompt_templates"):
+            config.prompt_templates = dict(genome.prompt_templates)
+        if hasattr(config, "prompt_creativity"):
+            config.prompt_creativity = genome.prompt_creativity
+        if hasattr(config, "prompt_verbosity"):
+            config.prompt_verbosity = genome.prompt_verbosity
+        if hasattr(config, "prompt_registry") and config.prompt_registry is not None:
+            for template_name, template_text in genome.prompt_templates.items():
+                try:
+                    config.prompt_registry.update_template(template_name, template_text)
+                except Exception as e:
+                    logger.debug(f"Could not update prompt registry template {template_name}: {e}")
         logger.info(
-            f"GeneticEvolutionEngine: Applied genome {genome.genome_id} to config. "
+            f"GeneticEvolutionEngine: Applied genome {genome.genome_id} to config "
+            f"(including {len(genome.prompt_templates)} prompt templates). "
             f"fitness={genome.fitness:.4f}"
         )
 
