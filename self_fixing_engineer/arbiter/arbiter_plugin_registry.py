@@ -82,14 +82,6 @@ except ImportError:
             return role == "admin"
 
 
-try:
-    from self_fixing_engineer.arbiter.audit_log import emit_audit_event
-except ImportError:
-
-    async def emit_audit_event(event_type, data):
-        logger.info(f"Audit Event: {event_type} - {data}")
-
-
 # Logging setup with PII redaction filter
 logger = logging.getLogger(__name__)
 logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
