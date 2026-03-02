@@ -1124,10 +1124,10 @@ class CustomLLMProvider:
             if not (isinstance(response, str) and normalized == response):
                 yield normalized
         finally:
-            if hasattr(response, "close"):
-                response.close()
-            elif hasattr(response, "aclose"):
+            if hasattr(response, "aclose"):
                 await response.aclose()
+            elif hasattr(response, "close"):
+                response.close()
             if session is not None and hasattr(session, "close"):
                 await session.close()
 

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, Mock, patch
 import pytest
 
 # Fix the import to be an absolute path
-from test_generation.gen_agent import agents
+from self_fixing_engineer.test_generation.gen_agent import agents
 
 
 @pytest.fixture

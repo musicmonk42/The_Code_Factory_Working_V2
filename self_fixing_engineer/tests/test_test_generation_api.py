@@ -18,7 +18,7 @@ with patch.dict(
         "CORS_ORIGINS": "",
     },
 ):
-    from test_generation.gen_agent.api import create_app
+    from self_fixing_engineer.test_generation.gen_agent.api import create_app
 
 
 async def _mock_invoke_graph(graph, state, config=None, progress_callback=None):

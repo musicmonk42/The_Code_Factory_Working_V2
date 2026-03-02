@@ -4,6 +4,7 @@ import datetime
 import gc
 import json
 import os
+import jwt as _real_jwt
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 # Import the module under test FIRST
@@ -121,7 +122,7 @@ def mock_redis_client():
     # We patch 'aredis.from_url' with an AsyncMock that returns our instance when awaited
     mock_from_url = AsyncMock(return_value=mock_client_instance)
 
-    with patch("intent_capture.agent_core.aredis.from_url", new=mock_from_url):
+    with patch("redis.asyncio.from_url", new=mock_from_url):
         yield mock_client_instance
 
 
@@ -339,8 +340,8 @@ async def test_redis_state_backend_save_load(mock_redis_client):
 @pytest.mark.asyncio
 async def test_validate_session_token_valid(mock_env_vars, mock_redis_client):
     """Test valid session token"""
-    # Create token using our jwt module
-    token = jwt.encode(
+    # Create token using the real jwt library (PyJWT) to match agent_core's usage
+    token = _real_jwt.encode(
         {
             "session_id": "test_session",
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
@@ -351,17 +352,15 @@ async def test_validate_session_token_valid(mock_env_vars, mock_redis_client):
         algorithm="HS512",
     )
 
-    # Patch jwt in agent_core module
-    with patch("intent_capture.agent_core.jwt", jwt):
-        payload = await validate_session_token(token)
-        assert payload["session_id"] == "test_session"
+    payload = await validate_session_token(token)
+    assert payload["session_id"] == "test_session"
 
 
 @pytest.mark.asyncio
 async def test_validate_session_token_revoked(mock_env_vars, mock_redis_client):
     """Test revoked session token"""
-    # Create token using our jwt module
-    token = jwt.encode(
+    # Create token using the real jwt library (PyJWT) to match agent_core's usage
+    token = _real_jwt.encode(
         {
             "session_id": "test_session",
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
@@ -375,18 +374,15 @@ async def test_validate_session_token_revoked(mock_env_vars, mock_redis_client):
     # Mark token as revoked
     mock_redis_client.sismember = AsyncMock(return_value=True)
 
-    with patch("intent_capture.agent_core.jwt", jwt):
-        with pytest.raises(InvalidSessionError, match="Token has been revoked"):
-            await validate_session_token(token)
+    with pytest.raises(InvalidSessionError, match="Token has been revoked"):
+        await validate_session_token(token)
 
 
 @pytest.mark.asyncio
 async def test_validate_session_token_invalid(mock_env_vars, mock_redis_client):
     """Test invalid session token"""
-    # Patch jwt in agent_core module with our mock
-    with patch("intent_capture.agent_core.jwt", jwt):
-        with pytest.raises(InvalidSessionError):
-            await validate_session_token("invalid_token")
+    with pytest.raises(InvalidSessionError):
+        await validate_session_token("invalid_token")
 
 
 # --- Tests for CollaborativeAgent ---
@@ -499,8 +495,8 @@ async def test_agent_state_persistence(mock_env_vars, mock_llm, mock_redis_clien
     ):
         with patch.object(LLMProviderFactory, "get_llm", return_value=mock_llm):
             agent = await CollaborativeAgent.create(
-                agent_id="test_agent",
-                session_id="test_session",
+                agent_id="test_agent_state",
+                session_id="test_session_state_persistence",
                 llm_config={
                     "provider": "openai",
                     "model": "gpt-4o-mini",
@@ -521,15 +517,12 @@ async def test_agent_state_persistence(mock_env_vars, mock_llm, mock_redis_clien
             mock_redis_client.set.assert_called()
 
 
-# --- Tests for get_or_create_agent ---
-
-
 @pytest.mark.asyncio
 async def test_get_or_create_agent_with_token(
     mock_env_vars, mock_llm_factory, mock_redis_client
 ):
     """Test get_or_create_agent function with token"""
-    token = jwt.encode(
+    token = _real_jwt.encode(
         {
             "session_id": "test_session",
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
@@ -540,16 +533,15 @@ async def test_get_or_create_agent_with_token(
         algorithm="HS512",
     )
 
-    with patch("intent_capture.agent_core.jwt", jwt):
-        agent = await get_or_create_agent(session_token=token)
-        assert agent.session_id == "test_session"
-        assert agent.agent_id == "agent_test_session"
+    agent = await get_or_create_agent(session_token=token)
+    assert agent.session_id == "test_session"
+    assert agent.agent_id == "agent_test_session"
 
 
 # --- Test for Configuration Validation ---
 
 
-def test_validate_environment(mock_env_vars):
+def test_validate_environment(mock_env_vars, monkeypatch):
     """Test environment validation"""
     from intent_capture.agent_core import validate_environment
 
@@ -557,14 +549,15 @@ def test_validate_environment(mock_env_vars):
     validate_environment()
 
     # Should fail with missing JWT_SECRET
-    with patch.dict(os.environ, {"JWT_SECRET": ""}, clear=False):
-        with pytest.raises(ConfigurationError, match="JWT_SECRET"):
-            validate_environment()
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    with pytest.raises(ConfigurationError, match="JWT_SECRET"):
+        validate_environment()
 
-    # Should fail with missing API keys
-    with patch.dict(os.environ, {"OPENAI_API_KEYS": ""}, clear=False):
-        with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
-            validate_environment()
+    # Restore JWT_SECRET and test OPENAI_API_KEYS
+    monkeypatch.setenv("JWT_SECRET", mock_env_vars["JWT_SECRET"])
+    monkeypatch.delenv("OPENAI_API_KEYS", raising=False)
+    with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
+        validate_environment()
 
 
 # --- Integration Test ---
@@ -574,7 +567,7 @@ def test_validate_environment(mock_env_vars):
 async def test_full_integration(mock_env_vars, mock_redis_client):
     """Test full integration from token to prediction"""
     # Create a valid token
-    token = jwt.encode(
+    token = _real_jwt.encode(
         {
             "session_id": "integration_test",
             "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1),
@@ -607,37 +600,36 @@ async def test_full_integration(mock_env_vars, mock_redis_client):
             cited_sources=["Wikipedia"],
         )
 
-    with patch("intent_capture.agent_core.jwt", jwt):
-        with patch(
-            "intent_capture.agent_core.llm_breaker.call_async",
-            side_effect=mock_breaker_call,
-        ):
-            with patch.object(LLMProviderFactory, "get_llm", return_value=mock_llm):
-                # Get or create agent
-                agent = await get_or_create_agent(session_token=token)
+    with patch(
+        "intent_capture.agent_core.llm_breaker.call_async",
+        side_effect=mock_breaker_call,
+    ):
+        with patch.object(LLMProviderFactory, "get_llm", return_value=mock_llm):
+            # Get or create agent
+            agent = await get_or_create_agent(session_token=token)
 
-                # Replace the runnable with a mock to bypass session_id requirement
-                class MockRunnable:
-                    async def ainvoke(self, input_dict, config=None):
-                        return AgentResponse(
-                            response="Paris is the capital of France",
-                            confidence_score=0.99,
-                            cited_sources=["Wikipedia"],
-                        )
+            # Replace the runnable with a mock to bypass session_id requirement
+            class MockRunnable:
+                async def ainvoke(self, input_dict, config=None):
+                    return AgentResponse(
+                        response="Paris is the capital of France",
+                        confidence_score=0.99,
+                        cited_sources=["Wikipedia"],
+                    )
 
-                agent._runnable = MockRunnable()
+            agent._runnable = MockRunnable()
 
-                # Make a prediction
-                result = await agent.predict("What is the capital of France?")
+            # Make a prediction
+            result = await agent.predict("What is the capital of France?")
 
-                # Verify the result
-                assert result["response"] == "Paris is the capital of France"
-                assert result["confidence"] == 0.99
-                assert "Wikipedia" in result["sources"]
+            # Verify the result
+            assert result["response"] == "Paris is the capital of France"
+            assert result["confidence"] == 0.99
+            assert "Wikipedia" in result["sources"]
 
-                # Verify state was saved
-                assert len(agent.chat_history) > 0
-                mock_redis_client.set.assert_called()
+            # Verify state was saved
+            assert len(agent.chat_history) > 0
+            mock_redis_client.set.assert_called()
 
 
 # --- Additional Test for Error Handling ---
