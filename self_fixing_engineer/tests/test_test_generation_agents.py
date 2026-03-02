@@ -134,10 +134,11 @@ async def test_performance_agent_skips_if_locust_unavailable():
 async def test_performance_agent_runs_locust():
     """Performance agent should generate performance script if available."""
     with patch("self_fixing_engineer.test_generation.gen_agent.agents.LOCUST_AVAILABLE", True):
-        mock_run = AsyncMock(return_value="PERF SCRIPT")
-        with patch("self_fixing_engineer.test_generation.gen_agent.agents._run_locust", mock_run):
-            state = {"code_under_test": "pass", "language": "python"}
-            result = await agents.performance_agent(state)
+        with patch("self_fixing_engineer.test_generation.gen_agent.agents.shutil.which", return_value="/usr/bin/locust"):
+            mock_run = AsyncMock(return_value="PERF SCRIPT")
+            with patch("self_fixing_engineer.test_generation.gen_agent.agents._run_locust", mock_run):
+                state = {"code_under_test": "pass", "language": "python"}
+                result = await agents.performance_agent(state)
 
     assert "PERF SCRIPT" in result["performance_report"]["report"]
     assert result["performance_report"]["status"] == "completed"
