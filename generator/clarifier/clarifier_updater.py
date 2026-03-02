@@ -170,6 +170,18 @@ UPDATE_CYCLES = get_or_create_metric(
     "clarifier_update_cycles_total",
     "Total requirements update cycles",
 )
+HISTORY_STORAGE_LATENCY = get_or_create_metric(
+    Histogram,
+    "clarifier_history_storage_seconds",
+    "Latency of history store operations by type",
+    ["operation"],
+)
+UPDATE_CONFLICTS = get_or_create_metric(
+    Gauge,
+    "clarifier_update_conflicts",
+    "Active requirements update conflicts by type",
+    ["conflict_type"],
+)
 SELF_TEST_PASS = get_or_create_metric(
     Gauge,
     "clarifier_updater_self_test_pass",
