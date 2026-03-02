@@ -56,6 +56,7 @@ from .codegen_response_handler import (
     fix_response_model_type_mismatches,
     get_stub_files,
     parse_llm_response,
+    reconcile_schema_model_fields,
 )
 
 # --- REMOVED OBSOLETE IMPORT: from .codegen_llm_call import CacheManager ---
@@ -77,6 +78,11 @@ except ImportError as e:
         "codegen_agent requires the generator.runner package "
         "(llm_client, runner_logging, runner_security_utils, runner_metrics)."
     ) from e
+
+try:
+    from generator.utils.ast_endpoint_extractor import ASTEndpointExtractor
+except ImportError:
+    ASTEndpointExtractor = None  # type: ignore[assignment,misc]
 
 # Internal component dummy/migration note
 try:
@@ -1471,6 +1477,60 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
 
     if not router_modules:
         return updated  # Nothing to wire — return unchanged                           #
+
+    # ------------------------------------------------------------------ #
+    # 1b. Deduplicate router files that define the same HTTP endpoint.    #
+    #                                                                      #
+    # The LLM sometimes generates both products_import.py AND             #
+    # products_import_router.py, both registering POST /import.  Including#
+    # both causes FastAPI duplicate-route registration errors and spec     #
+    # fidelity false-positives (endpoint exists but is unreachable).      #
+    # Keep the first file that claims each endpoint; log and drop the rest.#
+    # ------------------------------------------------------------------ #
+    _endpoint_claimed_by: Dict[str, str] = {}  # "METHOD /path" → path
+    _skip_router_paths: Set[str] = set()
+    if ASTEndpointExtractor is not None:
+        _extractor_for_dedup = ASTEndpointExtractor()
+        for _rm in router_modules:
+            _rm_path = _rm["module"].replace(".", "/") + ".py"
+            _rm_content = updated.get(_rm_path, "")
+            if not _rm_content:
+                continue
+            _rm_eps = _extractor_for_dedup.extract_from_source(_rm_content, _rm_path)
+            _is_dup = False
+            for _ep in _rm_eps:
+                _ep_key = f"{_ep['method']} {_ep['path']}"
+                if _ep_key in _endpoint_claimed_by:
+                    logger.warning(
+                        "[CODEGEN] _reconcile_app_wiring: duplicate endpoint %s in %s "
+                        "already claimed by %s — skipping %s",
+                        _ep_key,
+                        _rm_path,
+                        _endpoint_claimed_by[_ep_key],
+                        _rm_path,
+                    )
+                    _is_dup = True
+                    break
+            if _is_dup:
+                _skip_router_paths.add(_rm_path)
+            else:
+                for _ep in _rm_eps:
+                    _ep_key = f"{_ep['method']} {_ep['path']}"
+                    _endpoint_claimed_by[_ep_key] = _rm_path
+
+    if _skip_router_paths:
+        # Remove duplicate router modules from the list and from the file map
+        router_modules = [
+            _rm for _rm in router_modules
+            if (_rm["module"].replace(".", "/") + ".py") not in _skip_router_paths
+        ]
+        for _dup_path in _skip_router_paths:
+            updated.pop(_dup_path, None)
+            logger.info(
+                "[CODEGEN] _reconcile_app_wiring: removed duplicate router file %s",
+                _dup_path,
+            )
+
     # ------------------------------------------------------------------ #
     # All discovered routers share the same parent directory; derive it
     # from the first entry (mixed-directory projects are not supported).
@@ -1638,6 +1698,16 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         main_lines.append(f"from {rm['module']} import {rm['var']} as {rm['alias']}")
     for mm in middleware_modules:
         main_lines.append(f"from {mm['module']} import {mm['cls']}")
+    # Include app/routes.py (health probes) if it exists and defines a router
+    _app_routes_content = updated.get("app/routes.py", "")
+    _app_routes_var: Optional[str] = None
+    if _app_routes_content:
+        _routes_vars = _router_var_re.findall(_app_routes_content)
+        if _routes_vars:
+            _app_routes_var = _routes_vars[0]
+            main_lines.append(
+                f"from app.routes import {_app_routes_var} as routes_router"
+            )
 
     # ---- application setup ------------------------------------------------
     main_lines += [
@@ -1680,15 +1750,26 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     )
     for rm in router_modules:
         if rm['prefix']:
-            # LLM specified an explicit prefix — use it as-is.
-            prefix_kwarg = ', prefix="' + rm['prefix'] + '"'
+            # Router already has a prefix defined in APIRouter() — do NOT add it
+            # again to include_router() or routes will be double-prefixed, e.g.
+            # /api/v1/products/api/v1/products/import.
+            main_lines.append(
+                f"app.include_router({rm['alias']})"
+                f"  # prefix already defined in router: {rm['prefix']}"
+            )
         else:
             stem = rm["module"].rsplit(".", 1)[-1]
             if _has_api_v1 and stem not in _NO_PREFIX_STEMS:
                 prefix_kwarg = f', prefix="/api/v1/{stem}"'
             else:
                 prefix_kwarg = ""
-        main_lines.append(f"app.include_router({rm['alias']}{prefix_kwarg})")
+            main_lines.append(f"app.include_router({rm['alias']}{prefix_kwarg})")
+
+    # ---- app/routes.py health probes (Kubernetes /healthz and /readyz) ----
+    if _app_routes_var:
+        main_lines.append(
+            "app.include_router(routes_router)  # health check endpoints"
+        )
 
     # ---- preserved health/version/ping routes from old main.py -----------
     if extra_routes:
@@ -2178,6 +2259,19 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         logger.warning(
             "[CODEGEN] _reconcile_app_wiring: duplicate-prefix fix failed (non-fatal): %s",
             _dup_err,
+        )
+
+    # ------------------------------------------------------------------ #
+    # 9. Reconcile Pydantic schema fields with SQLAlchemy model columns   #
+    # ------------------------------------------------------------------ #
+    # Adds stub columns to models for any field that the schema references
+    # but the model does not define, preventing AttributeError at runtime.
+    try:
+        updated = reconcile_schema_model_fields(updated)
+    except Exception as _schema_err:
+        logger.warning(
+            "[CODEGEN] _reconcile_app_wiring: schema/model reconciliation failed (non-fatal): %s",
+            _schema_err,
         )
 
     return updated

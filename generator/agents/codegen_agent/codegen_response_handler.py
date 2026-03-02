@@ -1288,6 +1288,262 @@ def fix_depends_ellipsis(code_files: Dict[str, str]) -> Dict[str, str]:
     return result
 
 
+def reconcile_schema_model_fields(files: Dict[str, str]) -> Dict[str, str]:
+    """Ensure SQLAlchemy model columns cover every field referenced in Pydantic schemas.
+
+    The LLM sometimes generates service code that references ``Model.field`` where
+    ``field`` is present in the Pydantic schema but absent from the SQLAlchemy model.
+    This function adds typed stub columns to models for any schema field that is
+    missing, preventing ``AttributeError`` at runtime.
+
+    Strategy:
+        1. Use AST parsing to extract field names **and type annotations** from
+           Pydantic ``BaseModel`` subclasses in schema files.
+        2. Use AST parsing to extract column names from SQLAlchemy models in model files.
+        3. For each model, add a properly-typed stub column (``Integer``, ``String``,
+           ``Float``, ``Boolean``, or ``DateTime``) for any schema field that is
+           absent from the model's column definitions.
+
+    The insertion point is determined by scanning for the first ``__tablename__``
+    assignment within the class body, falling back to the line immediately after the
+    class definition header.  A final safety pass uses ``ast.parse()`` to verify the
+    modified file remains syntactically valid before writing it back.
+
+    Args:
+        files: Mapping of relative file path → file content.
+
+    Returns:
+        Updated mapping with stub columns injected where necessary.
+    """
+    updated = dict(files)
+
+    # ------------------------------------------------------------------
+    # Type mapping: Pydantic / Python annotation → SQLAlchemy column type
+    # Unmapped or complex types fall back to ``String``.
+    # ------------------------------------------------------------------
+    _TYPE_MAP: Dict[str, str] = {
+        # Integer-like
+        "int": "Integer",
+        "int | None": "Integer",
+        "Optional[int]": "Integer",
+        # Float / decimal
+        "float": "Float",
+        "float | None": "Float",
+        "Optional[float]": "Float",
+        "Decimal": "Numeric",
+        # Boolean
+        "bool": "Boolean",
+        "bool | None": "Boolean",
+        "Optional[bool]": "Boolean",
+        # Datetime / date
+        "datetime": "DateTime",
+        "datetime | None": "DateTime",
+        "Optional[datetime]": "DateTime",
+        "date": "Date",
+        "date | None": "Date",
+        "Optional[date]": "Date",
+    }
+    _DEFAULT_COLUMN_TYPE = "String"
+    _NEEDED_SA_TYPES: Set[str] = set()  # track which types need to be imported
+
+    def _infer_sa_type(annotation_node: Optional[ast.expr]) -> str:
+        """Return the SQLAlchemy column type name for a given AST annotation node."""
+        if annotation_node is None:
+            return _DEFAULT_COLUMN_TYPE
+        try:
+            ann_str = ast.unparse(annotation_node)
+        except Exception:
+            return _DEFAULT_COLUMN_TYPE
+        # Normalise Optional[X] from Union[X, None]
+        ann_str = ann_str.replace("Union[", "Optional[").replace(", None]", "]")
+        return _TYPE_MAP.get(ann_str, _DEFAULT_COLUMN_TYPE)
+
+    # Fields to never treat as SQLAlchemy columns
+    _SKIP_FIELD_NAMES: FrozenSet[str] = frozenset({
+        "model_config", "Config", "id", "created_at", "updated_at",
+        "__tablename__", "__table_args__",
+    })
+
+    # Suffix pattern to derive the base model name from Pydantic schema class names
+    _SUFFIX_RE = re.compile(
+        r'(?:Create|Update|Read|Response|Base|In|Out|Schema|Request|Reply|Payload)$'
+    )
+
+    # ------------------------------------------------------------------
+    # Pass 1: Extract fields + types from Pydantic schemas (AST-based).
+    # Uses a two-step approach:
+    #   1a. Identify all classes that are Pydantic models (directly or via
+    #       inheritance from another schema class in the same file).
+    #   1b. Extract annotated fields from those classes.
+    # ------------------------------------------------------------------
+    # schema_fields: base_model_name → {field_name → sa_type_string}
+    schema_fields: Dict[str, Dict[str, str]] = {}
+
+    for path, content in updated.items():
+        if "schema" not in path.lower() or not path.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(content, filename=path)
+        except SyntaxError:
+            continue
+
+        # Step 1a: collect all class names that are Pydantic models.
+        # Seed with classes that directly inherit from BaseModel (or pydantic.BaseModel),
+        # then iteratively expand to include classes that inherit from those.
+        pydantic_class_names: Set[str] = set()
+        class_nodes: Dict[str, ast.ClassDef] = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef):
+                class_nodes[node.name] = node
+                base_names = {
+                    (b.id if isinstance(b, ast.Name) else
+                     (b.attr if isinstance(b, ast.Attribute) else ""))
+                    for b in node.bases
+                }
+                if "BaseModel" in base_names:
+                    pydantic_class_names.add(node.name)
+
+        # Expand: if a class inherits from a known Pydantic class, it is also Pydantic.
+        changed = True
+        while changed:
+            changed = False
+            for cls_name, cls_node in class_nodes.items():
+                if cls_name in pydantic_class_names:
+                    continue
+                base_names = {
+                    (b.id if isinstance(b, ast.Name) else
+                     (b.attr if isinstance(b, ast.Attribute) else ""))
+                    for b in cls_node.bases
+                }
+                if base_names & pydantic_class_names:
+                    pydantic_class_names.add(cls_name)
+                    changed = True
+
+        # Step 1b: extract annotated fields from all identified Pydantic classes.
+        for cls_name in pydantic_class_names:
+            node = class_nodes[cls_name]
+            base_name = _SUFFIX_RE.sub("", cls_name) or cls_name
+
+            for item in node.body:
+                if not isinstance(item, ast.AnnAssign):
+                    continue
+                if not isinstance(item.target, ast.Name):
+                    continue
+                field_name = item.target.id
+                if field_name in _SKIP_FIELD_NAMES or field_name.startswith("_"):
+                    continue
+                sa_type = _infer_sa_type(item.annotation)
+                schema_fields.setdefault(base_name, {})[field_name] = sa_type
+
+    if not schema_fields:
+        return updated
+
+    # ------------------------------------------------------------------
+    # Pass 2: Check SQLAlchemy models and inject missing columns (AST-based)
+    # ------------------------------------------------------------------
+    for path, content in list(updated.items()):
+        if "model" not in path.lower() or not path.endswith(".py"):
+            continue
+        try:
+            tree = ast.parse(content, filename=path)
+        except SyntaxError:
+            continue
+
+        for cls_node in ast.walk(tree):
+            if not isinstance(cls_node, ast.ClassDef):
+                continue
+            # Only process classes that inherit from a name containing "Base"
+            if not any(
+                (isinstance(b, ast.Name) and "Base" in b.id)
+                or (isinstance(b, ast.Attribute) and "Base" in b.attr)
+                for b in cls_node.bases
+            ):
+                continue
+
+            model_name = cls_node.name
+            if model_name not in schema_fields:
+                continue
+
+            # Collect existing column/attribute names declared in the class body
+            existing_attrs: Set[str] = set()
+            for item in cls_node.body:
+                if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name):
+                    existing_attrs.add(item.target.id)
+                elif isinstance(item, ast.Assign):
+                    for t in item.targets:
+                        if isinstance(t, ast.Name):
+                            existing_attrs.add(t.id)
+
+            missing: Dict[str, str] = {
+                name: sa_type
+                for name, sa_type in schema_fields[model_name].items()
+                if name not in existing_attrs and name not in _SKIP_FIELD_NAMES
+            }
+            if not missing:
+                continue
+
+            # Build stub column lines with proper type names
+            stub_lines: List[str] = [
+                f"    {col} = Column({sa_type})"
+                f"  # stub added by reconcile_schema_model_fields\n"
+                for col, sa_type in sorted(missing.items())
+            ]
+            _NEEDED_SA_TYPES.update(missing.values())
+
+            # Determine insertion point: scan from the start of the class body
+            # until we find __tablename__, falling back to immediately after the
+            # class definition header.  Use end_lineno attributes from the AST
+            # so the search is robust regardless of docstrings or decorators.
+            lines = content.splitlines(keepends=True)
+            # cls_node.lineno is 1-based; convert to 0-based index
+            cls_start_idx = cls_node.lineno - 1
+            insert_idx = cls_start_idx + 1  # default: line after class header
+
+            # Search within the class body for __tablename__
+            for stmt in cls_node.body:
+                if (
+                    isinstance(stmt, ast.Assign)
+                    and any(
+                        isinstance(t, ast.Name) and t.id == "__tablename__"
+                        for t in stmt.targets
+                    )
+                ):
+                    # Insert immediately after the __tablename__ assignment
+                    # ast.Assign.end_lineno is the last line of the statement (1-based)
+                    end_ln = getattr(stmt, "end_lineno", stmt.lineno)
+                    insert_idx = end_ln  # 0-based offset = 1-based lineno - 1 + 1
+                    break
+
+            lines[insert_idx:insert_idx] = stub_lines
+            new_content = "".join(lines)
+
+            # Safety: verify the modified file still parses before committing
+            try:
+                ast.parse(new_content, filename=path)
+            except SyntaxError as parse_err:
+                logger.warning(
+                    "reconcile_schema_model_fields: modified %s is not valid Python "
+                    "(%s) — skipping injection for model %s",
+                    path,
+                    parse_err,
+                    model_name,
+                )
+                continue
+
+            content = new_content
+            updated[path] = new_content
+            logger.info(
+                "reconcile_schema_model_fields: added %d stub column(s) to %s "
+                "for model %s: %s",
+                len(missing),
+                path,
+                model_name,
+                sorted(missing),
+            )
+
+    return updated
+
+
 def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python") -> Dict[str, str]:
     """
     Parses the LLM response, handling both multi-file JSON and single-file code.
