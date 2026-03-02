@@ -10,11 +10,25 @@ into the generation pipeline, ensuring generated code meets specifications.
 import ast
 import logging
 import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
+
+# SQLAlchemy column-type → Python/annotation type mapping used by
+# _check_type_consistency.  Defined at module level so it is only
+# instantiated once rather than on every call.
+_SA_TYPE_MAP: Dict[str, str] = {
+    "integer": "int",
+    "biginteger": "int",
+    "smallinteger": "int",
+    "string": "str",
+    "text": "str",
+    "varchar": "str",
+    "uuid": "uuid.UUID",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -24,31 +38,19 @@ logger = logging.getLogger(__name__)
 def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[str]:
     """Scan Python files for intra-project imports and verify they resolve.
 
-    Returns a list of error strings (empty means all imports resolved).
+    Returns a list of plain error message strings (no check-name prefix).
+    The caller is responsible for recording them under the appropriate check.
     """
     errors: List[str] = []
     py_files = list(output_dir.rglob("*.py"))
     if not py_files:
         return errors
 
-    # Build set of known module paths (relative to output_dir)
+    # Build set of known module paths (relative to output_dir) and a map of
+    # module → exported symbols in a single pass.
     known_modules: Set[str] = set()
-    for f in py_files:
-        try:
-            rel = f.relative_to(output_dir)
-        except ValueError:
-            continue
-        # Convert path to dotted module name
-        parts = list(rel.parts)
-        if parts[-1] == "__init__.py":
-            parts = parts[:-1]
-        else:
-            parts[-1] = parts[-1][:-3]  # strip .py
-        if parts:
-            known_modules.add(".".join(parts))
-
-    # Build a map of module → set of defined names (for symbol checking)
     module_symbols: Dict[str, Set[str]] = {}
+
     for f in py_files:
         try:
             rel = f.relative_to(output_dir)
@@ -59,15 +61,18 @@ def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[
             mod_key_parts = parts[:-1]
         else:
             mod_key_parts = list(parts)
-            mod_key_parts[-1] = mod_key_parts[-1][:-3]
+            mod_key_parts[-1] = mod_key_parts[-1][:-3]  # strip .py
         if not mod_key_parts:
             continue
         mod_key = ".".join(mod_key_parts)
+        known_modules.add(mod_key)
+
         try:
             source = f.read_text(encoding="utf-8", errors="replace")
             tree = ast.parse(source)
         except (SyntaxError, OSError):
             continue
+
         symbols: Set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
@@ -78,7 +83,7 @@ def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[
                         symbols.add(target.id)
         module_symbols[mod_key] = symbols
 
-    # Now scan each file's imports
+    # Scan each file's import statements.
     for f in py_files:
         try:
             source = f.read_text(encoding="utf-8", errors="replace")
@@ -86,31 +91,29 @@ def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[
         except (SyntaxError, OSError):
             continue
         for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                mod = node.module
-                # Only check intra-project imports
-                if not mod.startswith(pkg_name + ".") and mod != pkg_name:
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            mod = node.module
+            # Only check intra-project imports.
+            if not mod.startswith(pkg_name + ".") and mod != pkg_name:
+                continue
+            # Verify target module exists.
+            if mod not in known_modules:
+                parent = mod.rsplit(".", 1)[0] if "." in mod else mod
+                if parent not in known_modules:
+                    errors.append(
+                        f"{f.name}: module '{mod}' not found in project"
+                    )
                     continue
-                # Verify target module file exists
-                if mod not in known_modules:
-                    # Check parent package exists (for __init__ imports)
-                    parent = mod.rsplit(".", 1)[0] if "." in mod else mod
-                    if parent not in known_modules:
-                        errors.append(
-                            f"import_completeness: {f.name}: module '{mod}' not found in project"
-                        )
-                        continue
-                # Check imported symbols exist in the module
-                if node.names:
-                    for alias in node.names:
-                        if alias.name == "*":
-                            continue
-                        syms = module_symbols.get(mod, set())
-                        if syms and alias.name not in syms:
-                            errors.append(
-                                f"import_completeness: {f.name}: symbol '{alias.name}' "
-                                f"not defined in '{mod}'"
-                            )
+            # Verify each imported symbol exists in the module.
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                syms = module_symbols.get(mod, set())
+                if syms and alias.name not in syms:
+                    errors.append(
+                        f"{f.name}: symbol '{alias.name}' not defined in '{mod}'"
+                    )
     return errors
 
 
@@ -121,10 +124,10 @@ def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[
 def _check_router_paths(output_dir: Path) -> List[str]:
     """Check APIRouter files for common path mistakes.
 
-    Returns a list of warning/error strings.
+    Returns a list of plain warning/error message strings (no check-name
+    prefix).  The caller records them under the appropriate check.
     """
     issues: List[str] = []
-    # Find all router files
     router_files = list(output_dir.rglob("routers/*.py"))
     if not router_files:
         return issues
@@ -137,37 +140,44 @@ def _check_router_paths(output_dir: Path) -> List[str]:
         except OSError:
             continue
 
-        # Extract APIRouter prefix
+        # Extract APIRouter prefix (first occurrence wins).
         prefix_match = re.search(r'APIRouter\([^)]*prefix\s*=\s*["\']([^"\']*)["\']', source)
         prefix = prefix_match.group(1) if prefix_match else ""
 
-        # Extract route decorators and their paths
-        route_paths: List[str] = []
+        # Collect routes per HTTP method to correctly scope the shadowing check.
+        # Shadowing only occurs within the same HTTP method (FastAPI matches
+        # both path and method, so GET /{id} does not shadow POST /batch).
+        routes_by_method: Dict[str, List[str]] = {}
         for method in http_methods:
+            method_paths: List[str] = []
             for m in re.finditer(
-                r'@router\.' + method + r'\s*\(\s*["\']([^"\']*)["\']', source
+                r"@router\." + method + r"\s*\(\s*[\"']([^\"']*)[\"']", source
             ):
                 route_path = m.group(1)
-                effective = (prefix.rstrip("/") + "/" + route_path.lstrip("/")).rstrip("/") or "/"
-                # Detect routes that collapse to just the prefix (e.g. prefix + "/")
+                method_paths.append(route_path)
+                # Detect routes that collapse to just the prefix root.
                 if route_path in ("/", "") and prefix:
+                    effective = (prefix.rstrip("/") + "/").rstrip("/") or "/"
                     issues.append(
-                        f"router_path_validation: {rfile.name}: route '{method.upper()} {route_path}' "
-                        f"with prefix '{prefix}' resolves to '{effective or prefix}/' "
+                        f"{rfile.name}: {method.upper()} '{route_path}' with prefix "
+                        f"'{prefix}' resolves to '{effective}' "
                         f"(likely missing resource path segment)"
                     )
-                route_paths.append(route_path)
+            routes_by_method[method] = method_paths
 
-        # Detect path-param routes defined before static routes (shadowing)
-        param_seen = False
-        for rp in route_paths:
-            if re.search(r'\{[^}]+\}', rp):
-                param_seen = True
-            elif param_seen and not re.search(r'\{[^}]+\}', rp):
-                issues.append(
-                    f"router_path_validation: {rfile.name}: static route '{rp}' "
-                    f"defined after parameterized route — may be shadowed"
-                )
+        # Per-method shadowing check: flag static routes defined after a
+        # parameterized route in the same HTTP method.
+        for method, method_paths in routes_by_method.items():
+            param_seen = False
+            for rp in method_paths:
+                has_param = bool(re.search(r"\{[^}]+\}", rp))
+                if has_param:
+                    param_seen = True
+                elif param_seen:
+                    issues.append(
+                        f"{rfile.name}: {method.upper()} static route '{rp}' "
+                        f"defined after a parameterized route — may be shadowed"
+                    )
 
     return issues
 
@@ -179,26 +189,16 @@ def _check_router_paths(output_dir: Path) -> List[str]:
 def _check_type_consistency(output_dir: Path) -> List[str]:
     """Cross-reference SQLAlchemy model PK types with router path-param types.
 
-    Returns a list of error strings.
+    Returns a list of plain error message strings (no check-name prefix).
+    The caller records them under the appropriate check.
     """
     errors: List[str] = []
 
     # --- Step 1: collect model PK column types ---
-    # entity_name → SQLAlchemy type (e.g. "Integer", "String", "UUID")
+    # entity_name (lowercase class name) → SQLAlchemy column type string
     model_pk_types: Dict[str, str] = {}
 
-    _sa_type_map = {
-        "integer": "int",
-        "biginteger": "int",
-        "smallinteger": "int",
-        "string": "str",
-        "text": "str",
-        "varchar": "str",
-        "uuid": "uuid.UUID",
-    }
-
-    model_files = list(output_dir.rglob("models/*.py"))
-    for mf in model_files:
+    for mf in output_dir.rglob("models/*.py"):
         try:
             source = mf.read_text(encoding="utf-8", errors="replace")
             tree = ast.parse(source)
@@ -209,48 +209,43 @@ def _check_type_consistency(output_dir: Path) -> List[str]:
                 continue
             entity = node.name.lower()
             for stmt in node.body:
-                if not isinstance(stmt, ast.Assign):
-                    continue
-                # Look for: id = Column(Integer, primary_key=True)
-                if not (isinstance(stmt.value, ast.Call)):
+                if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value, ast.Call):
                     continue
                 call = stmt.value
-                func_name = ""
                 if isinstance(call.func, ast.Name):
                     func_name = call.func.id
                 elif isinstance(call.func, ast.Attribute):
                     func_name = call.func.attr
+                else:
+                    continue
                 if func_name.lower() != "column":
                     continue
-                # Check primary_key=True
+                # Require primary_key=True keyword argument.
                 is_pk = any(
-                    (isinstance(kw.value, ast.Constant) and kw.value.value is True
-                     and kw.arg == "primary_key")
+                    kw.arg == "primary_key"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
                     for kw in call.keywords
                 )
-                if not is_pk:
-                    continue
-                # Get the type argument (first positional arg)
-                if not call.args:
+                if not is_pk or not call.args:
                     continue
                 type_arg = call.args[0]
-                col_type = ""
                 if isinstance(type_arg, ast.Name):
-                    col_type = type_arg.id
+                    col_type: str = type_arg.id
                 elif isinstance(type_arg, ast.Attribute):
                     col_type = type_arg.attr
-                if col_type:
-                    model_pk_types[entity] = col_type
+                else:
+                    continue
+                model_pk_types[entity] = col_type
 
     if not model_pk_types:
         return errors
 
-    # --- Step 2: collect router path parameter type annotations ---
-    # entity_name → annotated type string (from e.g. `product_id: uuid.UUID`)
+    # --- Step 2: collect router path-parameter type annotations ---
+    # entity_name → annotation string (from e.g. `product_id: uuid.UUID`)
     router_param_types: Dict[str, str] = {}
 
-    router_files = list(output_dir.rglob("routers/*.py"))
-    for rf in router_files:
+    for rf in output_dir.rglob("routers/*.py"):
         try:
             source = rf.read_text(encoding="utf-8", errors="replace")
             tree = ast.parse(source)
@@ -264,43 +259,41 @@ def _check_type_consistency(output_dir: Path) -> List[str]:
                     continue
                 entity = arg.arg[: -len("_id")]
                 ann = arg.annotation
-                ann_str = ""
                 if isinstance(ann, ast.Name):
-                    ann_str = ann.id
+                    ann_str: str = ann.id
+                elif isinstance(ann, ast.Attribute) and isinstance(ann.value, ast.Name):
+                    ann_str = f"{ann.value.id}.{ann.attr}"
                 elif isinstance(ann, ast.Attribute):
-                    ann_str = f"{ann.value.id}.{ann.attr}" if isinstance(ann.value, ast.Name) else ann.attr
-                if ann_str:
-                    router_param_types[entity] = ann_str
+                    ann_str = ann.attr
+                else:
+                    continue
+                router_param_types[entity] = ann_str
 
     # --- Step 3: cross-reference ---
     for entity, model_type in model_pk_types.items():
         router_type = router_param_types.get(entity)
         if router_type is None:
             continue
-        expected_router = _sa_type_map.get(model_type.lower())
+        expected_router = _SA_TYPE_MAP.get(model_type.lower())
         if expected_router is None:
             continue
-        # Normalise
-        rt_lower = router_type.lower().replace("uuid.uuid", "uuid.uuid")
+        rt_lower = router_type.lower()
         et_lower = expected_router.lower()
-        if et_lower == "uuid.uuid":
-            if "uuid" not in rt_lower:
-                errors.append(
-                    f"type_consistency: entity '{entity}': model PK is "
-                    f"'{model_type}' (UUID) but router uses '{router_type}'"
-                )
-        elif et_lower == "int":
-            if rt_lower not in ("int", "integer"):
-                errors.append(
-                    f"type_consistency: entity '{entity}': model PK is "
-                    f"'{model_type}' (int) but router uses '{router_type}'"
-                )
-        elif et_lower == "str":
-            if rt_lower not in ("str", "string"):
-                errors.append(
-                    f"type_consistency: entity '{entity}': model PK is "
-                    f"'{model_type}' (str) but router uses '{router_type}'"
-                )
+        if et_lower == "uuid.uuid" and "uuid" not in rt_lower:
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (UUID) "
+                f"but router uses '{router_type}'"
+            )
+        elif et_lower == "int" and rt_lower not in ("int", "integer"):
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (int) "
+                f"but router uses '{router_type}'"
+            )
+        elif et_lower == "str" and rt_lower not in ("str", "string"):
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (str) "
+                f"but router uses '{router_type}'"
+            )
 
     return errors
 
@@ -524,7 +517,6 @@ def validate_generated_code(
 
     # Fix 8: Cold-start import test — hard-fail for real app errors; soft-fail
     # (warning) when deps are simply not installed (ModuleNotFoundError).
-    import subprocess
     report.checks_run.append("Cold-start Import Test")
     try:
         _import_result = subprocess.run(

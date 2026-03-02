@@ -33,11 +33,19 @@ import json
 import logging
 import os
 import re
+import subprocess
 import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+try:
+    import yaml as _pyyaml
+    _YAML_AVAILABLE = True
+except ImportError:  # pyyaml is an optional dependency
+    _pyyaml = None  # type: ignore[assignment]
+    _YAML_AVAILABLE = False
 
 # --- OpenTelemetry Integration ---
 try:
@@ -1886,17 +1894,11 @@ def validate_deployment_artifacts(
         _helm_errors: List[str] = []
         _required_k8s_fields = ("apiVersion", "kind", "metadata")
 
-        try:
-            import yaml as _pyyaml  # type: ignore[import]
-            _yaml_available = True
-        except ImportError:
-            _yaml_available = False
-
         for _tpl_path, _tpl_content in _helm_template_files.items():
             if not _tpl_content or not _tpl_content.strip():
                 _helm_errors.append(f"Helm template '{_tpl_path}' is empty")
                 continue
-            # Check it's not a raw JSON blob (quick heuristic)
+            # Reject raw JSON blobs — these are not valid K8s YAML.
             stripped = _tpl_content.strip()
             if stripped.startswith("{") and stripped.endswith("}"):
                 _helm_errors.append(
@@ -1904,17 +1906,19 @@ def validate_deployment_artifacts(
                     "instead of valid Kubernetes YAML"
                 )
                 continue
-            # Validate YAML syntax (replace Helm directives first)
-            if _yaml_available:
-                _sanitized = re.sub(r'\{\{.*?\}\}', '""', _tpl_content, flags=re.DOTALL)
+            # Validate YAML syntax.  Replace Helm template directives with a
+            # harmless quoted empty string before parsing so that {{ ... }} blocks
+            # don't trip up the YAML parser.
+            if _YAML_AVAILABLE:
+                _sanitized = re.sub(r"\{\{.*?\}\}", '""', _tpl_content, flags=re.DOTALL)
                 try:
-                    _parsed = _pyyaml.safe_load(_sanitized)
+                    _parsed = _pyyaml.safe_load(_sanitized)  # type: ignore[union-attr]
                 except Exception as _ye:
                     _helm_errors.append(
                         f"Helm template '{_tpl_path}' contains invalid YAML: {_ye}"
                     )
                     continue
-                # Check required Kubernetes resource fields
+                # Check required Kubernetes resource fields.
                 if isinstance(_parsed, dict):
                     _missing = [f for f in _required_k8s_fields if f not in _parsed]
                     if _missing:
@@ -1923,20 +1927,19 @@ def validate_deployment_artifacts(
                             + ", ".join(_missing)
                         )
             else:
-                # Fallback: just check that required field names appear somewhere
+                # pyyaml unavailable — fall back to a plain text search.
                 for _field in _required_k8s_fields:
                     if _field not in _tpl_content:
                         _helm_errors.append(
                             f"Helm template '{_tpl_path}' missing required K8s field: {_field}"
                         )
 
-        # If output_dir is set and the helm directory exists, run helm lint
+        # Run `helm lint` when the CLI is available and structural checks passed.
         if output_dir and not _helm_errors:
-            import subprocess as _sp
             _helm_dir = Path(output_dir) / "helm"
             if _helm_dir.exists():
                 try:
-                    _lint = _sp.run(
+                    _lint = subprocess.run(
                         ["helm", "lint", str(_helm_dir)],
                         capture_output=True,
                         text=True,

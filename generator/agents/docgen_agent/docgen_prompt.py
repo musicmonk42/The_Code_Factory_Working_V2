@@ -400,6 +400,10 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
                     provider="docgen_prompt",
                     model="gpt-4o-mini",
                 ).observe(time.time() - _retry_start)
+                await add_provenance(
+                    "summarize_prompt_context_global_retry",
+                    {"action": "summarize_prompt_context_global_retry", "model": "gpt-4o-mini"},
+                )
                 if len(_retry_text) >= min_absolute_length:
                     return _retry_text
                 logger.warning(
