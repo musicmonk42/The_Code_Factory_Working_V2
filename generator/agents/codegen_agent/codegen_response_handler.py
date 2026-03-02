@@ -5173,13 +5173,19 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                 _missing_in_init: List[str] = []
                 _reexport_lines: List[str] = []
                 for _sym in sorted(symbols):
-                    # Check if already defined/imported in __init__.py
+                    # Check if already defined/imported in __init__.py.
+                    # Pre-compile the patterns once per symbol (used in both the
+                    # __init__.py check and the submodule scan below).
                     _sym_re = re.escape(_sym)
+                    _class_pat = re.compile(rf'^class\s+{_sym_re}\s*[\(:]', re.MULTILINE)
+                    _def_pat   = re.compile(rf'^(?:async\s+)?def\s+{_sym_re}\s*\(', re.MULTILINE)
+                    _asgn_pat  = re.compile(rf'^{_sym_re}\s*=', re.MULTILINE)
+                    _import_pat = re.compile(rf'\bimport\s+[^\n]*\b{_sym_re}\b')
                     _already_in_init = bool(
-                        re.search(rf'^class\s+{_sym_re}\s*[\(:]', _init_content, re.MULTILINE)
-                        or re.search(rf'^(?:async\s+)?def\s+{_sym_re}\s*\(', _init_content, re.MULTILINE)
-                        or re.search(rf'^{_sym_re}\s*=', _init_content, re.MULTILINE)
-                        or re.search(rf'\bimport\s+[^\n]*\b{_sym_re}\b', _init_content)
+                        _class_pat.search(_init_content)
+                        or _def_pat.search(_init_content)
+                        or _asgn_pat.search(_init_content)
+                        or _import_pat.search(_init_content)
                     )
                     if _already_in_init:
                         continue
@@ -5192,11 +5198,10 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                             continue
                         if not _sub_path.endswith(".py"):
                             continue
-                        _sub_sym_re = re.escape(_sym)
                         if (
-                            re.search(rf'^class\s+{_sub_sym_re}\s*[\(:]', _sub_content, re.MULTILINE)
-                            or re.search(rf'^(?:async\s+)?def\s+{_sub_sym_re}\s*\(', _sub_content, re.MULTILINE)
-                            or re.search(rf'^{_sub_sym_re}\s*=', _sub_content, re.MULTILINE)
+                            _class_pat.search(_sub_content)
+                            or _def_pat.search(_sub_content)
+                            or _asgn_pat.search(_sub_content)
                         ):
                             # Convert file path to module dotted name for the import
                             _sub_mod = _sub_path.removesuffix(".py").replace("/", ".")

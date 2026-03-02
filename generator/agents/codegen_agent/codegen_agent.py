@@ -705,13 +705,26 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     _include_router_prefix_re = re.compile(
         r'include_router\s*\(\s*(\w+)\s*[^)]*prefix\s*=\s*["\']([^"\']+)["\']'
     )
+    # Pattern to extract aliased router imports: ``from app.routers.X import router as X_router``
+    _router_import_alias_re = re.compile(
+        r'from\s+(app\.routers\.\w+)\s+import\s+(\w+)\s+as\s+(\w+)',
+        re.MULTILINE,
+    )
     duplicate_prefixes: List[Tuple[str, str, str]] = []
-    # Build mapping: router_var -> mount_prefix from main.py
+    # Build mapping: var_name_in_main -> mount_prefix from main.py
     _mount_prefix_map: Dict[str, str] = {}
     for _m in _include_router_prefix_re.finditer(main_content):
         _mount_prefix_map[_m.group(1)] = _m.group(2)
+    # Build reverse mapping: router_file_path -> alias name used in main.py
+    # so that ``from app.routers.items import router as items_router`` is resolved.
+    _path_to_alias: Dict[str, str] = {}
+    for _alias_m in _router_import_alias_re.finditer(main_content):
+        _mod_path = _alias_m.group(1).replace(".", "/") + ".py"
+        _path_to_alias[_mod_path] = _alias_m.group(3)
     for path, var in router_vars.items():
-        _mount_prefix = _mount_prefix_map.get(var, "")
+        # Prefer the aliased name if main.py imported the router under a different name
+        _var_in_main = _path_to_alias.get(path, var)
+        _mount_prefix = _mount_prefix_map.get(_var_in_main, "") or _mount_prefix_map.get(var, "")
         if not _mount_prefix:
             continue
         router_content = normalised.get(path, "")
@@ -773,7 +786,11 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
                     return True
                 if isinstance(val, ast.Constant) and val.value is None:
                     return True
-                if isinstance(val, (ast.List, ast.Dict, ast.Tuple)) and not getattr(val, "elts", [None]) and not getattr(val, "keys", [None]):
+                # ``return []`` / ``return ()`` — empty list or tuple
+                if isinstance(val, (ast.List, ast.Tuple)) and len(getattr(val, "elts", [1])) == 0:
+                    return True
+                # ``return {}`` — empty dict (Dict has ``keys`` not ``elts``)
+                if isinstance(val, ast.Dict) and len(getattr(val, "keys", [1])) == 0:
                     return True
             # ``pass``
             if isinstance(stmt, ast.Pass):
@@ -864,7 +881,7 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
                     re.search(rf'^class\s+{_sym_re}\s*[\(:]', _target_content, re.MULTILINE)
                     or re.search(rf'^(?:async\s+)?def\s+{_sym_re}\s*\(', _target_content, re.MULTILINE)
                     or re.search(rf'^{_sym_re}\s*=', _target_content, re.MULTILINE)
-                    or re.search(rf'["\'{_sym_re}["\']]', _target_content)
+                    or re.search(rf'(?:"|\'){_sym_re}(?:"|\') *[,\]]', _target_content)
                 )
                 if not _defined:
                     _missing.append(_sym)

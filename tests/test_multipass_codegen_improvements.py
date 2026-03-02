@@ -1396,7 +1396,7 @@ class TestReconcileAppWiringDuplicatePrefixFix:
 
     def test_duplicate_prefix_stripped_from_decorator(self, fn):
         """When main.py applies prefix='/api/v1/items' and the decorator also
-        has '/api/v1/items', the decorator should be rewritten to '/'."""
+        has '/api/v1/items', the decorator should be rewritten to just '/'."""
         files = {
             "app/routers/items.py": (
                 "from fastapi import APIRouter\n"
@@ -1413,8 +1413,11 @@ class TestReconcileAppWiringDuplicatePrefixFix:
         }
         result = fn(files)
         router_content = result.get("app/routers/items.py", "")
-        # The duplicate prefix should be stripped from the decorator
-        assert "/api/v1/items" not in router_content or router_content.count("/api/v1/items") <= 1
+        # The full duplicate path must be absent from the router file after reconciliation
+        assert "@router.get('/api/v1/items')" not in router_content, (
+            "Duplicate prefix decorator '/api/v1/items' must be stripped from the router. "
+            f"Router content:\n{router_content}"
+        )
 
     def test_non_duplicate_prefix_unchanged(self, fn):
         """When the router prefix is correct (no duplication), decorators stay as-is."""

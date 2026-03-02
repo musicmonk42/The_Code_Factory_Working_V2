@@ -18,6 +18,7 @@ class JobStatus(str, Enum):
     RUNNING = "running"
     NEEDS_CLARIFICATION = "needs_clarification"
     COMPLETED = "completed"
+    COMPLETED_WITH_WARNINGS = "completed_with_warnings"
     FAILED = "failed"
     CANCELLED = "cancelled"
 

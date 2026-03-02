@@ -182,7 +182,7 @@ class TestLanguageDetectionSanitization:
         src = (PROJECT_ROOT / "generator/runner/runner_parsers.py").read_text(
             encoding="utf-8"
         )
-        assert "'{'" in src or '"{' in src or "'{'" in src or 'in ext for c in' in src, (
+        assert "'{'" in src or '"{' in src or 'in ext for c in' in src, (
             "detect_language must contain an explicit brace-character guard"
         )
 

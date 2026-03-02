@@ -231,8 +231,13 @@ async def _finalize_job_success_impl(
         manifest = await _generate_output_manifest(job_id, correlation_id)
         
         # 2. Update job with final status - ATOMIC operation
-        # This is the critical state transition that makes artifacts visible
-        job.status = JobStatus.COMPLETED
+        # This is the critical state transition that makes artifacts visible.
+        # Honour completed_with_warnings from the pipeline result when present.
+        _pipeline_status = result.get("status") if result else None
+        if _pipeline_status == "completed_with_warnings":
+            job.status = JobStatus.COMPLETED_WITH_WARNINGS
+        else:
+            job.status = JobStatus.COMPLETED
         job.current_stage = JobStage.COMPLETED
         job.completed_at = datetime.now(timezone.utc)
         job.updated_at = datetime.now(timezone.utc)
@@ -280,6 +285,10 @@ async def _finalize_job_success_impl(
                 job.metadata["pipeline_message"] = result["message"]
             if result.get("stages_completed"):
                 job.metadata["completed_stages"] = result["stages_completed"]
+            if result.get("stages_failed"):
+                job.metadata["failed_stages"] = result["stages_failed"]
+            if result.get("validation_warnings"):
+                job.metadata["validation_warnings"] = result["validation_warnings"]
         
         # 5. Mark finalization metadata
         job.metadata["finalized_at"] = datetime.now(timezone.utc).isoformat()
