@@ -140,16 +140,12 @@ async def test_predict_success(
     async_client: AsyncClient,
     valid_token: str,
     mock_get_or_create_agent: AsyncMock,
-    test_secret_key: str,
 ):
     """Test a successful call to the /predict endpoint with valid authentication and payload."""
-    auth_token_payload = {
-        "sub": "test_user",
-        "exp": datetime.utcnow() + timedelta(hours=1),
-        "iss": "agent_core_auth",
-        "aud": "agent_core_user",
-    }
-    auth_token = jwt.encode(auth_token_payload, test_secret_key, algorithm="HS512")
+    # Get auth token from /token endpoint to ensure key compatibility with the app config
+    token_response = await async_client.post("/token")
+    assert token_response.status_code == status.HTTP_200_OK
+    auth_token = token_response.json()["access_token"]
 
     headers = {"Authorization": f"Bearer {auth_token}"}
     payload = {"user_input": "Hello, agent!", "session_token": valid_token}

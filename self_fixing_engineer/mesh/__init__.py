@@ -17,8 +17,8 @@ from .checkpoint import (
     get_checkpoint_manager,
 )
 
-# Backward-compatible alias: was previously exporting a module object.
-from . import checkpoint as checkpoint_manager
+# Backward-compatible alias: map to the CheckpointManager class (callable).
+checkpoint_manager = CheckpointManager
 
 # Import GraphRAG policy reasoning engine
 try:

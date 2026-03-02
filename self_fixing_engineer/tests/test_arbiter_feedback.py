@@ -70,7 +70,7 @@ def test_init_default_sqlite(mock_sqlite_class):
 
     fm = FeedbackManager()
 
-    mock_sqlite_class.assert_called_once_with(db_file="feedback.db")
+    mock_sqlite_class.assert_called_once_with(db_file="./omnicore.db")
     assert fm.db_client == mock_sqlite_instance
 
 

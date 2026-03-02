@@ -1124,8 +1124,12 @@ class CustomLLMProvider:
             if not (isinstance(response, str) and normalized == response):
                 yield normalized
         finally:
-            response.close()
-            await session.close()
+            if hasattr(response, "aclose"):
+                await response.aclose()
+            elif hasattr(response, "close"):
+                response.close()
+            if session is not None and hasattr(session, "close"):
+                await session.close()
 
     @classmethod
     async def _get_cached_vault_key(
