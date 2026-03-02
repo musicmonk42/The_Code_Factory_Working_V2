@@ -439,3 +439,31 @@ class TestAsyncOperations:
         with pytest.raises(ValueError) as exc_info:
             web_app.run_async(failing_func())
         assert "Test error" in str(exc_info.value)
+
+
+class TestSafeGetUsername:
+    """Test _safe_get_username returns safely outside a Streamlit context"""
+
+    def test_returns_anonymous_when_no_streamlit_context(self):
+        """Outside a Streamlit session, _safe_get_username must return 'anonymous' without raising."""
+        with patch("intent_capture.web_app.get_script_run_ctx", return_value=None):
+            result = web_app._safe_get_username()
+        assert result == "anonymous"
+
+    def test_returns_username_when_in_streamlit_context(self):
+        """When a Streamlit context is active and username is set, return it."""
+        mock_ctx = MagicMock()
+        mock_state = MockSessionState({"username": "testuser"})
+        with patch("intent_capture.web_app.get_script_run_ctx", return_value=mock_ctx):
+            web_app.st.session_state = mock_state
+            result = web_app._safe_get_username()
+        assert result == "testuser"
+
+    def test_returns_anonymous_on_exception(self):
+        """If get_script_run_ctx raises unexpectedly, fall back to 'anonymous'."""
+        with patch(
+            "intent_capture.web_app.get_script_run_ctx",
+            side_effect=RuntimeError("unexpected"),
+        ):
+            result = web_app._safe_get_username()
+        assert result == "anonymous"

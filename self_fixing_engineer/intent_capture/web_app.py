@@ -15,6 +15,7 @@ import bcrypt
 # UPGRADE: For real-time collaboration
 import redis
 import streamlit as st
+from streamlit.runtime.scriptrunner import get_script_run_ctx
 import yaml
 
 # Import custom modules - Fixed to use relative imports within the package
@@ -57,6 +58,8 @@ except Exception:
 def _safe_get_username():
     """Safely retrieve username from Streamlit session state, returning 'anonymous' if unavailable."""
     try:
+        if get_script_run_ctx() is None:
+            return "anonymous"
         return st.session_state.get("username", "anonymous")
     except Exception:
         return "anonymous"
