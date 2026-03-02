@@ -39,7 +39,7 @@ jobs:
   test-matrix:
     name: Tests - ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 180  # Increased to accommodate setup overhead and longer test batches
+    timeout-minutes: 60  # Reduced from 180; legitimate runs complete in <60min, helps catch issues faster
     permissions:
       contents: read
     strategy:
@@ -117,12 +117,25 @@ jobs:
 
       - name: Free disk space
         run: |
-          # Remove apt lists, docs, and clear pip cache to free disk space
-          sudo rm -rf /var/lib/apt/lists/* /usr/share/doc/* /usr/share/man/* || true
-          rm -rf /home/runner/.cache/pip/* || true
-          # Clean /tmp files owned by current user only (avoids permission errors for system directories)
-          find /tmp -maxdepth 1 -user "$(whoami)" -type f -delete 2>/dev/null || true
-          find /tmp -mindepth 1 -maxdepth 1 -user "$(whoami)" -type d -exec rm -rf {} \; 2>/dev/null || true
+          echo "=== Before cleanup ==="
+          df -h
+          
+          # Remove large pre-installed packages
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/share/swift
+          
+          # Clean Docker
+          docker system prune -af --volumes || true
+          
+          # Clean apt cache
+          sudo apt-get clean
+          sudo rm -rf /var/lib/apt/lists/*
+          
+          echo "=== After cleanup ==="
           df -h
 
       - name: Enable memory overcommit for Redis
@@ -284,6 +297,8 @@ jobs:
 
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
+
+          pip cache purge
 
       - name: Verify critical test dependencies
         run: |
@@ -1435,6 +1450,14 @@ jobs:
             --ignore=self_fixing_engineer/tests/test_arbiter_growth.py \
             2>&1 | head -50 || true
         continue-on-error: true
+
+      - name: Check disk space during tests
+        if: always()
+        run: |
+          echo "=== Disk space status ==="
+          df -h
+          echo "=== Large directories ==="
+          du -sh /home/runner/work/* 2>/dev/null | sort -rh | head -10
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
