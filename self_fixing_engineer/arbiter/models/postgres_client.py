@@ -9,6 +9,10 @@ import os
 import re
 import ssl
 import subprocess
+
+# Python 3.12+ compatibility: ssl.SSLPurpose was renamed to ssl.Purpose
+if not hasattr(ssl, 'SSLPurpose'):
+    ssl.SSLPurpose = ssl.Purpose
 import sys
 import time
 import types

@@ -26,6 +26,8 @@ import tempfile
 from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 # Industry Standard: Import centralized utilities to eliminate code duplication
 from server.services.omnicore_service import _load_sfe_analysis_report
 from server.services.sfe_utils import (
@@ -3347,11 +3349,10 @@ class SFEService:
                         logger.warning(
                             f"[SFE] Deep analysis: path does not exist: {resolved_path}"
                         )
-                        return {
-                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
-                            "error": f"Path does not exist: {resolved_path}",
-                            "source": "direct_sfe",
-                        }
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"Code path does not exist: {resolved_path}. Ensure the job has completed and generated output."
+                        )
                     code_path_obj = fallback_path
 
                 # Use CodebaseAnalyzer to perform deep analysis
@@ -4616,20 +4617,21 @@ class SFEService:
                 f'{{"event": "start_arbiter_import_error", "error": "{e}"}}',
                 exc_info=True,
             )
-            # Graceful degradation: mark running with degraded note
-            self._arbiter_running = True
+            self._arbiter_running = False
             return {
-                "status": "started",
-                "message": "Arbiter component available (partial initialization)",
-                "arbiter_available": True,
-                "services_active": True,
-                "note": f"Full initialization skipped due to ImportError: {e}",
+                "status": "error",
+                "message": f"Arbiter failed to initialize: {str(e)}",
+                "arbiter_available": False,
+                "services_active": False,
+                "error_type": "import_error",
+                "error_details": str(e),
             }
         except Exception as e:
             logger.error(
                 f'{{"event": "start_arbiter_error", "error": "{e}"}}',
                 exc_info=True,
             )
+            self._arbiter_running = False
             return {
                 "status": "error",
                 "message": f"Failed to start Arbiter: {str(e)}",
