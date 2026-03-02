@@ -3902,6 +3902,26 @@ def auto_fix_pydantic_v1_imports(files: Dict[str, str]) -> Dict[str, str]:
                     filename,
                 )
 
+            # Fix: Ensure field_validator is imported when @field_validator decorator is used.
+            # The LLM sometimes generates @field_validator without adding it to the pydantic import,
+            # causing a NameError at runtime.
+            if "@field_validator" in content and not _re.search(
+                r'from\s+pydantic\s+import\s+[^\n]*\bfield_validator\b', content
+            ):
+                if _re.search(r'from\s+pydantic\s+import\s+', content):
+                    content = _re.sub(
+                        r'(from\s+pydantic\s+import\s+)([^\n]+)',
+                        lambda m: m.group(0) if 'field_validator' in m.group(2)
+                        else m.group(1) + 'field_validator, ' + m.group(2),
+                        content,
+                    )
+                else:
+                    content = "from pydantic import field_validator\n" + content
+                logger.info(
+                    "auto_fix_pydantic_v1_imports: added missing field_validator import in %s",
+                    filename,
+                )
+
             # Fix: class Config: inside BaseModel/BaseSettings → model_config = ConfigDict(...)
             if "class Config:" in content and ("BaseModel" in content or "BaseSettings" in content):
                 new_content = _fix_class_config_to_model_config(content)

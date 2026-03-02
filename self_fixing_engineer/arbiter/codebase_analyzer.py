@@ -1261,27 +1261,52 @@ class CodebaseAnalyzer:
                     self._audit_repair_tools_sync
                 )
 
-        defects_and_complexity_tasks = [
-            asyncio.to_thread(self._analyze_file_defects_and_complexity_blocking, f)
-            for f in py_files
-        ]
+        _PER_FILE_TIMEOUT = 30.0  # seconds — prevents deadlock on broken imports
+        _CIRCUIT_BREAKER_THRESHOLD = 3  # skip remaining files after this many consecutive timeouts
 
-        all_results = await asyncio.gather(
-            *defects_and_complexity_tasks, return_exceptions=True
-        )
+        async def _analyze_with_timeout(f: Path) -> tuple:
+            return await asyncio.wait_for(
+                asyncio.to_thread(self._analyze_file_defects_and_complexity_blocking, f),
+                timeout=_PER_FILE_TIMEOUT,
+            )
 
         defects = []
         complexity_info = []
         per_file_defect_counts: dict[str, int] = {}
-        for f, res in zip(py_files, all_results):
-            if isinstance(res, tuple) and len(res) == 2:
-                file_defects, file_complexity = res
-                defects.extend(file_defects)
-                complexity_info.extend(file_complexity)
-                if file_defects:
-                    per_file_defect_counts[str(f)] = len(file_defects)
-            elif isinstance(res, Exception):
-                logger.error(f"Error during file analysis: {res}", exc_info=True)
+        consecutive_timeouts = 0
+
+        for idx, f in enumerate(py_files):
+            if consecutive_timeouts >= _CIRCUIT_BREAKER_THRESHOLD:
+                logger.warning(
+                    "scan_codebase: circuit breaker triggered after %d consecutive per-file timeouts; "
+                    "skipping remaining %d file(s).",
+                    _CIRCUIT_BREAKER_THRESHOLD,
+                    len(py_files) - idx,
+                )
+                break
+            try:
+                res = await _analyze_with_timeout(f)
+                consecutive_timeouts = 0
+                if isinstance(res, tuple) and len(res) == 2:
+                    file_defects, file_complexity = res
+                    defects.extend(file_defects)
+                    complexity_info.extend(file_complexity)
+                    if file_defects:
+                        per_file_defect_counts[str(f)] = len(file_defects)
+            except asyncio.TimeoutError:
+                consecutive_timeouts += 1
+                logger.warning(
+                    "scan_codebase: per-file analysis timed out after %.0fs for %s "
+                    "(consecutive timeouts: %d/%d).",
+                    _PER_FILE_TIMEOUT, f, consecutive_timeouts, _CIRCUIT_BREAKER_THRESHOLD,
+                )
+                try:
+                    analyzer_errors_total.labels(error_type="file_analysis_timeout").inc()
+                except AttributeError:
+                    pass
+            except Exception as exc:
+                consecutive_timeouts = 0
+                logger.error(f"Error during file analysis: {exc}", exc_info=True)
                 try:
                     analyzer_errors_total.labels(error_type="file_analysis_fail").inc()
                 except AttributeError:
