@@ -3194,7 +3194,15 @@ async function fixImports(btn) {
                 `\n\nTotal: ${fixCount} imports fixed in ${fileCount} files`;
             alert(resultMessage);
         } else if (fixCount === 0) {
-            alert('No import issues found to fix.');
+            const container = document.getElementById('errors-list');
+            if (container) {
+                container.innerHTML = `
+                    <div class="success-card" style="padding:20px;background:linear-gradient(135deg,#48bb78 0%,#38a169 100%);border-radius:8px;color:white;margin:10px 0;">
+                        <h4 style="margin-top:0;">✅ Import Check Complete</h4>
+                        <p>All imports are correct across ${data.files_fixed !== undefined ? 'all scanned' : ''} files. No fixes needed.</p>
+                        <p style="font-size:0.85em;opacity:0.9;">Source: ${escapeHtml(data.source || 'import_fixer')}</p>
+                    </div>`;
+            }
         } else if (data.message || data.note) {
             alert(data.message || data.note);
         }
@@ -3308,7 +3316,8 @@ async function startArbiter() {
             const response = await fetchWithRetry(`${API_BASE}/sfe/arbiter/control`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({command: 'start', job_id: jobId, config: {}})
+                body: JSON.stringify({command: 'start', job_id: jobId, config: {}}),
+                timeout: 180000  // 3 minutes for heavy analysis
             });
 
             if (!response.ok) {

@@ -67,6 +67,8 @@ ingress:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
     nginx.ingress.kubernetes.io/rate-limit: "100"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"  # 5 min: covers 180 s Arbiter analysis + network overhead + safety buffer
     # WebSocket support for /api/clarifier/ws/* endpoints
     nginx.ingress.kubernetes.io/proxy-set-header-upgrade: "$http_upgrade"
     nginx.ingress.kubernetes.io/proxy-set-header-connection: "upgrade"
