@@ -380,6 +380,10 @@ The following are MANDATORY checks:
 
 4a. IMPORTS AND DEPENDENCIES (CRITICAL FOR FASTAPI):
    - Every name referenced in the code MUST have a corresponding import statement
+   - ✓ CRITICAL: Only import from modules that you are generating in this response.
+     If ``app/routers/orders.py`` imports ``from app.database import get_db``,
+     then ``app/database.py`` MUST also be generated and MUST export ``get_db``.
+     NEVER import from a module that you have not included in the generated file list.
    - When using FastAPI middleware, ALWAYS include:
      * from fastapi import Request (when using Request type hint)
      * import time (when using time.time() or time.perf_counter())

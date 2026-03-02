@@ -98,14 +98,17 @@ try:
         async def _run_tool(self, *args, **kwargs):
             logging.warning(
                 "LanguageCritiquePlugin is not available in this environment. "
-                "Language-specific coverage tooling will be skipped."
+                "Language-specific coverage tooling will be skipped. "
+                "To enable it, install the 'runner' package: "
+                "pip install runner[critique] or add it to requirements.txt."
             )
             return False, {
                 "output": "",
                 "stderr": (
                     "LanguageCritiquePlugin is not available. "
                     "Install the required runner dependencies to enable "
-                    "language-specific critique tooling."
+                    "language-specific critique tooling: "
+                    "pip install runner[critique]"
                 ),
             }
 
@@ -148,13 +151,16 @@ except ImportError as e:
         async def _run_tool(self, *args, **kwargs):
             logging.warning(
                 "LanguageCritiquePlugin is not available (runner utilities not installed). "
-                "Language-specific coverage tooling will be skipped."
+                "Language-specific coverage tooling will be skipped. "
+                "To enable it, install the 'runner' package: "
+                "pip install runner[critique] or add it to requirements.txt."
             )
             return False, {
                 "output": "",
                 "stderr": (
                     "LanguageCritiquePlugin unavailable — runner utilities not installed. "
-                    "Install the runner package to enable language-specific critique tooling."
+                    "Install the runner package to enable language-specific critique tooling: "
+                    "pip install runner[critique]"
                 ),
             }
 
@@ -814,7 +820,7 @@ async def build_semantic_critique_prompt(
     try:
         # Query is now deterministic because op_id is deterministic
         rag_query = f"code critique support for op_id={op_id}"
-        rag_context = await rag_retrieve(rag_query)
+        rag_context = await rag_retrieve.ainvoke(rag_query)
     except Exception:
         rag_context = ""
 

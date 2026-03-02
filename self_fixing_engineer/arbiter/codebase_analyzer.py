@@ -1272,17 +1272,47 @@ class CodebaseAnalyzer:
 
         defects = []
         complexity_info = []
-        for res in all_results:
+        per_file_defect_counts: dict[str, int] = {}
+        for f, res in zip(py_files, all_results):
             if isinstance(res, tuple) and len(res) == 2:
                 file_defects, file_complexity = res
                 defects.extend(file_defects)
                 complexity_info.extend(file_complexity)
+                if file_defects:
+                    per_file_defect_counts[str(f)] = len(file_defects)
             elif isinstance(res, Exception):
                 logger.error(f"Error during file analysis: {res}", exc_info=True)
                 try:
                     analyzer_errors_total.labels(error_type="file_analysis_fail").inc()
                 except AttributeError:
                     pass
+
+        # Emit a single aggregated lint summary instead of one log per file,
+        # to avoid overwhelming log aggregators (e.g. Railway 500 logs/sec cap).
+        #
+        # Errors are defects reported by static-analysis tools (pylint, ruff,
+        # mypy, bandit).  Warnings are all other defect types (complexity,
+        # coverage, IO errors, etc.).  Both counts are computed explicitly to
+        # avoid the arithmetic-error trap of `total_warnings = total - errors`
+        # when `defects` contains non-dict items or unexpected source values.
+        _LINTER_SOURCES = frozenset(("pylint", "ruff", "mypy", "bandit"))
+        total_errors = sum(
+            1 for d in defects
+            if isinstance(d, dict) and d.get("source") in _LINTER_SOURCES
+        )
+        total_warnings = sum(
+            1 for d in defects
+            if isinstance(d, dict) and d.get("source") not in _LINTER_SOURCES
+        )
+        logger.info(
+            "Lint summary: %d file(s) scanned, %d file(s) with findings, "
+            "%d linter error(s), %d other warning(s). Top files by finding count: %s",
+            len(py_files),
+            len(per_file_defect_counts),
+            total_errors,
+            total_warnings,
+            dict(sorted(per_file_defect_counts.items(), key=lambda kv: kv[1], reverse=True)[:5]),
+        )
 
         if use_baseline:
             with self._lock:

@@ -661,6 +661,16 @@ def post_materialize(
                 logger.warning("%s %s", _STAGE, warn, exc_info=True)
 
             # ------------------------------------------------------------------
+            # Phase 10: Validate intra-project imports in generated .py files
+            # ------------------------------------------------------------------
+            try:
+                _validate_generated_imports(output_dir, result)
+            except Exception as imp_exc:  # pylint: disable=broad-except
+                warn = f"_validate_generated_imports error: {imp_exc}"
+                result.warnings.append(warn)
+                logger.warning("%s %s", _STAGE, warn, exc_info=True)
+
+            # ------------------------------------------------------------------
             # Finalize
             # ------------------------------------------------------------------
             result.duration_seconds = time.monotonic() - start_ts
@@ -1176,6 +1186,99 @@ def _ensure_provenance_report(
             warn = f"Could not create reports/critique_report.json: {exc}"
             result.warnings.append(warn)
             logger.warning("%s %s", _STAGE, warn)
+
+def _validate_generated_imports(
+    output_dir: Path,
+    result: PostMaterializeResult,
+) -> None:
+    """Phase 10: Validate that intra-project imports in generated .py files
+    actually resolve to modules that exist in the generated output tree.
+
+    Only local imports whose root package exists inside the generated output
+    tree are checked — stdlib and third-party packages are skipped entirely.
+    When a missing module is detected the issue is recorded as a **blocking**
+    validation error in ``result.warnings`` and ``result.success`` is set to
+    ``False``.
+    """
+    import ast as _ast
+
+    # Build the set of top-level package directories present in the generated
+    # output.  These are the only roots we check — anything else is a
+    # third-party or stdlib import that we should not validate.
+    local_roots: set[str] = {
+        p.name for p in output_dir.iterdir()
+        if p.is_dir() and not p.name.startswith(".")
+    } | {
+        p.stem for p in output_dir.glob("*.py")
+    }
+
+    # Build the set of module dotted paths available in the generated output.
+    # Uses Path.stem (drops the last suffix only) so that ``foo.py`` → ``foo``
+    # and ``foo.pyi`` → ``foo`` are both handled correctly.
+    available_modules: set[str] = set()
+    for py_file in output_dir.rglob("*.py"):
+        try:
+            rel = py_file.relative_to(output_dir)
+        except ValueError:
+            continue
+        # Convert path parts to dotted module name, replacing the last part
+        # with its stem (suffix-free name) rather than slicing with [:-3].
+        parts = list(rel.parts[:-1]) + [rel.stem]
+        available_modules.add(".".join(parts))
+
+    missing: List[str] = []
+
+    for py_file in output_dir.rglob("*.py"):
+        try:
+            source = py_file.read_text(encoding="utf-8")
+            tree = _ast.parse(source, filename=str(py_file))
+        except Exception:  # pylint: disable=broad-except
+            continue
+
+        try:
+            rel_file = py_file.relative_to(output_dir)
+        except ValueError:
+            rel_file = py_file
+
+        for node in _ast.walk(tree):
+            # ``from app.database import get_db`` → module = "app.database"
+            if isinstance(node, _ast.ImportFrom) and node.module:
+                module = node.module
+                # Determine the root package of this import and skip it if it
+                # doesn't exist in the generated output (i.e. it's stdlib or
+                # third-party).
+                root_pkg = module.split(".")[0]
+                if root_pkg not in local_roots:
+                    continue  # not generated — skip
+                if module not in available_modules:
+                    missing.append(
+                        f"{rel_file}: imports from '{module}' which was not generated"
+                    )
+
+    if missing:
+        for msg in missing:
+            logger.error(
+                "%s [BLOCKING] Missing generated module — %s",
+                _STAGE,
+                msg,
+                extra={"output_dir": str(output_dir)},
+            )
+        result.success = False
+        result.warnings.extend(missing)
+        logger.error(
+            "%s Import validation failed: %d missing module(s). "
+            "The generated application will not start.",
+            _STAGE,
+            len(missing),
+            extra={"output_dir": str(output_dir)},
+        )
+    else:
+        logger.info(
+            "%s Import validation passed — all intra-project imports resolve.",
+            _STAGE,
+            extra={"output_dir": str(output_dir)},
+        )
+
 
 def _create_if_absent(
     path: Path,

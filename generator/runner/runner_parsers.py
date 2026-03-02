@@ -1709,6 +1709,36 @@ def detect_language(code_files: Union[Dict[str, str], str]) -> str:
     if isinstance(code_files, str):
         code_files = {code_files: ""}
 
+    # Guard: ensure all keys are plain strings or Path objects, not dicts or
+    # other objects that would produce garbage file extensions.
+    sanitized: Dict[str, str] = {}
+    for k, v in code_files.items():
+        if not isinstance(k, (str, Path)):
+            logger.warning(
+                "detect_language: received a non-string filename key (%r, type %s). "
+                "This suggests a dict or pipeline result was incorrectly passed as a "
+                "filename. Skipping this entry.",
+                k,
+                type(k).__name__,
+                stack_info=True,
+            )
+            continue
+        key_str = str(k)
+        # Explicit guard: reject filenames that contain JSON-like characters,
+        # which indicate a serialized payload was accidentally concatenated into
+        # a path string upstream.
+        if any(c in key_str for c in ('{', '}', ',')):
+            logger.warning(
+                "detect_language: filename contains JSON-like characters (%r). "
+                "This indicates upstream pipeline metadata is leaking into the "
+                "filename. Skipping this entry.",
+                key_str,
+                stack_info=True,
+            )
+            continue
+        sanitized[key_str] = v
+    code_files = sanitized if sanitized else code_files  # type: ignore[assignment]
+
     # Extract file extensions from the keys
     file_extensions = set(Path(f).suffix.lower() for f in code_files.keys())
 
@@ -1727,6 +1757,7 @@ def detect_language(code_files: Union[Dict[str, str], str]) -> str:
             "non-extension data (e.g. JSON payload leakage): %s",
             len(invalid_extensions),
             sorted(str(e) for e in invalid_extensions),
+            stack_info=True,
         )
     file_extensions = valid_extensions if valid_extensions else file_extensions
 

@@ -678,9 +678,13 @@ class PostgresClient:
                     status="attempt",
                 ).inc()
                 try:
+                    _is_production = (
+                        os.getenv("ENV", "dev") in ("prod", "production")
+                        or os.getenv("RAILWAY_ENVIRONMENT", "") in ("production", "prod")
+                    )
                     ssl_mode = os.getenv(
                         "PG_SSL_MODE",
-                        "require" if os.getenv("ENV", "dev") == "prod" else "prefer",
+                        "require" if _is_production else "prefer",
                     ).lower()
                     env = os.getenv("ENV", "dev").lower()
 
