@@ -806,6 +806,12 @@ CRITICAL OUTPUT REQUIREMENTS:
 - Do NOT wrap the output in markdown code fences
 - Output should be ready to write directly to a file without any modifications
 
+CRITICAL DOCKERFILE RULES (violations cause container startup failure):
+- ❌ NEVER combine `ENTRYPOINT ["python"]` with `CMD ["uvicorn", ...]` — this produces the invalid command `python uvicorn ...`
+- ✅ Use `CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]` with NO ENTRYPOINT
+- ✅ Or: `ENTRYPOINT ["uvicorn"]` with `CMD ["app.main:app", "--host", "0.0.0.0", "--port", "8000"]`
+- ✅ Or: `ENTRYPOINT ["python"]` with `CMD ["-m", "uvicorn", "app.main:app"]` (the `-m` flag is required)
+
 Begin your response with the actual configuration content (e.g., "FROM" for Dockerfile, "apiVersion:" for Kubernetes YAML)."""
                 # Use Jinja2 to create a template from string
                 from jinja2 import Template as JinjaTemplate

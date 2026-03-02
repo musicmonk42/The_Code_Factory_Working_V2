@@ -820,6 +820,9 @@ async def build_semantic_critique_prompt(
     try:
         # Query is now deterministic because op_id is deterministic
         rag_query = f"code critique support for op_id={op_id}"
+        # rag_retrieve is a LangChain @tool-decorated function, which makes it a
+        # StructuredTool (BaseTool subclass).  Use .ainvoke() — the standard async
+        # invocation API — instead of the deprecated BaseTool.__call__.
         rag_context = await rag_retrieve.ainvoke(rag_query)
     except Exception:
         rag_context = ""

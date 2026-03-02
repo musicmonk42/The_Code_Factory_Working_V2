@@ -1213,16 +1213,20 @@ def _validate_generated_imports(
     }
 
     # Build the set of module dotted paths available in the generated output.
-    # Uses Path.stem (drops the last suffix only) so that ``foo.py`` → ``foo``
-    # and ``foo.pyi`` → ``foo`` are both handled correctly.
+    # ``Path.stem`` removes only the *last* suffix, so:
+    #   app/database.py   → parts = ["app", "database"]   → "app.database"   ✓
+    #   app/__init__.py   → parts = ["app", "__init__"]   → "app.__init__"   ✓
+    # Files with multiple dots in the name (e.g. foo.test.py → "foo.test") are
+    # not valid Python import identifiers and cannot appear in an ImportFrom
+    # node, so they never produce false matches.
     available_modules: set[str] = set()
     for py_file in output_dir.rglob("*.py"):
         try:
             rel = py_file.relative_to(output_dir)
         except ValueError:
             continue
-        # Convert path parts to dotted module name, replacing the last part
-        # with its stem (suffix-free name) rather than slicing with [:-3].
+        # Build the dotted module path: drop all path separators except the last
+        # filename component, then strip the .py suffix via Path.stem.
         parts = list(rel.parts[:-1]) + [rel.stem]
         available_modules.add(".".join(parts))
 
