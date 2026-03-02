@@ -3954,8 +3954,8 @@ async function submitAnswer() {
             // Show next question
             currentQuestionId = `q${window.currentQuestionIndex + 1}`;
             const nextQuestion = window.clarifierQuestions[window.currentQuestionIndex];
-            addClarifierMessage('ai', nextQuestion, 'Clarification Question');
-            updateClarifierStatus('Waiting for your answer', 'waiting');
+            displayClarificationQuestion(nextQuestion, window.currentQuestionIndex);
+            updateClarifierStatus(`Waiting for answer (${window.currentQuestionIndex + 1}/${window.clarifierQuestions.length})`, 'waiting');
         } else {
             // All questions answered
             updateClarifierStatus('Complete', 'active');
