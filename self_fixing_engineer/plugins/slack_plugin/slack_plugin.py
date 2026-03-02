@@ -160,7 +160,7 @@ class AuditJsonFormatter(jsonlogger.JsonFormatter):
         log_record["signature"] = signature
 
 
-AUDIT_LOG_PATH = os.environ.get("SLACK_AUDIT_LOG_FILE", "/var/log/slack_audit.log")
+AUDIT_LOG_PATH = os.environ.get("SLACK_AUDIT_LOG_FILE", "/app/logs/slack_audit.log")
 try:
     os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
     audit_log_handler = RotatingFileHandler(
@@ -1949,7 +1949,7 @@ class SlackGatewayManager(PluginBase):
 
 # ---- Global Instances & Application Lifecycle ----
 DEAD_LETTER_DIR = os.environ.get(
-    "SLACK_GATEWAY_DEAD_LETTER_DIR", "/var/lib/slack_gateway_dead_letters"
+    "SLACK_GATEWAY_DEAD_LETTER_DIR", "/app/data/dead_letters/slack_gateway_dead_letters"
 )
 try:
     if not os.path.exists(DEAD_LETTER_DIR):
