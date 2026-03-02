@@ -942,3 +942,234 @@ async def start_prometheus_exporter(address: str, port: int):
             f"CRITICAL: Failed to start Prometheus exporter: {e}.", level="CRITICAL"
         )
         sys.exit(1)
+
+
+# --- OO Wrappers ---
+class GrpcRuntimeError(Exception):
+    """Custom exception for gRPC operation failures."""
+
+    pass
+
+
+class GrpcRunner:
+    """
+    Thread-safe, lifecycle-managed wrapper for gRPC plugin connectivity.
+
+    Wraps the module-level ``connect``, ``plugin_health``, and ``run_method``
+    utilities behind a clean async interface compatible with
+    ``simulation.plugins.plugin_manager.GrpcPluginWrapper``.
+
+    Supports use as an async context manager::
+
+        async with GrpcRunner(name, manifest) as runner:
+            health = await runner.plugin_health()
+            result = await runner.run_method("ServiceName/Call", data)
+    """
+
+    _DEFAULT_RPC_TIMEOUT: float = 30.0
+
+    def __init__(self, name: str, manifest: Dict[str, Any]) -> None:
+        """
+        Initialise the runner.
+
+        Args:
+            name:     Plugin name used for logging and health-check labelling.
+            manifest: Plugin manifest dict; the ``entrypoint`` key is used as
+                      the gRPC server address (``host:port``).
+
+        Raises:
+            GrpcRuntimeError: If the manifest is missing the ``entrypoint``
+                              field.
+        """
+        self.name = name
+        self.manifest = manifest
+        address: str = manifest.get("entrypoint", "")
+        if not address:
+            raise GrpcRuntimeError(
+                f"Plugin '{name}' manifest is missing the 'entrypoint' field "
+                "required for gRPC connectivity."
+            )
+        self._address: str = address
+        self._channel: Optional["grpc_types.aio.Channel"] = None
+        # Serialises concurrent connect()/close() calls; prevents duplicate
+        # channels and use-after-close races.
+        self._connect_lock: asyncio.Lock = asyncio.Lock()
+
+    def __repr__(self) -> str:
+        connected = self._channel is not None
+        return (
+            f"<GrpcRunner name={self.name!r} address={self._address!r} "
+            f"connected={connected}>"
+        )
+
+    async def __aenter__(self) -> "GrpcRunner":
+        """Connect and return self for ``async with`` usage."""
+        await self.connect()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Ensure the channel is closed when exiting the context."""
+        await self.close()
+
+    async def connect(self) -> None:
+        """
+        Establish the gRPC channel, re-using an existing one if already open.
+
+        Concurrent calls are safe: a lock and double-checked locking ensure
+        that only one connection attempt is made even when multiple coroutines
+        call ``connect()`` simultaneously.
+
+        Raises:
+            GrpcRuntimeError: On connection failure.
+        """
+        if self._channel is not None:
+            return
+        async with self._connect_lock:
+            if self._channel is not None:  # double-checked locking
+                return
+            try:
+                self._channel = await connect(self._address)
+                audit_logger.log_event(
+                    "grpc_runner_connected",
+                    plugin=self.name,
+                    endpoint=self._address,
+                )
+                logger.debug(
+                    f"[{self.name}] GrpcRunner connected to '{self._address}'."
+                )
+            except Exception as e:
+                raise GrpcRuntimeError(
+                    f"[{self.name}] Failed to connect to gRPC endpoint "
+                    f"'{self._address}': {e}"
+                ) from e
+
+    async def plugin_health(self) -> Dict[str, Any]:
+        """
+        Return the health status of the gRPC plugin as a dict.
+
+        Returns:
+            A dict containing at least ``status`` (e.g. ``"SERVING"``) and
+            ``plugin`` keys.
+
+        Raises:
+            GrpcRuntimeError: If no channel has been established yet, or if
+                              the health-check call fails.
+        """
+        if self._channel is None:
+            raise GrpcRuntimeError(
+                f"[{self.name}] gRPC channel is not connected. "
+                "Call connect() first."
+            )
+        try:
+            # Call the module-level plugin_health function (not this method).
+            # Python method lookup does not search the class scope, so the
+            # bare name resolves to the module-level function correctly.
+            status = await plugin_health(self._channel, self.name)
+            return {"status": status, "plugin": self.name}
+        except GrpcRuntimeError:
+            raise
+        except Exception as e:
+            raise GrpcRuntimeError(
+                f"[{self.name}] Health check failed: {e}"
+            ) from e
+
+    async def run_method(
+        self,
+        service_method: str,
+        request_data: Dict[str, Any],
+        *,
+        # _DEFAULT_RPC_TIMEOUT is resolved in the class body scope at
+        # definition time; this is valid Python – GrpcRunner is not yet
+        # defined when the default is evaluated, so the class name cannot
+        # be used here.
+        timeout: float = _DEFAULT_RPC_TIMEOUT,
+    ) -> Dict[str, Any]:
+        """
+        Invoke a method on the remote gRPC service.
+
+        Args:
+            service_method: Method identifier (e.g. ``"ServiceName/MethodName"``)
+                            forwarded to the underlying ``run_method`` utility.
+            request_data:   Dict payload forwarded as the ``request`` argument.
+            timeout:        Per-call RPC deadline in seconds.  Defaults to
+                            ``GrpcRunner._DEFAULT_RPC_TIMEOUT`` (30 s).
+
+        Returns:
+            The response from the remote method normalised to a ``dict``.
+            For protobuf responses, ``google.protobuf.json_format.MessageToDict``
+            is attempted first; a best-effort ``dict()`` conversion follows;
+            ``{"result": response}`` is returned as a last resort.
+
+        Raises:
+            GrpcRuntimeError: If no channel has been established yet or if
+                              the RPC call fails.
+        """
+        if self._channel is None:
+            raise GrpcRuntimeError(
+                f"[{self.name}] gRPC channel is not connected. "
+                "Call connect() first."
+            )
+        try:
+            response = await run_method(
+                self._channel, service_method, request_data, timeout=timeout
+            )
+            if isinstance(response, dict):
+                return response
+            # Prefer protobuf-aware serialisation when available
+            try:
+                from google.protobuf.json_format import MessageToDict
+
+                return MessageToDict(response)
+            except Exception:
+                pass
+            # Generic fallback for dict-like response objects
+            try:
+                return dict(response)
+            except (TypeError, ValueError):
+                return {"result": response}
+        except GrpcRuntimeError:
+            raise
+        except Exception as e:
+            raise GrpcRuntimeError(
+                f"[{self.name}] RPC '{service_method}' failed: {e}"
+            ) from e
+
+    async def close(self) -> None:
+        """
+        Close the gRPC channel and release all associated resources.
+
+        Safe to call multiple times; subsequent calls are a no-op.  The
+        channel reference is cleared atomically inside the lock before the
+        blocking ``close()`` I/O is performed outside it, so concurrent
+        callers will never attempt a double-close.
+        """
+        async with self._connect_lock:
+            if self._channel is None:
+                return
+            channel, self._channel = self._channel, None
+        try:
+            await channel.close()
+        except Exception as e:
+            logger.warning(
+                f"[{self.name}] Error while closing gRPC channel: {e}"
+            )
+        audit_logger.log_event("grpc_runner_closed", plugin=self.name)
+        logger.info(f"[{self.name}] GrpcRunner closed.")
+
+
+__all__ = [
+    "GrpcRuntimeError",
+    "GrpcRunner",
+    "connect",
+    "plugin_health",
+    "run_method",
+    "emit_metric",
+    "validate_manifest",
+    "list_plugins",
+    "generate_plugin_docs",
+    "start_prometheus_exporter",
+    "AnalyzerCriticalError",
+    "NonCriticalError",
+    "PluginManifest",
+    "PRODUCTION_MODE",
+]
