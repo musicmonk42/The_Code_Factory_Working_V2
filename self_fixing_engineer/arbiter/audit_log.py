@@ -20,8 +20,14 @@ from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
 try:
     import aiohttp
+    _AIOHTTP_AVAILABLE = True
 except ImportError:
     aiohttp = None  # type: ignore[assignment]
+    _AIOHTTP_AVAILABLE = False
+
+# One-shot warning flag: emit the aiohttp-unavailable message at most once per
+# process lifetime to avoid log spam on high-frequency audit workloads.
+_aiohttp_missing_warned: bool = False
 
 # Third-party module imports
 try:
@@ -855,18 +861,30 @@ class TamperEvidentLogger:
             if self._metrics:
                 self._metrics["log_latency_seconds"].observe(time.time() - start_time)
 
-        # Add omnicore_engine publishing (skip in test environment)
-        if omnicore_url and aiohttp is not None and not os.getenv("PYTEST_CURRENT_TEST"):
-            async with aiohttp.ClientSession() as session:
-                try:
-                    await session.post(f"{omnicore_url}/audit", json=log_entry)
-                    logging.getLogger(__name__).info(
-                        f"Audit event sent to omnicore_engine: {event_type}"
+        # Add omnicore_engine publishing (skip in test environment).
+        # Guard on _AIOHTTP_AVAILABLE to avoid NameError when the optional
+        # dependency is absent; warn once so operators know delivery is disabled.
+        if omnicore_url and not os.getenv("PYTEST_CURRENT_TEST"):
+            if not _AIOHTTP_AVAILABLE:
+                global _aiohttp_missing_warned
+                if not _aiohttp_missing_warned:
+                    logging.getLogger(__name__).warning(
+                        "aiohttp is not installed; HTTP audit-event delivery to "
+                        "%s is disabled.  Install aiohttp to enable this feature.",
+                        omnicore_url,
                     )
-                except Exception as e:
-                    logging.getLogger(__name__).error(
-                        f"Failed to send audit event to omnicore_engine: {e}"
-                    )
+                    _aiohttp_missing_warned = True
+            else:
+                async with aiohttp.ClientSession() as session:
+                    try:
+                        await session.post(f"{omnicore_url}/audit", json=log_entry)
+                        logging.getLogger(__name__).info(
+                            f"Audit event sent to omnicore_engine: {event_type}"
+                        )
+                    except Exception as e:
+                        logging.getLogger(__name__).error(
+                            f"Failed to send audit event to omnicore_engine: {e}"
+                        )
 
         return log_entry["current_hash"]
 

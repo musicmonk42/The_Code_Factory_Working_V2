@@ -13,6 +13,7 @@
 # - Enhanced error tracking and observability
 
 import asyncio
+import sys
 import contextlib
 import json
 import logging
@@ -1333,9 +1334,19 @@ class MetricsExporter:
         logger.info("MetricsExporter shutdown complete.")
 
 
-# DOC_FRAMEWORKS_FOR_ALERTS is populated lazily inside alert_monitor() to avoid
-# a circular import with runner_core (runner_core imports runner_metrics at module
-# level, so runner_metrics must not import runner_core at module level).
+# _DOC_FRAMEWORKS_DEFAULT provides the canonical fallback list of documentation
+# framework names used by alert_monitor when runner_core is not yet importable.
+# It intentionally duplicates the keys of runner_core.DOC_FRAMEWORKS so that
+# runner_metrics remains free of any module-level import from runner_core.
+#
+# Design note – circular import avoidance
+# ----------------------------------------
+# runner_core imports runner_metrics at module level (``from .runner_metrics import *``)
+# to receive all metric objects in one step.  Any module-level import of runner_core
+# inside runner_metrics would therefore create a circular dependency, leaving
+# runner_core in a partially-initialised state and making ``Runner`` un-importable.
+# The lazy-resolver helper ``_resolve_doc_framework_names()`` below defers the
+# runner_core import to call time, by which point the module-load cycle is complete.
 _DOC_FRAMEWORKS_DEFAULT: List[str] = [
     "sphinx",
     "mkdocs",
@@ -1343,6 +1354,37 @@ _DOC_FRAMEWORKS_DEFAULT: List[str] = [
     "jsdoc",
     "go_doc",
 ]
+
+
+def _resolve_doc_framework_names() -> List[str]:
+    """Return the documentation-framework names registered in ``runner_core``.
+
+    The import is deferred to call time to break the circular dependency between
+    this module and ``runner_core``:
+
+    * ``runner_core`` performs ``from .runner_metrics import *`` at module level.
+    * Any module-level ``from .runner_core import …`` inside *this* module would
+      therefore fire while ``runner_core`` is still being initialised, leaving it
+      in a partially-loaded state and making ``Runner`` un-importable.
+
+    By inspecting ``sys.modules`` at call time we avoid triggering a new import
+    entirely — if ``runner_core`` is fully loaded we read its ``DOC_FRAMEWORKS``
+    directly; otherwise we fall back to :data:`_DOC_FRAMEWORKS_DEFAULT` with no
+    log noise.
+
+    Returns
+    -------
+    List[str]
+        Keys of ``runner_core.DOC_FRAMEWORKS``, or :data:`_DOC_FRAMEWORKS_DEFAULT`
+        when ``runner_core`` is not yet available.
+    """
+    for mod_key in ("generator.runner.runner_core", "runner.runner_core"):
+        mod = sys.modules.get(mod_key)
+        if mod is not None:
+            doc_frameworks = getattr(mod, "DOC_FRAMEWORKS", None)
+            if doc_frameworks is not None:
+                return list(doc_frameworks.keys())
+    return _DOC_FRAMEWORKS_DEFAULT
 
 
 async def alert_monitor(config: "RunnerConfig"):
@@ -1483,14 +1525,7 @@ async def alert_monitor(config: "RunnerConfig"):
                 f"High mutation survival rate: {mutation_survival_rate:.2f} (>{current_thresholds['mutation_survival_max']}). Tests might be weak."
             )
 
-        # Lazy import to avoid circular dependency: runner_core imports runner_metrics at
-        # module level, so DOC_FRAMEWORKS must be fetched at call time, not import time.
-        try:
-            from .runner_core import DOC_FRAMEWORKS as _DOC_FRAMEWORKS
-            _doc_frameworks_for_alerts: List[str] = list(_DOC_FRAMEWORKS.keys())
-        except ImportError:
-            _doc_frameworks_for_alerts = _DOC_FRAMEWORKS_DEFAULT
-        for doc_fw in _doc_frameworks_for_alerts:
+        for doc_fw in _resolve_doc_framework_names():
             doc_validation_statuses = metrics.get("runner_doc_validation_status", {})
             doc_status = doc_validation_statuses.get(
                 f"doc_framework_name_{doc_fw}_instance_id_{instance_id}", 1.0
