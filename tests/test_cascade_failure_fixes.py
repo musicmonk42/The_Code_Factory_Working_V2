@@ -36,8 +36,14 @@ class TestAutoFixFieldValidatorImport:
         )
         return auto_fix_pydantic_v1_imports(files)
 
-    def test_adds_field_validator_to_existing_pydantic_import(self):
-        """@field_validator used without importing it → symbol added to existing import."""
+    def _pydantic_import_line(self, source: str) -> str:
+        """Return the first line (or block) containing 'from pydantic import'."""
+        lines = [l for l in source.splitlines() if "from pydantic" in l and "import" in l]
+        assert lines, f"No pydantic import found in:\n{source}"
+        return lines[0]
+
+    def test_adds_field_validator_to_single_line_import(self):
+        """@field_validator used without importing it → symbol added to single-line import."""
         code = (
             "from pydantic import BaseModel, Field\n\n"
             "class Product(BaseModel):\n"
@@ -48,38 +54,102 @@ class TestAutoFixFieldValidatorImport:
             "        return v\n"
         )
         fixed = self._fix({"schema.py": code})
-        import_lines = [
-            l for l in fixed["schema.py"].splitlines()
-            if l.startswith("from pydantic import")
-        ]
-        assert import_lines, "Expected at least one pydantic import line"
-        assert "field_validator" in import_lines[0], (
-            f"field_validator should be added to the pydantic import line; got: {import_lines[0]}"
+        import_line = self._pydantic_import_line(fixed["schema.py"])
+        assert "field_validator" in import_line, (
+            f"field_validator should be on the import line; got: {import_line}"
         )
 
-    def test_no_change_when_field_validator_already_imported(self):
-        """No duplicate import should be added when field_validator is already present."""
+    def test_adds_field_validator_to_parenthesized_multiline_import(self):
+        """@field_validator with multiline parenthesized import → added inside the parens."""
+        import re
+        code = (
+            "from pydantic import (\n"
+            "    BaseModel,\n"
+            "    Field,\n"
+            ")\n\n"
+            "class Product(BaseModel):\n"
+            "    @field_validator('name', mode='before')\n"
+            "    @classmethod\n"
+            "    def validate_name(cls, v): return v\n"
+        )
+        fixed = self._fix({"schema.py": code})
+        block = re.search(r'from pydantic import \([^)]+\)', fixed["schema.py"], re.DOTALL)
+        assert block is not None, "Parenthesized import block not found"
+        assert "field_validator" in block.group(0), (
+            f"field_validator should be inside the parens; block:\n{block.group(0)}"
+        )
+
+    def test_adds_field_validator_to_single_line_parenthesized_import(self):
+        """@field_validator with inline parens → added before the closing paren."""
+        import re
+        code = (
+            "from pydantic import (BaseModel, Field)\n\n"
+            "class Product(BaseModel):\n"
+            "    @field_validator('name')\n"
+            "    @classmethod\n"
+            "    def validate_name(cls, v): return v\n"
+        )
+        fixed = self._fix({"schema.py": code})
+        block = re.search(r'from pydantic import \([^)]+\)', fixed["schema.py"], re.DOTALL)
+        assert block is not None
+        assert "field_validator" in block.group(0), (
+            f"field_validator should be inside the inline parens; got: {block.group(0)}"
+        )
+
+    def test_adds_field_validator_to_pydantic_v1_import(self):
+        """from pydantic.v1 import … should also get field_validator added."""
+        code = (
+            "from pydantic.v1 import BaseModel, Field\n\n"
+            "class Product(BaseModel):\n"
+            "    @field_validator('name')\n"
+            "    @classmethod\n"
+            "    def validate_name(cls, v): return v\n"
+        )
+        fixed = self._fix({"schema.py": code})
+        import_line = self._pydantic_import_line(fixed["schema.py"])
+        assert "field_validator" in import_line, (
+            f"field_validator should be on the pydantic.v1 import line; got: {import_line}"
+        )
+
+    def test_no_change_when_field_validator_already_imported_single_line(self):
+        """No duplicate import should be added when field_validator is already on one line."""
         code = (
             "from pydantic import BaseModel, Field, field_validator\n\n"
             "class Product(BaseModel):\n"
-            "    name: str\n\n"
             "    @field_validator('name', mode='before')\n"
             "    @classmethod\n"
             "    def validate_name(cls, v):\n"
             "        return v\n"
         )
         fixed = self._fix({"schema.py": code})
-        import_line = [
+        import_lines = [
             l for l in fixed["schema.py"].splitlines()
             if l.startswith("from pydantic import")
         ]
-        assert len(import_line) == 1, "Should have exactly one pydantic import line"
-        assert import_line[0].count("field_validator") == 1, (
+        assert len(import_lines) == 1, "Should have exactly one pydantic import line"
+        assert import_lines[0].count("field_validator") == 1, (
             "field_validator should appear exactly once in the import"
         )
 
+    def test_no_change_when_field_validator_already_imported_multiline(self):
+        """No duplicate added when field_validator already appears inside multiline parens."""
+        code = (
+            "from pydantic import (\n"
+            "    BaseModel,\n"
+            "    field_validator,\n"
+            ")\n\n"
+            "class Product(BaseModel):\n"
+            "    @field_validator('name')\n"
+            "    @classmethod\n"
+            "    def validate_name(cls, v): return v\n"
+        )
+        fixed = self._fix({"schema.py": code})
+        assert fixed["schema.py"] == code, (
+            "File should be unchanged when field_validator is already inside multiline parens"
+        )
+
     def test_adds_new_pydantic_import_when_none_exists(self):
-        """When there is no pydantic import at all, one should be created."""
+        """When there is no pydantic import at all, a new one should be created."""
         code = (
             "class Product:\n"
             "    @field_validator('name', mode='before')\n"

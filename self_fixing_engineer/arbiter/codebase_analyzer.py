@@ -1298,7 +1298,7 @@ class CodebaseAnalyzer:
                 logger.warning(
                     "scan_codebase: per-file analysis timed out after %.0fs for %s "
                     "(consecutive timeouts: %d/%d).",
-                    _PER_FILE_TIMEOUT, f, consecutive_timeouts, _CIRCUIT_BREAKER_THRESHOLD,
+                    _PER_FILE_TIMEOUT, f, consecutive_timeouts, _CIRCUIT_BREAKER_THRESHOLD
                 )
                 try:
                     analyzer_errors_total.labels(error_type="file_analysis_timeout").inc()
