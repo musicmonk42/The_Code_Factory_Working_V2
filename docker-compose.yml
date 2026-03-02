@@ -105,6 +105,15 @@ services:
       - CONFIGDB_REMOTE_ENDPOINT=${CONFIGDB_REMOTE_ENDPOINT:-}
       - CONFIGDB_ALLOWED_HOSTS=${CONFIGDB_ALLOWED_HOSTS:-}
       - AUDIT_LOG_PATH=/app/audit_trail.log
+      # SFE Arbiter analysis tuning
+      # SFE_ANALYSIS_TIMEOUT_SECONDS: wall-clock budget for one full codebase scan.
+      #   Default 300 s (5 min) — increase for repos with 100+ Python files.
+      - SFE_ANALYSIS_TIMEOUT_SECONDS=${SFE_ANALYSIS_TIMEOUT_SECONDS:-300}
+      # Skip individual linters for resource-constrained or CI environments.
+      - SFE_SKIP_MYPY=${SFE_SKIP_MYPY:-false}
+      - SFE_SKIP_PYLINT=${SFE_SKIP_PYLINT:-false}
+      # SFE_FAST_MODE=true skips both Pylint and Mypy, running only Bandit + Radon.
+      - SFE_FAST_MODE=${SFE_FAST_MODE:-false}
 
       # ============================================
       # Arbiter Configuration
@@ -157,6 +166,12 @@ services:
       # route spans off stdout and avoid Railway's 500 logs/sec rate-limit burst).
       # Example: OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      # OpenTelemetry Batch Span Processor tuning — keeps export bursts under
+      # Railway's 500 logs/sec rate limit.  Values below are the application defaults;
+      # override in .env to tune without rebuilding the image.
+      - OTEL_BSP_MAX_EXPORT_BATCH_SIZE=${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-100}
+      - OTEL_BSP_SCHEDULE_DELAY=${OTEL_BSP_SCHEDULE_DELAY:-5000}
+      - OTEL_BSP_MAX_QUEUE_SIZE=${OTEL_BSP_MAX_QUEUE_SIZE:-2048}
 
       # ============================================
       # Intent Capture Module (Bug fixes: #4, #10, #17)

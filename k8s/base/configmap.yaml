@@ -218,6 +218,14 @@ data:
   # Override via kustomize patch or kubectl set env for environments with a collector:
   #   kubectl set env deployment/codefactory-api OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317 -n codefactory
   OTEL_EXPORTER_OTLP_ENDPOINT: ""
+  # OpenTelemetry Batch Span Processor tuning — keeps export bursts well under
+  # Railway's 500 logs/sec rate limit.  Defaults are more conservative than the
+  # OTel SDK defaults (512 batch / 5 s delay) to avoid log-rate spikes.
+  # Override via kustomize patch:
+  #   kubectl set env deployment/codefactory-api OTEL_BSP_MAX_EXPORT_BATCH_SIZE=200 -n codefactory
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "100"
+  OTEL_BSP_SCHEDULE_DELAY: "5000"
+  OTEL_BSP_MAX_QUEUE_SIZE: "2048"
 
   # ============================================
   # Application Paths
@@ -228,6 +236,19 @@ data:
   # Defaults to the bundled refactor_agent.yaml inside the container image.
   # Override (e.g. via kustomize overlay) if you mount a custom config on a ConfigMap.
   REFACTOR_AGENT_CONFIG: "/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml"
+
+  # ============================================
+  # SFE Arbiter Analysis Configuration
+  # ============================================
+  # Wall-clock budget for a single full codebase scan (default 300 s = 5 min).
+  # Raise for repositories with 100+ Python files where linting takes longer.
+  # Override: kubectl set env deployment/codefactory SFE_ANALYSIS_TIMEOUT_SECONDS=600 -n codefactory
+  SFE_ANALYSIS_TIMEOUT_SECONDS: "300"
+  # Skip individual linters to speed up analysis in resource-constrained pods.
+  SFE_SKIP_MYPY: "false"
+  SFE_SKIP_PYLINT: "false"
+  # Fast-mode skips both Pylint and Mypy, running only Bandit (security) and Radon (complexity).
+  SFE_FAST_MODE: "false"
 
   # ============================================
   # Self-Healing Import Fixer (SHIF) Settings
