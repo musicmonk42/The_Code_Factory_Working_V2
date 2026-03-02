@@ -4636,6 +4636,7 @@ class SFEService:
                 "status": "error",
                 "message": f"Failed to start Arbiter: {str(e)}",
                 "arbiter_available": False,
+                "services_active": False,
             }
 
     async def stop_arbiter(self) -> Dict[str, Any]:

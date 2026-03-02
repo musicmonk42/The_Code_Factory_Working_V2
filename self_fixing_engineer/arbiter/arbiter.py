@@ -1644,7 +1644,7 @@ else:
             self.omnicore_url = omnicore_url or str(self.settings.OMNICORE_URL)
     
             self.db_client = PostgresClient(self.settings.DATABASE_URL)
-            self._db_healthy = True
+            self._db_healthy = False
             self.state_manager = AgentStateManager(self.db_client, name, self.settings)
             self.x = self.state_manager.x
             self.y = self.state_manager.y
