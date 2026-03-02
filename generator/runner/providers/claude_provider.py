@@ -281,8 +281,8 @@ class ClaudeProvider(LLMProvider):
         try:
             from self_fixing_engineer.prompt_registry import get_prompt_registry
             _sys = get_prompt_registry().get_template("system_prompt")
-            if _sys and "system" not in kwargs:
-                kwargs = dict(kwargs, system=_sys)
+            if _sys:
+                kwargs.setdefault("system", _sys)
         except Exception:
             pass  # Registry unavailable — proceed without system message
 

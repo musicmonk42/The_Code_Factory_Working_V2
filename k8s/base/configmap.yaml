@@ -271,6 +271,11 @@ data:
   # MUST be on the data PVC so the registry survives pod restarts; otherwise the
   # Arbiter loses track of generator-produced files on every restart.
   ARBITER_PROVENANCE_PATH: "/app/data/provenance.json"
+  # Reports directory — used by the Genetic Evolution Engine to persist the GA
+  # population (evolution_population.json) across pod restarts. Genomes now include
+  # evolved prompt templates, making population persistence more valuable.
+  # MUST be on the data PVC.
+  REPORTS_DIRECTORY: "/app/data/reports"
 
   # SFE Checkpoint Manager uses container-friendly defaults:
   # - CHECKPOINT_AUDIT_LOG_PATH defaults to ./logs/checkpoint/audit.log

@@ -12,6 +12,7 @@ Tests cover:
 - save_population / load_population round-trip
 """
 
+import importlib
 import json
 import os
 import sys
@@ -508,7 +509,6 @@ class TestEnvironmentConfigIntegration:
     def _get_env_config(self):
         """Return a real EnvironmentConfig if the envs module is importable."""
         try:
-            import importlib
             mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
             EnvironmentConfig = getattr(mod, "EnvironmentConfig")
             cfg = EnvironmentConfig()
@@ -559,7 +559,6 @@ class TestEnvironmentConfigIntegration:
     def test_system_metrics_has_prompt_metric_fields(self):
         """SystemMetrics should expose the prompt metric fields referenced in FITNESS_WEIGHTS."""
         try:
-            import importlib
             mod = importlib.import_module("self_fixing_engineer.envs.code_health_env")
             SystemMetrics = getattr(mod, "SystemMetrics")
             m = SystemMetrics()

@@ -270,10 +270,8 @@ class GeminiProvider(LLMProvider):
         except Exception:
             pass  # Registry unavailable — proceed without system instruction
 
-        client = GenerativeModel(
-            gemini_model,
-            **({} if not _system_instruction else {"system_instruction": _system_instruction}),
-        )
+        _system_kwargs = {"system_instruction": _system_instruction} if _system_instruction else {}
+        client = GenerativeModel(gemini_model, **_system_kwargs)
 
         # A run_id just for this call, in case _api_call needs it for logging retries
         run_id = str(uuid.uuid4())[:8]
