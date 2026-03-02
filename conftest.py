@@ -696,12 +696,13 @@ def isolate_prometheus_registry():
         yield
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(autouse=False)
 def cleanup_async_tasks():
-    """Clean up async tasks after each test to prevent timeouts and hangs.
+    """Clean up async tasks after each test.
     
-    This fixture ensures all pending async tasks are cancelled after each test,
-    preventing accumulated background threads and event loop exhaustion.
+    This fixture must be explicitly requested by tests that need it.
+    It is not auto-used because it can interfere with pytest-asyncio's
+    internal event loop management and cause subsequent tests to hang.
     """
     yield
     
