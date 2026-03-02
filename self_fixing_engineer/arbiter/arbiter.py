@@ -2584,6 +2584,11 @@ else:
                             await self.publish_to_omnicore(
                                 "ga_result", {"agent": self.name, "config": best_config}
                             )
+                            if best_config and self.code_health_env and hasattr(self.code_health_env, "config"):
+                                for key, value in best_config.items():
+                                    if hasattr(self.code_health_env.config, key):
+                                        setattr(self.code_health_env.config, key, value)
+                                logger.info(f"[{self.name}] Applied DEAP best_config to code_health_env.config")
                         except Exception as e:
                             sentry_sdk.capture_exception(e)
                             self.log_event(f"GA-driven evolution failed: {e}", "ga_failure")

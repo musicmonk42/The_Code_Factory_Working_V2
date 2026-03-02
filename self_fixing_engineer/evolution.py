@@ -3,8 +3,8 @@
 """
 Genetic Algorithm Platform Evolution
 
-Evolves the platform's own configuration, agent hyperparameters, and
-prompt templates using a genetic algorithm with real fitness evaluation.
+Evolves the platform's own configuration and agent hyperparameters
+using a genetic algorithm.
 
 Genome represents:
 - Agent reward weights (from EnvironmentConfig.reward_weights)
@@ -12,16 +12,20 @@ Genome represents:
 - Cooldown values for RL actions
 - Critique thresholds
 
-Fitness function uses REAL metrics from the running platform.
+Note: prompt template evolution is a future enhancement and is not
+currently implemented.
+
+Fitness function evaluates genome quality based on metrics provided by
+the caller (e.g. the Arbiter), which is responsible for collecting real
+metrics from the running platform.
 """
 
 import json
 import logging
-import os
 import random
 import uuid
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +40,7 @@ except ImportError:
 # Parameter bounds for validity
 _REWARD_WEIGHT_RANGE = (-5.0, 5.0)
 _TEMPERATURE_RANGE = (0.0, 1.5)
+_TOP_P_RANGE = (0.0, 1.0)
 _MAX_TOKENS_RANGE = (256, 4096)
 _COOLDOWN_RANGE = (1, 100)
 _CRITIQUE_THRESHOLD_RANGE = (0.0, 1.0)
@@ -55,6 +60,7 @@ class Genome:
         }
     )
     llm_temperature: float = 0.7
+    llm_top_p: float = 1.0
     llm_max_tokens: int = 1024
     action_cooldowns: Dict[str, int] = field(
         default_factory=lambda: {
@@ -80,6 +86,8 @@ class Genome:
     def is_valid(self) -> bool:
         """Check if all genome parameters are within valid ranges."""
         if not (_TEMPERATURE_RANGE[0] <= self.llm_temperature <= _TEMPERATURE_RANGE[1]):
+            return False
+        if not (_TOP_P_RANGE[0] <= self.llm_top_p <= _TOP_P_RANGE[1]):
             return False
         if not (_MAX_TOKENS_RANGE[0] <= self.llm_max_tokens <= _MAX_TOKENS_RANGE[1]):
             return False
@@ -169,6 +177,7 @@ class GeneticEvolutionEngine:
             genome = Genome(
                 reward_weights=_rand_reward_weights(),
                 llm_temperature=round(random.uniform(*_TEMPERATURE_RANGE), 3),
+                llm_top_p=round(random.uniform(*_TOP_P_RANGE), 3),
                 llm_max_tokens=random.randint(*_MAX_TOKENS_RANGE),
                 action_cooldowns=_rand_cooldowns(),
                 critique_threshold=round(random.uniform(*_CRITIQUE_THRESHOLD_RANGE), 3),
@@ -232,6 +241,8 @@ class GeneticEvolutionEngine:
         # Crossover scalar fields
         child1_temp = parent1.llm_temperature if random.random() < 0.5 else parent2.llm_temperature
         child2_temp = parent2.llm_temperature if random.random() < 0.5 else parent1.llm_temperature
+        child1_top_p = parent1.llm_top_p if random.random() < 0.5 else parent2.llm_top_p
+        child2_top_p = parent2.llm_top_p if random.random() < 0.5 else parent1.llm_top_p
         child1_tokens = parent1.llm_max_tokens if random.random() < 0.5 else parent2.llm_max_tokens
         child2_tokens = parent2.llm_max_tokens if random.random() < 0.5 else parent1.llm_max_tokens
         child1_crit = parent1.critique_threshold if random.random() < 0.5 else parent2.critique_threshold
@@ -240,6 +251,7 @@ class GeneticEvolutionEngine:
         child1 = Genome(
             reward_weights=child1_rw,
             llm_temperature=child1_temp,
+            llm_top_p=child1_top_p,
             llm_max_tokens=child1_tokens,
             action_cooldowns=child1_cd,
             critique_threshold=child1_crit,
@@ -248,6 +260,7 @@ class GeneticEvolutionEngine:
         child2 = Genome(
             reward_weights=child2_rw,
             llm_temperature=child2_temp,
+            llm_top_p=child2_top_p,
             llm_max_tokens=child2_tokens,
             action_cooldowns=child2_cd,
             critique_threshold=child2_crit,
@@ -276,6 +289,13 @@ class GeneticEvolutionEngine:
             )
             genome.llm_temperature = round(genome.llm_temperature, 4)
 
+        # Mutate llm_top_p
+        if random.random() < self.mutation_rate:
+            genome.llm_top_p = _clip(
+                genome.llm_top_p + random.gauss(0, 0.1), *_TOP_P_RANGE
+            )
+            genome.llm_top_p = round(genome.llm_top_p, 4)
+
         # Mutate llm_max_tokens
         if random.random() < self.mutation_rate:
             delta = random.choice([-1, 1]) * random.randint(1, 128)
@@ -298,6 +318,10 @@ class GeneticEvolutionEngine:
                 *_CRITIQUE_THRESHOLD_RANGE,
             )
             genome.critique_threshold = round(genome.critique_threshold, 4)
+
+        # Validate after mutation (defensive check)
+        if not genome.is_valid():
+            logger.warning(f"Genome {genome.genome_id} failed validation after mutation")
 
         return genome
 
@@ -372,6 +396,14 @@ class GeneticEvolutionEngine:
             config.reward_weights = dict(genome.reward_weights)
         if hasattr(config, "critique_threshold"):
             config.critique_threshold = genome.critique_threshold
+        if hasattr(config, "llm_temperature"):
+            config.llm_temperature = genome.llm_temperature
+        if hasattr(config, "llm_top_p"):
+            config.llm_top_p = genome.llm_top_p
+        if hasattr(config, "llm_max_tokens"):
+            config.llm_max_tokens = genome.llm_max_tokens
+        if hasattr(config, "action_cooldowns"):
+            config.action_cooldowns = dict(genome.action_cooldowns)
         logger.info(
             f"GeneticEvolutionEngine: Applied genome {genome.genome_id} to config. "
             f"fitness={genome.fitness:.4f}"

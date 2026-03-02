@@ -31,6 +31,7 @@ from self_fixing_engineer.evolution import (
     _MAX_TOKENS_RANGE,
     _REWARD_WEIGHT_RANGE,
     _TEMPERATURE_RANGE,
+    _TOP_P_RANGE,
 )
 
 
@@ -54,6 +55,17 @@ class TestGenome:
         """Default genome has valid parameter ranges."""
         genome = Genome()
         assert genome.is_valid(), "Default genome should be valid"
+
+    def test_genome_top_p_in_range(self):
+        """Genome llm_top_p is within [0.0, 1.0]."""
+        genome = Genome()
+        assert _TOP_P_RANGE[0] <= genome.llm_top_p <= _TOP_P_RANGE[1]
+
+    def test_genome_top_p_invalid(self):
+        """Genome with out-of-range llm_top_p fails is_valid()."""
+        genome = Genome()
+        genome.llm_top_p = 1.5
+        assert not genome.is_valid()
 
     def test_genome_temperature_in_range(self):
         """Genome temperature is within [0.0, 1.5]."""
@@ -269,17 +281,29 @@ class TestGeneticEvolutionEngine:
                 os.unlink(tmp_path)
 
     def test_apply_genome_to_config(self):
-        """apply_genome_to_config() updates config reward_weights."""
+        """apply_genome_to_config() updates all config fields from genome."""
         genome = Genome(
             reward_weights={"pass_rate": 3.0, "code_coverage": 2.0},
             critique_threshold=0.8,
+            llm_temperature=0.9,
+            llm_top_p=0.85,
+            llm_max_tokens=2048,
+            action_cooldowns={"run_linter": 7, "run_tests": 12, "run_formatter": 4, "apply_patch": 20, "noop": 2},
         )
 
         class MockConfig:
             reward_weights = {}
             critique_threshold = 0.5
+            llm_temperature = 0.7
+            llm_top_p = 1.0
+            llm_max_tokens = 1024
+            action_cooldowns = {}
 
         config = MockConfig()
         self.engine.apply_genome_to_config(genome, config)
         assert config.reward_weights["pass_rate"] == 3.0
         assert config.critique_threshold == 0.8
+        assert config.llm_temperature == 0.9
+        assert config.llm_top_p == 0.85
+        assert config.llm_max_tokens == 2048
+        assert config.action_cooldowns["run_linter"] == 7
