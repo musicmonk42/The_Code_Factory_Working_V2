@@ -219,13 +219,14 @@ async def test_start_retry_logic(set_env_redis_url):
 
     mock_redis_client.ping = AsyncMock(side_effect=ping_side_effect)
 
-    with patch(
-        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
-        return_value=mock_redis_client,
-    ):
-        await store.start()
-        assert mock_redis_client.ping.await_count == 3
-        assert store.redis is not None
+    with patch("asyncio.sleep", new=AsyncMock()):  # prevent real retry delays
+        with patch(
+            "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
+            return_value=mock_redis_client,
+        ):
+            await store.start()
+            assert mock_redis_client.ping.await_count == 3
+            assert store.redis is not None
 
 
 @pytest.mark.asyncio
@@ -237,17 +238,18 @@ async def test_start_fails_after_max_retries(set_env_redis_url, caplog):
     # Always fail
     mock_redis_client.ping = AsyncMock(side_effect=RedisError("Persistent failure"))
 
-    with patch(
-        "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
-        return_value=mock_redis_client,
-    ):
-        with pytest.raises(IdempotencyStoreError, match="Failed to connect to Redis"):
-            await store.start()
+    with patch("asyncio.sleep", new=AsyncMock()):  # prevent real retry delays
+        with patch(
+            "self_fixing_engineer.arbiter.arbiter_growth.idempotency.redis.from_url",
+            return_value=mock_redis_client,
+        ):
+            with pytest.raises(IdempotencyStoreError, match="Failed to connect to Redis"):
+                await store.start()
 
-        # Should have attempted 5 times (based on retry configuration)
-        assert mock_redis_client.ping.await_count == 5
-        assert "Failed to connect to IdempotencyStore Redis" in caplog.text
-        assert store.redis is None  # Should be reset on failure
+            # Should have attempted 5 times (based on retry configuration)
+            assert mock_redis_client.ping.await_count == 5
+            assert "Failed to connect to IdempotencyStore Redis" in caplog.text
+            assert store.redis is None  # Should be reset on failure
 
 
 @pytest.mark.asyncio
