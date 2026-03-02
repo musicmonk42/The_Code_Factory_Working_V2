@@ -423,9 +423,7 @@ class FeedbackManager:
                 and DB_CLIENTS_AVAILABLE
                 and SQLLITE_AVAILABLE
             ):
-                self.db_client = ConcreteSQLiteClient(
-                    db_file=db_url.replace("sqlite:///", "")
-                )
+                self.db_client = SQLiteClient(db_file=db_url.replace("sqlite:///", ""))
                 logger.info(
                     "FeedbackManager: Using SQLiteClient for database interactions."
                 )
