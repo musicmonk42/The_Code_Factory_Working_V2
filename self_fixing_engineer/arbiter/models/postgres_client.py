@@ -502,7 +502,13 @@ class PostgresClient:
         },
     }
 
-    def __init__(self, db_url: Optional[str] = None):
+    def __init__(
+        self,
+        db_url: Optional[str] = None,
+        pool_size: Optional[int] = None,
+        max_overflow: Optional[int] = None,
+        **pool_kwargs,
+    ):
         """Initializes the PostgresClient."""
         self.db_url = db_url or os.getenv("DATABASE_URL")
         if not self.db_url:
@@ -512,6 +518,9 @@ class PostgresClient:
 
         self._pool: Optional[Pool] = None
         self.db_type = "postgresql"
+        self._pool_size = pool_size
+        self._pool_max_overflow = max_overflow
+        self._pool_kwargs = pool_kwargs
         self._connect_lock = asyncio.Lock()
         self._is_closed = True
         self._health_check_task: Optional[asyncio.Task] = None
@@ -613,9 +622,46 @@ class PostgresClient:
                 logger.info("PostgreSQL client already connected.")
                 return
 
+            min_size = int(self._pool_kwargs.get("min_size", os.getenv("PG_POOL_MIN_SIZE", "1")))
+            max_size = int(self._pool_kwargs.get("max_size", os.getenv("PG_POOL_MAX_SIZE", "10")))
+            if self._pool_size is not None:
+                min_size = max_size = int(self._pool_size)
+            if self._pool_max_overflow is not None:
+                max_size = int(max_size) + int(self._pool_max_overflow)
+            max_connections = int(os.getenv("PG_MAX_CONNECTIONS", "100"))
+            if max_size > max_connections:
+                logger.warning(
+                    f"PG_POOL_MAX_SIZE ({max_size}) exceeds PG_MAX_CONNECTIONS ({max_connections}). Clamping."
+                )
+                max_size = max_connections
+            if min_size > max_size:
+                logger.warning(
+                    f"PG_POOL_MIN_SIZE ({min_size}) is greater than PG_POOL_MAX_SIZE ({max_size}). Clamping min_size to max_size."
+                )
+                min_size = max_size
+            timeout = float(self._pool_kwargs.get("timeout", os.getenv("PG_POOL_TIMEOUT", "30")))
+            command_timeout = float(
+                self._pool_kwargs.get(
+                    "command_timeout",
+                    os.getenv("DB_COMMAND_TIMEOUT", os.getenv("PG_COMMAND_TIMEOUT", "60")),
+                )
+            )
+            extra_pool_kwargs = {
+                k: v
+                for k, v in self._pool_kwargs.items()
+                if k not in {"min_size", "max_size", "timeout", "command_timeout"}
+            }
+
             if not ASYNCPG_AVAILABLE:
                 if self._pool is None:
-                    self._pool = await asyncpg.create_pool(self.db_url)
+                    self._pool = await asyncpg.create_pool(
+                        self.db_url,
+                        min_size=min_size,
+                        max_size=max_size,
+                        timeout=timeout,
+                        command_timeout=command_timeout,
+                        **extra_pool_kwargs,
+                    )
                 self._is_closed = False
                 logger.warning(
                     "asyncpg not available. PostgresClient running in no-op mode."
@@ -632,21 +678,6 @@ class PostgresClient:
                     status="attempt",
                 ).inc()
                 try:
-                    min_size = int(os.getenv("PG_POOL_MIN_SIZE", "1"))
-                    max_size = int(os.getenv("PG_POOL_MAX_SIZE", "10"))
-                    max_connections = int(os.getenv("PG_MAX_CONNECTIONS", "100"))
-                    if max_size > max_connections:
-                        logger.warning(
-                            f"PG_POOL_MAX_SIZE ({max_size}) exceeds PG_MAX_CONNECTIONS ({max_connections}). Clamping."
-                        )
-                        max_size = max_connections
-                    if min_size > max_size:
-                        logger.warning(
-                            f"PG_POOL_MIN_SIZE ({min_size}) is greater than PG_POOL_MAX_SIZE ({max_size}). Clamping min_size to max_size."
-                        )
-                        min_size = max_size
-                    timeout = float(os.getenv("PG_POOL_TIMEOUT", "30"))
-                    command_timeout = float(os.getenv("DB_COMMAND_TIMEOUT", os.getenv("PG_COMMAND_TIMEOUT", "60")))
                     ssl_mode = os.getenv(
                         "PG_SSL_MODE",
                         "require" if os.getenv("ENV", "dev") == "prod" else "prefer",
@@ -695,6 +726,7 @@ class PostgresClient:
                         command_timeout=command_timeout,
                         ssl=ssl_context,
                         init=self._init_conn,
+                        **extra_pool_kwargs,
                     )
 
                     async with self._pool.acquire() as conn:
