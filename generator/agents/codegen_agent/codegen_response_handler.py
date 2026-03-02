@@ -1485,7 +1485,7 @@ def reconcile_schema_model_fields(files: Dict[str, str]) -> Dict[str, str]:
             # Build stub column lines with proper type names
             stub_lines: List[str] = [
                 f"    {col} = Column({sa_type})"
-                f"  # stub added by reconcile_schema_model_fields\n"
+                + "  # stub added by reconcile_schema_model_fields\n"
                 for col, sa_type in sorted(missing.items())
             ]
             _NEEDED_SA_TYPES.update(missing.values())
@@ -1508,10 +1508,14 @@ def reconcile_schema_model_fields(files: Dict[str, str]) -> Dict[str, str]:
                         for t in stmt.targets
                     )
                 ):
-                    # Insert immediately after the __tablename__ assignment
-                    # ast.Assign.end_lineno is the last line of the statement (1-based)
+                    # Insert immediately after the __tablename__ assignment.
+                    # ast.Assign.end_lineno is 1-based, so end_ln=5 means the
+                    # assignment occupies the line stored in lines[4].  We want
+                    # to insert after that line, i.e. at lines[5].
+                    # The two adjustments cancel: (1-based → 0-based) -1,
+                    # then (insert AFTER the line) +1, net effect = end_ln as-is.
                     end_ln = getattr(stmt, "end_lineno", stmt.lineno)
-                    insert_idx = end_ln  # 0-based offset = 1-based lineno - 1 + 1
+                    insert_idx = end_ln  # lines[end_ln] is the slot right after end_lineno
                     break
 
             lines[insert_idx:insert_idx] = stub_lines

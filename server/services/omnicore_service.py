@@ -7599,13 +7599,16 @@ class OmniCoreService:
                                         _pre_wire_extractor = _ASTExtractor()
                                         _found_pre: set = set()
                                         _gen_dir_pre = Path(output_path_for_validation)
-                                        # Matches app/routers/<file>.py, app/routes/<file>.py,
-                                        # and the top-level app/routes.py (health probes).
-                                        # Use a compiled pattern to avoid substring false-positives
-                                        # (e.g. "create_routes_helper.py" must not match).
+                                        # Match only genuine router/routes files; avoid false-positives
+                                        # on names like "create_routes_helper.py".
+                                        # Covered paths (forward-slash normalised):
+                                        #   app/routers/<file>.py  — plural directory (most common)
+                                        #   app/router/<file>.py   — singular directory (LLM variant)
+                                        #   app/routes/<file>.py   — plural directory
+                                        #   app/routes.py          — top-level health-probe file
                                         import re as _re_pw
                                         _router_file_pat = _re_pw.compile(
-                                            r'^app[/\\](?:routers?[/\\]|routes?\.py$|routes?[/\\])'
+                                            r'^app/(?:routers?/|routes/|routes\.py$)'
                                         )
                                         for _py_file in _gen_dir_pre.rglob("*.py"):
                                             _rel = str(_py_file.relative_to(_gen_dir_pre))
