@@ -1378,6 +1378,9 @@ def _resolve_doc_framework_names() -> List[str]:
         Keys of ``runner_core.DOC_FRAMEWORKS``, or :data:`_DOC_FRAMEWORKS_DEFAULT`
         when ``runner_core`` is not yet available.
     """
+    # Check both possible module keys: conftest.py adds ``generator/`` to
+    # sys.path, so the module may be registered as bare ``runner.runner_core``
+    # as well as the fully-qualified ``generator.runner.runner_core``.
     for mod_key in ("generator.runner.runner_core", "runner.runner_core"):
         mod = sys.modules.get(mod_key)
         if mod is not None:
