@@ -1333,24 +1333,16 @@ class MetricsExporter:
         logger.info("MetricsExporter shutdown complete.")
 
 
-# Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally.
-try:
-    # Attempt to import from runner.runner_core first, then runner.core
-    try:
-        # --- FIX: Use relative import ---
-        from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
-    except ImportError:
-        # --- FIX: Use relative import ---
-        from .core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
-    DOC_FRAMEWORKS_FOR_ALERTS: List[str] = list(CORE_DOC_FRAMEWORKS.keys())
-except ImportError:
-    DOC_FRAMEWORKS_FOR_ALERTS: List[str] = [
-        "sphinx",
-        "mkdocs",
-        "javadoc",
-        "jsdoc",
-        "go_doc",
-    ]
+# DOC_FRAMEWORKS_FOR_ALERTS is populated lazily inside alert_monitor() to avoid
+# a circular import with runner_core (runner_core imports runner_metrics at module
+# level, so runner_metrics must not import runner_core at module level).
+_DOC_FRAMEWORKS_DEFAULT: List[str] = [
+    "sphinx",
+    "mkdocs",
+    "javadoc",
+    "jsdoc",
+    "go_doc",
+]
 
 
 async def alert_monitor(config: "RunnerConfig"):
@@ -1491,7 +1483,14 @@ async def alert_monitor(config: "RunnerConfig"):
                 f"High mutation survival rate: {mutation_survival_rate:.2f} (>{current_thresholds['mutation_survival_max']}). Tests might be weak."
             )
 
-        for doc_fw in DOC_FRAMEWORKS_FOR_ALERTS:
+        # Lazy import to avoid circular dependency: runner_core imports runner_metrics at
+        # module level, so DOC_FRAMEWORKS must be fetched at call time, not import time.
+        try:
+            from .runner_core import DOC_FRAMEWORKS as _DOC_FRAMEWORKS
+            _doc_frameworks_for_alerts: List[str] = list(_DOC_FRAMEWORKS.keys())
+        except ImportError:
+            _doc_frameworks_for_alerts = _DOC_FRAMEWORKS_DEFAULT
+        for doc_fw in _doc_frameworks_for_alerts:
             doc_validation_statuses = metrics.get("runner_doc_validation_status", {})
             doc_status = doc_validation_statuses.get(
                 f"doc_framework_name_{doc_fw}_instance_id_{instance_id}", 1.0
@@ -1594,26 +1593,6 @@ async def alert_monitor(config: "RunnerConfig"):
         except asyncio.CancelledError:
             logger.info("Alert monitor received shutdown signal.")
             break
-
-
-# Assuming DOC_FRAMEWORKS_FOR_ALERTS is managed centrally
-try:
-    # Prefer generator.runner.runner_core for correct module resolution
-    try:
-        # --- FIX: Use relative import ---
-        from .runner_core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
-    except ImportError:
-        # --- FIX: Use relative import ---
-        from .core import DOC_FRAMEWORKS as CORE_DOC_FRAMEWORKS
-    DOC_FRAMEWORKS_FOR_ALERTS: List[str] = list(CORE_DOC_FRAMEWORKS.keys())
-except ImportError:
-    DOC_FRAMEWORKS_FOR_ALERTS: List[str] = [
-        "sphinx",
-        "mkdocs",
-        "javadoc",
-        "jsdoc",
-        "go_doc",
-    ]
 
 
 def get_metrics_dict() -> Dict[str, Any]:

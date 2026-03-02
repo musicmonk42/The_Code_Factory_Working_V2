@@ -18,7 +18,10 @@ from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple
 
-import aiohttp
+try:
+    import aiohttp
+except ImportError:
+    aiohttp = None  # type: ignore[assignment]
 
 # Third-party module imports
 try:
@@ -853,7 +856,7 @@ class TamperEvidentLogger:
                 self._metrics["log_latency_seconds"].observe(time.time() - start_time)
 
         # Add omnicore_engine publishing (skip in test environment)
-        if omnicore_url and not os.getenv("PYTEST_CURRENT_TEST"):
+        if omnicore_url and aiohttp is not None and not os.getenv("PYTEST_CURRENT_TEST"):
             async with aiohttp.ClientSession() as session:
                 try:
                     await session.post(f"{omnicore_url}/audit", json=log_entry)
