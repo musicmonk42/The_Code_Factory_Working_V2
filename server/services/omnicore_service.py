@@ -9397,18 +9397,40 @@ class OmniCoreService:
                     except Exception as e:
                         logger.warning(f"[PIPELINE] Failed to save validation report: {e}")
                     
-                    # Log validation results
+                    # Fix 8: If the cold-start import test failed (hard error), mark
+                    # the job as failed so the pipeline doesn't report broken code as
+                    # "completed".  Third-party dep absence (ModuleNotFoundError) stays
+                    # as a warning and does NOT trigger this path.
                     if not validation_report.is_valid():
-                        logger.warning(
-                            f"[PIPELINE] Job {job_id} validation FAILED with {len(validation_report.errors)} errors",
-                            extra={
-                                "job_id": job_id,
-                                "errors": validation_report.errors,
-                                "checks_failed": validation_report.checks_failed,
-                            }
+                        _cold_start_hard_failed = any(
+                            "Cold-start Import Test" in e
+                            for e in validation_report.errors
                         )
-                        # Note: We don't fail the job, but log the validation issues
-                        # The validation report is available for review
+                        if _cold_start_hard_failed:
+                            logger.error(
+                                f"[PIPELINE] Job {job_id} cold-start import HARD-FAILED — "
+                                "updating job status to 'failed'",
+                                extra={"job_id": job_id, "errors": validation_report.errors},
+                            )
+                            await self._finalize_failed_job(
+                                job_id,
+                                error=(
+                                    "Cold-start import test failed: app cannot start. "
+                                    + "; ".join(
+                                        e for e in validation_report.errors
+                                        if "Cold-start Import Test" in e
+                                    )
+                                ),
+                            )
+                        else:
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} validation FAILED with {len(validation_report.errors)} errors",
+                                extra={
+                                    "job_id": job_id,
+                                    "errors": validation_report.errors,
+                                    "checks_failed": validation_report.checks_failed,
+                                }
+                            )
                     else:
                         logger.info(
                             f"[PIPELINE] Job {job_id} validation PASSED",

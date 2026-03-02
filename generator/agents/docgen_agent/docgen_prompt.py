@@ -373,18 +373,48 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             optimized_text = optimized_text[: max_tokens * 4]  # Approximate
 
         # Reject optimization if the result is below an absolute minimum length.
-        # Instead of returning the original oversized prompt (which the LLM will
-        # silently truncate from the end), apply a hard token-budget truncation
-        # with a clear marker so the LLM knows content was omitted.
+        # Instead of immediately falling back to hard truncation, retry with a
+        # higher-quality model (gpt-4o-mini) which produces better summaries.
+        # Only fall back to hard truncation if the retry also fails.
         min_absolute_length = int(os.getenv("DOCGEN_PROMPT_MIN_LENGTH", "800"))
         if len(optimized_text) < min_absolute_length and len(prompt_text) >= min_absolute_length:
             logger.warning(
-                "Prompt optimization result too short: %d chars (minimum: %d). "
-                "Applying hard token-budget truncation instead of returning "
-                "original oversized prompt.",
-                len(optimized_text),
-                min_absolute_length,
+                "Prompt optimization too short with gpt-3.5-turbo, retrying with gpt-4o-mini"
             )
+            try:
+                _retry_prompt = (
+                    f"Summarize the following entire prompt context very concisely "
+                    f"(max 500 words). Retain all instructions, but heavily summarize "
+                    f"file contents:\n\n```\n{prompt_text[:8000]}\n```"
+                )
+                _retry_start = time.time()
+                _retry_response = await call_llm_api(
+                    prompt=_retry_prompt, model="gpt-4o-mini"
+                )
+                _retry_text = _retry_response["content"]
+                LLM_CALLS_TOTAL.labels(
+                    provider="docgen_prompt",
+                    model="gpt-4o-mini",
+                ).inc()
+                LLM_LATENCY_SECONDS.labels(
+                    provider="docgen_prompt",
+                    model="gpt-4o-mini",
+                ).observe(time.time() - _retry_start)
+                if len(_retry_text) >= min_absolute_length:
+                    return _retry_text
+                logger.warning(
+                    "Prompt optimization result too short: %d chars (minimum: %d). "
+                    "Applying hard token-budget truncation instead of returning "
+                    "original oversized prompt.",
+                    len(_retry_text),
+                    min_absolute_length,
+                )
+                optimized_text = _retry_text
+            except Exception as _retry_err:
+                logger.warning(
+                    "gpt-4o-mini retry also failed: %s. Falling back to hard truncation.",
+                    _retry_err,
+                )
             # Hard truncation at the token budget boundary (~4 chars/token).
             char_budget = max_tokens * 4
             truncated = prompt_text[:char_budget]
