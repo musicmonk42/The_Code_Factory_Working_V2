@@ -186,6 +186,38 @@ def validate_generated_code(
         except Exception as e:
             report.add_error("Spec Block Compliance", str(e))
     
+    # Cold-start import test: attempt to import app.main to catch runtime import errors
+    # such as missing symbols, async driver mismatches, or circular imports.
+    # This is a WARNING (not an error) because third-party deps may not be installed.
+    import subprocess
+    report.checks_run.append("Cold-start Import Test")
+    try:
+        _import_result = subprocess.run(
+            [sys.executable, "-c", "import app.main"],
+            cwd=str(output_dir),
+            timeout=30,
+            capture_output=True,
+            text=True,
+        )
+        if _import_result.returncode == 0:
+            report.mark_passed("Cold-start Import Test")
+            logger.debug("✅ Cold-start import test passed")
+        else:
+            _stderr_snippet = _import_result.stderr[:500] if _import_result.stderr else "(no stderr)"
+            report.add_warning(
+                "Cold-start Import Test",
+                f"import app.main exited with code {_import_result.returncode}: {_stderr_snippet}",
+            )
+            logger.warning(
+                f"⚠️  Cold-start import test failed (exit {_import_result.returncode}): {_stderr_snippet}"
+            )
+    except subprocess.TimeoutExpired:
+        report.add_warning("Cold-start Import Test", "import app.main timed out after 30s")
+        logger.warning("⚠️  Cold-start import test timed out")
+    except Exception as _imp_err:
+        report.add_warning("Cold-start Import Test", f"Could not run import test: {_imp_err}")
+        logger.warning(f"⚠️  Cold-start import test error: {_imp_err}")
+    
     logger.info(
         f"Validation complete: {len(report.checks_passed)}/{len(report.checks_run)} passed"
     )

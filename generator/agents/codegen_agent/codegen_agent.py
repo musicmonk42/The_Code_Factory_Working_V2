@@ -572,13 +572,19 @@ _STUB_RETRY_PLAIN_PROMPT_SUFFIX: str = (
 def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     """Validate that generated files form a coherent, runnable application.
 
-    Performs two categories of checks:
+    Performs four categories of checks:
 
     **Router-wiring check**
         Scans every ``app/routers/<name>.py`` for an ``APIRouter`` instance
         variable.  For each router found, checks that ``app/main.py`` (a)
         imports the variable and (b) calls ``app.include_router(<var>)``.
         Routers that fail either condition are reported as *unwired*.
+
+    **Duplicate route prefix detection** (section 1.6)
+        Checks whether any route decorator path in a router file starts with
+        the same prefix that ``main.py`` already applies via
+        ``include_router(..., prefix=...)``.  Such double-prefixed routes
+        produce unreachable paths at runtime.
 
     **Placeholder-service check**
         Scans every ``app/services/<name>.py`` and counts function/method
@@ -587,7 +593,13 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
         ``raise NotImplementedError``, or a ``# Placeholder`` / ``# TODO``
         comment.  Service files where the ratio of stubs to total functions
         exceeds :data:`_PLACEHOLDER_SERVICE_THRESHOLD_PCT` percent are
-        reported.
+        reported.  An AST-based fallback also catches functions whose only
+        body is an optional docstring followed by ``return None``.
+
+    **Cross-file symbol resolution** (section 3)
+        Scans all Python files for ``from app.X import Y1, Y2, ...``
+        statements and verifies that each imported symbol is actually defined
+        in the target module file.
 
     This function is intentionally pure (no I/O, no LLM calls) so it can
     be called safely as a fast post-processing step.
@@ -607,6 +619,16 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
         ``"placeholder_services"`` : List[Tuple[str, float]]
             ``(path, pct)`` pairs for service files with a stub ratio above
             the threshold.  ``pct`` is rounded to one decimal place.
+
+        ``"duplicate_prefixes"`` : List[Tuple[str, str, str]]
+            ``(router_file, mount_prefix, decorator_path)`` triples where a
+            route decorator path starts with the prefix already applied by
+            ``main.py``'s ``include_router`` call.
+
+        ``"unresolved_imports"`` : List[Tuple[str, str, List[str]]]
+            ``(importing_file, target_module, [missing_symbols])`` triples
+            where one or more imported symbols are not defined in the target
+            module file.
 
     Examples:
         >>> files = {
@@ -671,6 +693,34 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
         )
 
     # ------------------------------------------------------------------ #
+    # 1.6  Duplicate route prefix detection                               #
+    # ------------------------------------------------------------------ #
+    # Detect when a router file's decorator paths start with the same
+    # prefix that main.py already applies via include_router(..., prefix=).
+    # At runtime this doubles the prefix (e.g. /api/v1/items/api/v1/items).
+    _route_decorator_re = re.compile(
+        r'@\w+\.(?:get|post|put|patch|delete|head|options)\s*\(\s*["\']([^"\']+)["\']',
+        re.IGNORECASE,
+    )
+    _include_router_prefix_re = re.compile(
+        r'include_router\s*\(\s*(\w+)\s*[^)]*prefix\s*=\s*["\']([^"\']+)["\']'
+    )
+    duplicate_prefixes: List[Tuple[str, str, str]] = []
+    # Build mapping: router_var -> mount_prefix from main.py
+    _mount_prefix_map: Dict[str, str] = {}
+    for _m in _include_router_prefix_re.finditer(main_content):
+        _mount_prefix_map[_m.group(1)] = _m.group(2)
+    for path, var in router_vars.items():
+        _mount_prefix = _mount_prefix_map.get(var, "")
+        if not _mount_prefix:
+            continue
+        router_content = normalised.get(path, "")
+        for _dec_m in _route_decorator_re.finditer(router_content):
+            _dec_path = _dec_m.group(1)
+            if _dec_path.startswith(_mount_prefix):
+                duplicate_prefixes.append((path, _mount_prefix, _dec_path))
+
+    # ------------------------------------------------------------------ #
     # 2. Placeholder-service check                                        #
     # ------------------------------------------------------------------ #
     # Patterns that strongly indicate a stub function body:
@@ -690,6 +740,55 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     # Match any function definition (sync or async) at any indentation level
     _func_def_re = re.compile(r'^\s*(?:async\s+)?def\s+\w+\s*\(', re.MULTILINE)
 
+    def _is_stub_function_ast(node: ast.AST) -> bool:
+        """Return True if an AST FunctionDef/AsyncFunctionDef is a stub body.
+
+        A stub body is defined as: an optional docstring (``Expr(Constant(str))``)
+        followed by a single ``return None`` / ``return []`` / ``return {}`` /
+        ``return ()`` / ``pass`` / ``raise NotImplementedError`` statement.
+        """
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            return False
+        body = node.body
+        if not body:
+            return True
+        # Skip optional leading docstring
+        start = 0
+        if (
+            len(body) >= 1
+            and isinstance(body[0], ast.Expr)
+            and isinstance(getattr(body[0], "value", None), ast.Constant)
+            and isinstance(body[0].value.value, str)
+        ):
+            start = 1
+        effective = body[start:]
+        if not effective:
+            return True
+        if len(effective) == 1:
+            stmt = effective[0]
+            # ``return None`` / ``return`` / ``return []`` / ``return {}`` / ``return ()``
+            if isinstance(stmt, ast.Return):
+                val = stmt.value
+                if val is None:
+                    return True
+                if isinstance(val, ast.Constant) and val.value is None:
+                    return True
+                if isinstance(val, (ast.List, ast.Dict, ast.Tuple)) and not getattr(val, "elts", [None]) and not getattr(val, "keys", [None]):
+                    return True
+            # ``pass``
+            if isinstance(stmt, ast.Pass):
+                return True
+            # ``raise NotImplementedError``
+            if isinstance(stmt, ast.Raise) and stmt.exc is not None:
+                exc = stmt.exc
+                name = (
+                    exc.id if isinstance(exc, ast.Name)
+                    else (exc.func.id if isinstance(exc, ast.Call) and isinstance(exc.func, ast.Name) else None)
+                )
+                if name == "NotImplementedError":
+                    return True
+        return False
+
     placeholder_services: List[Tuple[str, float]] = []
     for path, content in normalised.items():
         if not ("app/services/" in path and path.endswith(".py")):
@@ -699,12 +798,84 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
             continue
         stub_hits = _stub_body_re.findall(content)
         pct = len(stub_hits) / len(funcs) * 100.0
+        # AST-based fallback: count functions whose body is purely stub-like
+        # (optional docstring + return None). This catches cases where the regex
+        # under-counts because indentation or spacing varies.
+        if pct <= _PLACEHOLDER_SERVICE_THRESHOLD_PCT:
+            try:
+                _tree = ast.parse(content)
+                _ast_stub_count = sum(
+                    1 for _node in ast.walk(_tree)
+                    if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                    and _is_stub_function_ast(_node)
+                )
+                _ast_func_count = sum(
+                    1 for _node in ast.walk(_tree)
+                    if isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef))
+                )
+                if _ast_func_count > 0:
+                    _ast_pct = _ast_stub_count / _ast_func_count * 100.0
+                    if _ast_pct > pct:
+                        pct = _ast_pct
+            except SyntaxError:
+                pass
         if pct > _PLACEHOLDER_SERVICE_THRESHOLD_PCT:
             placeholder_services.append((path, round(pct, 1)))
+
+    # ------------------------------------------------------------------ #
+    # 3. Cross-file symbol resolution check                               #
+    # ------------------------------------------------------------------ #
+    # Scan all Python files for ``from app.X import Y1, Y2, ...`` and verify
+    # that each imported symbol is actually defined in the target module.
+    _from_app_import_re = re.compile(
+        r'^[ \t]*from\s+(app(?:\.[a-zA-Z_]\w*)+)\s+import\s+(.+)',
+        re.MULTILINE,
+    )
+    unresolved_imports: List[Tuple[str, str, List[str]]] = []
+    for path, content in normalised.items():
+        if not path.endswith(".py"):
+            continue
+        for _imp_m in _from_app_import_re.finditer(content):
+            _module_str = _imp_m.group(1).strip()
+            _imports_raw = _imp_m.group(2).strip().strip("()")
+            # Parse imported symbol names (handle ``A as a``, multi-token)
+            _symbols: List[str] = []
+            for _part in _imports_raw.split(","):
+                _name = _part.split(" as ")[0].strip()
+                if _name and _name != "*" and _name.isidentifier():
+                    _symbols.append(_name)
+            if not _symbols:
+                continue
+            # Resolve to a module file path; skip if the target isn't in our
+            # generated files (it may be a third-party or stdlib package).
+            _module_path = _module_str.replace(".", "/") + ".py"
+            _target_content = normalised.get(_module_path, "")
+            if not _target_content:
+                # Also try package __init__.py form
+                _init_path = _module_str.replace(".", "/") + "/__init__.py"
+                _target_content = normalised.get(_init_path, "")
+            if not _target_content:
+                continue
+            # Check each symbol against the target module content
+            _missing: List[str] = []
+            for _sym in _symbols:
+                _sym_re = re.escape(_sym)
+                _defined = (
+                    re.search(rf'^class\s+{_sym_re}\s*[\(:]', _target_content, re.MULTILINE)
+                    or re.search(rf'^(?:async\s+)?def\s+{_sym_re}\s*\(', _target_content, re.MULTILINE)
+                    or re.search(rf'^{_sym_re}\s*=', _target_content, re.MULTILINE)
+                    or re.search(rf'["\'{_sym_re}["\']]', _target_content)
+                )
+                if not _defined:
+                    _missing.append(_sym)
+            if _missing:
+                unresolved_imports.append((path, _module_str, _missing))
 
     return {
         "unwired_routers": sorted(unwired),
         "placeholder_services": sorted(placeholder_services, key=lambda t: t[0]),
+        "duplicate_prefixes": duplicate_prefixes,
+        "unresolved_imports": unresolved_imports,
     }
 
 
@@ -1955,6 +2126,42 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     # and disambiguate models/ vs schemas/ name collisions in router files.
     updated = fix_response_model_type_mismatches(updated)
     updated = disambiguate_model_schema_imports(updated)
+
+    # ------------------------------------------------------------------ #
+    # 8. Fix duplicate route prefixes detected by _validate_wiring        #
+    # ------------------------------------------------------------------ #
+    # When a router decorator path starts with the same prefix that main.py
+    # applies via include_router(..., prefix=...), strip the prefix from the
+    # decorator so the runtime path is correct.
+    try:
+        _post_wiring = _validate_wiring(updated)
+        for _dup_file, _mount_prefix, _decorator_path in _post_wiring.get("duplicate_prefixes", []):
+            if _dup_file not in updated:
+                continue
+            _stripped_path = _decorator_path[len(_mount_prefix):]
+            if not _stripped_path.startswith("/"):
+                _stripped_path = "/" + _stripped_path
+            _dup_content = updated[_dup_file]
+            _dup_content = _dup_content.replace(
+                f'"{_decorator_path}"', f'"{_stripped_path}"'
+            ).replace(
+                f"'{_decorator_path}'", f"'{_stripped_path}'"
+            )
+            if _dup_content != updated[_dup_file]:
+                updated[_dup_file] = _dup_content
+                logger.info(
+                    "[CODEGEN] _reconcile_app_wiring: fixed duplicate prefix '%s' in %s:"
+                    " '%s' → '%s'",
+                    _mount_prefix,
+                    _dup_file,
+                    _decorator_path,
+                    _stripped_path,
+                )
+    except Exception as _dup_err:
+        logger.warning(
+            "[CODEGEN] _reconcile_app_wiring: duplicate-prefix fix failed (non-fatal): %s",
+            _dup_err,
+        )
 
     return updated
 
@@ -3895,6 +4102,22 @@ if PLUGIN_AVAILABLE:
                                         "— _reconcile_app_wiring will fix these",
                                         _wiring["unwired_routers"],
                                     )
+                                for _imp_file, _imp_mod, _imp_missing in _wiring.get("unresolved_imports", []):
+                                    logger.warning(
+                                        "[CODEGEN] Unresolved imports in %s: symbols %s not found in %s "
+                                        "— stub repair will address these",
+                                        _imp_file,
+                                        _imp_missing,
+                                        _imp_mod,
+                                    )
+                                for _dup_file, _dup_prefix, _dup_path in _wiring.get("duplicate_prefixes", []):
+                                    logger.warning(
+                                        "[CODEGEN] Duplicate route prefix in %s: decorator path '%s' "
+                                        "starts with mount prefix '%s' — _reconcile_app_wiring will fix this",
+                                        _dup_file,
+                                        _dup_path,
+                                        _dup_prefix,
+                                    )
                             except Exception as _val_err:
                                 logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")
                             # ------------------------------------------------------------------
@@ -4444,6 +4667,22 @@ else:
                                         "[CODEGEN] Unwired routers detected before reconciliation: %s "
                                         "— _reconcile_app_wiring will fix these",
                                         _wiring["unwired_routers"],
+                                    )
+                                for _imp_file, _imp_mod, _imp_missing in _wiring.get("unresolved_imports", []):
+                                    logger.warning(
+                                        "[CODEGEN] Unresolved imports in %s: symbols %s not found in %s "
+                                        "— stub repair will address these",
+                                        _imp_file,
+                                        _imp_missing,
+                                        _imp_mod,
+                                    )
+                                for _dup_file, _dup_prefix, _dup_path in _wiring.get("duplicate_prefixes", []):
+                                    logger.warning(
+                                        "[CODEGEN] Duplicate route prefix in %s: decorator path '%s' "
+                                        "starts with mount prefix '%s' — _reconcile_app_wiring will fix this",
+                                        _dup_file,
+                                        _dup_path,
+                                        _dup_prefix,
                                     )
                             except Exception as _val_err:
                                 logger.warning(f"[CODEGEN] Wiring validation failed (non-fatal): {_val_err}")

@@ -1714,7 +1714,20 @@ def detect_language(code_files: Union[Dict[str, str], str]) -> str:
 
     # Filter out strings that don't look like real file extensions
     # (e.g., ".json()" from response.json() or numeric-heavy strings from JSON payloads)
-    valid_extensions = {ext for ext in file_extensions if re.match(r'^\.[a-zA-Z0-9]{1,10}$', ext)}
+    # Also defensively reject any extension containing JSON-like characters ({ } ").
+    valid_extensions = {
+        ext for ext in file_extensions
+        if re.match(r'^\.[a-zA-Z0-9]{1,10}$', ext)
+        and not any(c in ext for c in ('{', '}', '"'))
+    }
+    invalid_extensions = file_extensions - valid_extensions
+    if invalid_extensions:
+        logger.warning(
+            "detect_language: filtered out %d invalid extension(s) that appear to contain "
+            "non-extension data (e.g. JSON payload leakage): %s",
+            len(invalid_extensions),
+            sorted(str(e) for e in invalid_extensions),
+        )
     file_extensions = valid_extensions if valid_extensions else file_extensions
 
     # Check for common language extensions

@@ -41,7 +41,7 @@ import subprocess
 import sys
 import tempfile
 from functools import lru_cache
-from typing import Any, Dict, List, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 try:
     import yaml
@@ -5160,6 +5160,68 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             )
         else:
             target_module_path = module_path
+
+        # Defect 9: If the target .py file doesn't exist but a package __init__.py
+        # does (e.g. "app/schemas.py" absent but "app/schemas/__init__.py" present),
+        # redirect to the __init__.py and add re-exports from submodules for any
+        # symbols not already defined there.
+        if target_module_path not in code_files:
+            _pkg_dir = target_module_path.removesuffix(".py")
+            _init_path = _pkg_dir + "/__init__.py"
+            if _init_path in code_files:
+                _init_content = code_files[_init_path]
+                _missing_in_init: List[str] = []
+                _reexport_lines: List[str] = []
+                for _sym in sorted(symbols):
+                    # Check if already defined/imported in __init__.py
+                    _sym_re = re.escape(_sym)
+                    _already_in_init = bool(
+                        re.search(rf'^class\s+{_sym_re}\s*[\(:]', _init_content, re.MULTILINE)
+                        or re.search(rf'^(?:async\s+)?def\s+{_sym_re}\s*\(', _init_content, re.MULTILINE)
+                        or re.search(rf'^{_sym_re}\s*=', _init_content, re.MULTILINE)
+                        or re.search(rf'\bimport\s+[^\n]*\b{_sym_re}\b', _init_content)
+                    )
+                    if _already_in_init:
+                        continue
+                    # Search submodules under the package directory
+                    _found_in: Optional[str] = None
+                    for _sub_path, _sub_content in code_files.items():
+                        if not _sub_path.startswith(_pkg_dir + "/"):
+                            continue
+                        if _sub_path == _init_path:
+                            continue
+                        if not _sub_path.endswith(".py"):
+                            continue
+                        _sub_sym_re = re.escape(_sym)
+                        if (
+                            re.search(rf'^class\s+{_sub_sym_re}\s*[\(:]', _sub_content, re.MULTILINE)
+                            or re.search(rf'^(?:async\s+)?def\s+{_sub_sym_re}\s*\(', _sub_content, re.MULTILINE)
+                            or re.search(rf'^{_sub_sym_re}\s*=', _sub_content, re.MULTILINE)
+                        ):
+                            # Convert file path to module dotted name for the import
+                            _sub_mod = _sub_path.removesuffix(".py").replace("/", ".")
+                            _found_in = _sub_mod
+                            break
+                    if _found_in:
+                        _reexport_lines.append(f"from {_found_in} import {_sym}\n")
+                    else:
+                        _missing_in_init.append(_sym)
+                if _reexport_lines:
+                    code_files[_init_path] = _init_content + "\n# Re-exports added by module-stub pass\n" + "".join(_reexport_lines)
+                    stub_files_created.add(_init_path)
+                    logger.info(
+                        "ensure_local_module_stubs: added %d re-export(s) to %s: %s",
+                        len(_reexport_lines),
+                        _init_path,
+                        [ln.strip() for ln in _reexport_lines],
+                    )
+                # If some symbols still aren't accounted for, fall through to stub
+                # generation targeting the __init__.py directly.
+                if _missing_in_init:
+                    target_module_path = _init_path
+                    symbols = set(_missing_in_init)
+                else:
+                    continue
 
         if target_module_path not in code_files:
             # Module file is entirely missing — generate a stub.
