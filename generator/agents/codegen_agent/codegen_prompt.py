@@ -1761,6 +1761,28 @@ Review the error carefully and ensure your generated code does not repeat the sa
                 md_content=md_content,
             )
 
+            # 7b. Inject mandatory endpoint checklist so the LLM generates every
+            # required route.  Without an explicit checklist the LLM receives only a
+            # wall of markdown and frequently misses endpoints.
+            if required_endpoints:
+                endpoint_checklist = "\n".join(
+                    f"- [ ] {ep['method']} {ep['path']}"
+                    for ep in required_endpoints
+                )
+                prompt += (
+                    "\n\n## MANDATORY ENDPOINT CHECKLIST\n"
+                    "You MUST implement EVERY endpoint listed below. "
+                    "The build will FAIL if any are missing.\n"
+                    "Check each one as you implement it:\n\n"
+                    f"{endpoint_checklist}\n\n"
+                    "CRITICAL: Generate router functions for ALL endpoints above. "
+                    "Missing any will cause build failure."
+                )
+                logger.info(
+                    "Injected mandatory endpoint checklist with %d endpoints into prompt",
+                    len(required_endpoints),
+                )
+
             # 9. Final self-critique and refinement (if enabled)
             if enable_meta_llm_critique and META_LLM_API_KEY:
                 with tracer.start_as_current_span("meta_llm_critique"):

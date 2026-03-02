@@ -7575,6 +7575,112 @@ class OmniCoreService:
                                             stages_completed.remove("codegen")
                                         continue
 
+                            # Issue 6 fix: pre-wiring spec fidelity check.
+                            # Read ONLY router/routes files (not main.py which is auto-wired)
+                            # and check endpoint coverage BEFORE the post-wiring validation runs.
+                            # If <50% of required endpoints are present in router files, fail fast
+                            # and retry with an explicit list of missing endpoints.
+                            _PRE_WIRE_COVERAGE_THRESHOLD = 0.50
+                            if (
+                                md_content
+                                and _PROVENANCE_AVAILABLE
+                                and codegen_attempt <= max_codegen_retries
+                                and validation_passed
+                            ):
+                                try:
+                                    from generator.main.provenance import extract_endpoints_from_md as _extract_eps_md
+                                    from generator.utils.ast_endpoint_extractor import ASTEndpointExtractor as _ASTExtractor
+                                    _required_pre = _extract_eps_md(md_content)
+                                    if _required_pre:
+                                        _required_pre_set = {
+                                            f"{ep['method'].upper()} {ep['path']}"
+                                            for ep in _required_pre
+                                        }
+                                        _pre_wire_extractor = _ASTExtractor()
+                                        _found_pre: set = set()
+                                        _gen_dir_pre = Path(output_path_for_validation)
+                                        # Match only genuine router/routes files; avoid false-positives
+                                        # on names like "create_routes_helper.py".
+                                        # Covered paths (forward-slash normalised):
+                                        #   app/routers/<file>.py  — plural directory (most common)
+                                        #   app/router/<file>.py   — singular directory (LLM variant)
+                                        #   app/routes/<file>.py   — plural directory
+                                        #   app/routes.py          — top-level health-probe file
+                                        import re as _re_pw
+                                        _router_file_pat = _re_pw.compile(
+                                            r'^app/(?:routers?/|routes/|routes\.py$)'
+                                        )
+                                        for _py_file in _gen_dir_pre.rglob("*.py"):
+                                            _rel = str(_py_file.relative_to(_gen_dir_pre))
+                                            # Normalise separators for consistent matching
+                                            _rel_norm = _rel.replace("\\", "/")
+                                            if not _router_file_pat.match(_rel_norm):
+                                                continue
+                                            if "main.py" in _rel_norm or "__init__" in _rel_norm:
+                                                continue
+                                            try:
+                                                _eps = _pre_wire_extractor.extract_from_source(
+                                                    _py_file.read_text(encoding="utf-8"), _rel_norm
+                                                )
+                                                for _ep in _eps:
+                                                    _found_pre.add(
+                                                        f"{_ep['method'].upper()} {_ep['path']}"
+                                                    )
+                                            except Exception:
+                                                pass
+                                        _pre_wire_missing = _required_pre_set - _found_pre
+                                        _pre_wire_coverage = (
+                                            1.0 - len(_pre_wire_missing) / len(_required_pre_set)
+                                            if _required_pre_set else 1.0
+                                        )
+                                        if _pre_wire_coverage < _PRE_WIRE_COVERAGE_THRESHOLD:
+                                            validation_passed = False
+                                            _pre_wire_missing_labels = sorted(_pre_wire_missing)[:20]
+                                            _pre_wire_extra = (
+                                                f" (and {len(_pre_wire_missing) - 20} more)"
+                                                if len(_pre_wire_missing) > 20 else ""
+                                            )
+                                            logger.warning(
+                                                f"[PIPELINE] Job {job_id} pre-wiring spec fidelity check "
+                                                f"failed: {len(_pre_wire_missing)}/{len(_required_pre_set)} "
+                                                f"endpoints missing ({_pre_wire_coverage:.0%} coverage). "
+                                                f"Retrying codegen with explicit endpoint list.",
+                                                extra={
+                                                    "job_id": job_id,
+                                                    "attempt": codegen_attempt,
+                                                    "pre_wire_coverage": _pre_wire_coverage,
+                                                    "missing_count": len(_pre_wire_missing),
+                                                    "required_count": len(_required_pre_set),
+                                                },
+                                            )
+                                            previous_error = {
+                                                "error_type": "SpecFidelityFailure",
+                                                "details": (
+                                                    f"Pre-wiring coverage check: only "
+                                                    f"{_pre_wire_coverage:.0%} of required endpoints "
+                                                    f"were found in router files."
+                                                ),
+                                                "instruction": (
+                                                    f"Critical: {len(_pre_wire_missing)} of "
+                                                    f"{len(_required_pre_set)} required endpoints are "
+                                                    f"MISSING from the generated router files. "
+                                                    f"You MUST implement ALL of these endpoints:\n"
+                                                    + "\n".join(
+                                                        f"  - {ep}"
+                                                        for ep in _pre_wire_missing_labels
+                                                    )
+                                                    + _pre_wire_extra
+                                                ),
+                                            }
+                                            if "codegen" in stages_completed:
+                                                stages_completed.remove("codegen")
+                                            continue
+                                except Exception as _pre_wire_err:
+                                    logger.warning(
+                                        f"[PIPELINE] Job {job_id} pre-wiring spec fidelity "
+                                        f"check error (non-fatal): {_pre_wire_err}"
+                                    )
+
                             # Issue 3 fix: spec fidelity check triggers codegen retry for ANY
                             # missing endpoints (not only when >50% are missing).  The previous
                             # threshold meant that 46% missing (13/28) never triggered a retry.
