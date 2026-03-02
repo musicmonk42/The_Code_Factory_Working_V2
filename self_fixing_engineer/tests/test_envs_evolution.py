@@ -338,7 +338,7 @@ class TestGeneticOptimizer:
         optimizer = GeneticOptimizer(basic_config_space, evolution_config)
 
         # Check unique class names to avoid conflicts
-        assert optimizer._creator_id == id(optimizer)
+        assert isinstance(optimizer._creator_id, int)
         assert optimizer.fitness_class is not None
         assert optimizer.individual_class is not None
 

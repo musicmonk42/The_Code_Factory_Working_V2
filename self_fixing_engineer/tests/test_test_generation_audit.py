@@ -5,7 +5,7 @@ from pathlib import Path
 from unittest.mock import ANY, AsyncMock, Mock
 
 import pytest
-from test_generation.orchestrator.audit import RUN_ID, audit_event
+from self_fixing_engineer.test_generation.orchestrator.audit import RUN_ID, audit_event
 
 # Fix: Added missing import.
 
@@ -133,6 +133,6 @@ async def test_audit_serialization_failure_handling(monkeypatch, caplog):
 
 def test_audit_export():
     """Verifies that `audit_event` is correctly exported and callable."""
-    from test_generation.orchestrator.audit import audit_event
+    from self_fixing_engineer.test_generation.orchestrator.audit import audit_event
 
     assert callable(audit_event)

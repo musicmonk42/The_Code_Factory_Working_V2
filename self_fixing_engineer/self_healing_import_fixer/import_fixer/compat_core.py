@@ -1400,6 +1400,8 @@ def _initialize_core_modules() -> None:
                     or os.path.exists("/.dockerenv")
                     or os.getenv("KUBERNETES_SERVICE_HOST")
                     or os.getenv("RAILWAY_ENVIRONMENT")
+                    or os.getenv("CI")
+                    or os.getenv("TESTING")
                 )
                 
                 if _HAS_POSIX_RESOURCE and not _skip_rlimit:
