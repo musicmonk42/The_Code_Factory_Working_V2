@@ -1644,6 +1644,7 @@ else:
             self.omnicore_url = omnicore_url or str(self.settings.OMNICORE_URL)
     
             self.db_client = PostgresClient(self.settings.DATABASE_URL)
+            self._db_healthy = False
             self.state_manager = AgentStateManager(self.db_client, name, self.settings)
             self.x = self.state_manager.x
             self.y = self.state_manager.y
@@ -3247,10 +3248,13 @@ else:
             await self.db_client.connect()
             db_status = await self.db_client.check_health()
             if db_status["status"] == "unhealthy":
-                logging.getLogger(__name__).critical(
-                    f"[{self.name}] Database is unhealthy. Shutting down."
+                logging.getLogger(__name__).warning(
+                    f"[{self.name}] Database is unhealthy. Running in degraded mode with limited functionality."
                 )
-                sys.exit(1)
+                self._db_healthy = False
+                # Continue execution instead of exiting - allow degraded operation
+            else:
+                self._db_healthy = True
     
             await self.state_manager.load_state()
             self.x = self.state_manager.x

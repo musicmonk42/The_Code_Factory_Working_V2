@@ -708,7 +708,7 @@ class PostgresClient:
                     ssl_context = None
                     if ssl_mode == "require" or (ssl_mode == "allow" and env == "prod"):
                         ssl_context = ssl.create_default_context(
-                            purpose=ssl.SSLPurpose.SERVER_AUTH
+                            purpose=ssl.Purpose.SERVER_AUTH
                         )
                         ssl_context.check_hostname = True
                         ssl_context.verify_mode = ssl.CERT_REQUIRED

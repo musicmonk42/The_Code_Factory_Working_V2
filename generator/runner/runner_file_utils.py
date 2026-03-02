@@ -1765,7 +1765,7 @@ def _repair_double_prefix(output_dir: Path) -> None:
                 py_file.write_text(new_content, encoding="utf-8")
                 logger.info(
                     "Repaired double-prefix in %s",
-                    py_file.relative_to(output_dir),
+                    str(py_file.relative_to(output_dir)),
                 )
             except OSError as exc:
                 logger.warning(
