@@ -74,6 +74,11 @@ services:
       - LLM_TEMPERATURE=${LLM_TEMPERATURE:-0.7}
       # Maximum tokens for code-generation prompts (supports large README-driven specs)
       - CODEGEN_MAX_PROMPT_TOKENS=${CODEGEN_MAX_PROMPT_TOKENS:-32000}
+      # Minimum character length for an optimised prompt returned by docgen_prompt.py.
+      # When gpt-3.5-turbo compresses below this threshold, the system retries with
+      # gpt-4o-mini before falling back to hard token-budget truncation.
+      # Raise if the 800-char default still produces over-compressed prompts in practice.
+      - DOCGEN_PROMPT_MIN_LENGTH=${DOCGEN_PROMPT_MIN_LENGTH:-800}
       # Multi-pass code generation thresholds.
       # Raise to disable multi-pass for all but the largest specs; lower to enable earlier.
       - CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}

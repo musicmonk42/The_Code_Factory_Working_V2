@@ -260,6 +260,11 @@ env:
   # (e.g., 17KB spec = ~25k tokens). Override per-environment:
   #   helm upgrade --set env.CODEGEN_MAX_PROMPT_TOKENS=65000 ...
   CODEGEN_MAX_PROMPT_TOKENS: "32000"
+  # Minimum character length for an optimised prompt returned by docgen_prompt.py.
+  # When gpt-3.5-turbo compresses the prompt below this threshold, the system
+  # retries with gpt-4o-mini before falling back to hard token-budget truncation.
+  # Override: helm upgrade --set env.DOCGEN_PROMPT_MIN_LENGTH=1200 ...
+  DOCGEN_PROMPT_MIN_LENGTH: "800"
   # LLM_USE_MOCK: set to "true" ONLY for non-production testing when no real API keys are
   # available. agent_core.init_llm() raises ValueError on a missing key unless
   # this flag is "true". Never enable in staging or production deployments.

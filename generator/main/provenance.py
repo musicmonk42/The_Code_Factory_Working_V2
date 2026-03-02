@@ -33,11 +33,19 @@ import json
 import logging
 import os
 import re
+import subprocess
 import time
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
+
+try:
+    import yaml as _pyyaml
+    _YAML_AVAILABLE = True
+except ImportError:  # pyyaml is an optional dependency
+    _pyyaml = None  # type: ignore[assignment]
+    _YAML_AVAILABLE = False
 
 # --- OpenTelemetry Integration ---
 try:
@@ -1876,7 +1884,83 @@ def validate_deployment_artifacts(
         if not dc_result["valid"]:
             results["valid"] = False
             results["errors"].extend(dc_result["errors"])
-    
+
+    # Fix 11: Validate Helm templates — check for valid YAML and required K8s fields.
+    _helm_template_files = {
+        k: v for k, v in deploy_files.items()
+        if k.startswith("helm/templates/") and k.endswith((".yaml", ".yml"))
+    }
+    if _helm_template_files:
+        _helm_errors: List[str] = []
+        _required_k8s_fields = ("apiVersion", "kind", "metadata")
+
+        for _tpl_path, _tpl_content in _helm_template_files.items():
+            if not _tpl_content or not _tpl_content.strip():
+                _helm_errors.append(f"Helm template '{_tpl_path}' is empty")
+                continue
+            # Reject raw JSON blobs — these are not valid K8s YAML.
+            stripped = _tpl_content.strip()
+            if stripped.startswith("{") and stripped.endswith("}"):
+                _helm_errors.append(
+                    f"Helm template '{_tpl_path}' appears to contain a JSON blob "
+                    "instead of valid Kubernetes YAML"
+                )
+                continue
+            # Validate YAML syntax.  Replace Helm template directives with a
+            # harmless quoted empty string before parsing so that {{ ... }} blocks
+            # don't trip up the YAML parser.
+            if _YAML_AVAILABLE:
+                _sanitized = re.sub(r"\{\{.*?\}\}", '""', _tpl_content, flags=re.DOTALL)
+                try:
+                    _parsed = _pyyaml.safe_load(_sanitized)  # type: ignore[union-attr]
+                except Exception as _ye:
+                    _helm_errors.append(
+                        f"Helm template '{_tpl_path}' contains invalid YAML: {_ye}"
+                    )
+                    continue
+                # Check required Kubernetes resource fields.
+                if isinstance(_parsed, dict):
+                    _missing = [f for f in _required_k8s_fields if f not in _parsed]
+                    if _missing:
+                        _helm_errors.append(
+                            f"Helm template '{_tpl_path}' missing required K8s fields: "
+                            + ", ".join(_missing)
+                        )
+            else:
+                # pyyaml unavailable — fall back to a plain text search.
+                for _field in _required_k8s_fields:
+                    if _field not in _tpl_content:
+                        _helm_errors.append(
+                            f"Helm template '{_tpl_path}' missing required K8s field: {_field}"
+                        )
+
+        # Run `helm lint` when the CLI is available and structural checks passed.
+        if output_dir and not _helm_errors:
+            _helm_dir = Path(output_dir) / "helm"
+            if _helm_dir.exists():
+                try:
+                    _lint = subprocess.run(
+                        ["helm", "lint", str(_helm_dir)],
+                        capture_output=True,
+                        text=True,
+                        timeout=30,
+                    )
+                    if _lint.returncode != 0:
+                        _helm_errors.append(
+                            f"helm lint failed: {(_lint.stdout + _lint.stderr)[:500]}"
+                        )
+                except FileNotFoundError:
+                    pass  # helm CLI not available — skip
+                except Exception:
+                    pass  # helm lint optional
+
+        if _helm_errors:
+            results["checks"]["helm_templates"] = {"valid": False, "errors": _helm_errors}
+            results["valid"] = False
+            results["errors"].extend(_helm_errors)
+        else:
+            results["checks"]["helm_templates"] = {"valid": True, "errors": []}
+
     if not results["valid"] and output_dir:
         error_path = Path(output_dir) / "error.txt"
         with open(error_path, "a", encoding="utf-8") as f:

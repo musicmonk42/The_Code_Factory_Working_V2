@@ -1109,8 +1109,14 @@ class CodebaseAnalyzer:
                     )
                 elif tool["name"] == "Mypy" and MYPY_AVAILABLE and not _SFE_SKIP_MYPY and not _SFE_FAST_MODE:
                     _mypy_ctx = MYPY_LOCK if MYPY_LOCK is not None else _nullcontext()
-                    with _mypy_ctx:
-                        stdout, stderr, _ = mypy_run([str(file_path)])
+                    try:
+                        with _mypy_ctx:
+                            stdout, stderr, _ = mypy_run([str(file_path)])
+                    except (AssertionError, SystemExit) as _mypy_crash:
+                        logger.warning(
+                            f"Mypy internal error on {file_path}, skipping: {_mypy_crash}"
+                        )
+                        continue
                     
                     # FIX 3: Filter mypy INTERNAL ERROR lines before parsing
                     # mypy v1.17.1 on Python 3.11 produces INTERNAL ERROR messages

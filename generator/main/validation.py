@@ -7,12 +7,295 @@ This module integrates contract validation from scripts/validate_contract_compli
 into the generation pipeline, ensuring generated code meets specifications.
 """
 
+import ast
 import logging
+import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
 logger = logging.getLogger(__name__)
+
+# SQLAlchemy column-type → Python/annotation type mapping used by
+# _check_type_consistency.  Defined at module level so it is only
+# instantiated once rather than on every call.
+_SA_TYPE_MAP: Dict[str, str] = {
+    "integer": "int",
+    "biginteger": "int",
+    "smallinteger": "int",
+    "string": "str",
+    "text": "str",
+    "varchar": "str",
+    "uuid": "uuid.UUID",
+}
+
+
+# ---------------------------------------------------------------------------
+# Helper: import_completeness check (Fix 5)
+# ---------------------------------------------------------------------------
+
+def _check_import_completeness(output_dir: Path, pkg_name: str = "app") -> List[str]:
+    """Scan Python files for intra-project imports and verify they resolve.
+
+    Returns a list of plain error message strings (no check-name prefix).
+    The caller is responsible for recording them under the appropriate check.
+    """
+    errors: List[str] = []
+    py_files = list(output_dir.rglob("*.py"))
+    if not py_files:
+        return errors
+
+    # Build set of known module paths (relative to output_dir) and a map of
+    # module → exported symbols in a single pass.
+    known_modules: Set[str] = set()
+    module_symbols: Dict[str, Set[str]] = {}
+
+    for f in py_files:
+        try:
+            rel = f.relative_to(output_dir)
+        except ValueError:
+            continue
+        parts = list(rel.parts)
+        if parts[-1] == "__init__.py":
+            mod_key_parts = parts[:-1]
+        else:
+            mod_key_parts = list(parts)
+            mod_key_parts[-1] = mod_key_parts[-1][:-3]  # strip .py
+        if not mod_key_parts:
+            continue
+        mod_key = ".".join(mod_key_parts)
+        known_modules.add(mod_key)
+
+        try:
+            source = f.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except (SyntaxError, OSError):
+            continue
+
+        symbols: Set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                symbols.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        symbols.add(target.id)
+        module_symbols[mod_key] = symbols
+
+    # Scan each file's import statements.
+    for f in py_files:
+        try:
+            source = f.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except (SyntaxError, OSError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
+                continue
+            mod = node.module
+            # Only check intra-project imports.
+            if not mod.startswith(pkg_name + ".") and mod != pkg_name:
+                continue
+            # Verify target module exists.
+            if mod not in known_modules:
+                parent = mod.rsplit(".", 1)[0] if "." in mod else mod
+                if parent not in known_modules:
+                    errors.append(
+                        f"{f.name}: module '{mod}' not found in project"
+                    )
+                    continue
+            # Verify each imported symbol exists in the module.
+            for alias in node.names:
+                if alias.name == "*":
+                    continue
+                syms = module_symbols.get(mod, set())
+                if syms and alias.name not in syms:
+                    errors.append(
+                        f"{f.name}: symbol '{alias.name}' not defined in '{mod}'"
+                    )
+    return errors
+
+
+# ---------------------------------------------------------------------------
+# Helper: router_path_validation check (Fix 6)
+# ---------------------------------------------------------------------------
+
+def _check_router_paths(output_dir: Path) -> List[str]:
+    """Check APIRouter files for common path mistakes.
+
+    Returns a list of plain warning/error message strings (no check-name
+    prefix).  The caller records them under the appropriate check.
+    """
+    issues: List[str] = []
+    router_files = list(output_dir.rglob("routers/*.py"))
+    if not router_files:
+        return issues
+
+    http_methods = ("get", "post", "put", "delete", "patch", "options", "head")
+
+    for rfile in router_files:
+        try:
+            source = rfile.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+
+        # Extract APIRouter prefix (first occurrence wins).
+        prefix_match = re.search(r'APIRouter\([^)]*prefix\s*=\s*["\']([^"\']*)["\']', source)
+        prefix = prefix_match.group(1) if prefix_match else ""
+
+        # Collect routes per HTTP method to correctly scope the shadowing check.
+        # Shadowing only occurs within the same HTTP method (FastAPI matches
+        # both path and method, so GET /{id} does not shadow POST /batch).
+        routes_by_method: Dict[str, List[str]] = {}
+        for method in http_methods:
+            method_paths: List[str] = []
+            for m in re.finditer(
+                r"@router\." + method + r"\s*\(\s*[\"']([^\"']*)[\"']", source
+            ):
+                route_path = m.group(1)
+                method_paths.append(route_path)
+                # Detect routes that collapse to just the prefix root.
+                if route_path in ("/", "") and prefix:
+                    effective = (prefix.rstrip("/") + "/").rstrip("/") or "/"
+                    issues.append(
+                        f"{rfile.name}: {method.upper()} '{route_path}' with prefix "
+                        f"'{prefix}' resolves to '{effective}' "
+                        f"(likely missing resource path segment)"
+                    )
+            routes_by_method[method] = method_paths
+
+        # Per-method shadowing check: flag static routes defined after a
+        # parameterized route in the same HTTP method.
+        for method, method_paths in routes_by_method.items():
+            param_seen = False
+            for rp in method_paths:
+                has_param = bool(re.search(r"\{[^}]+\}", rp))
+                if has_param:
+                    param_seen = True
+                elif param_seen:
+                    issues.append(
+                        f"{rfile.name}: {method.upper()} static route '{rp}' "
+                        f"defined after a parameterized route — may be shadowed"
+                    )
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
+# Helper: type_consistency check (Fix 7)
+# ---------------------------------------------------------------------------
+
+def _check_type_consistency(output_dir: Path) -> List[str]:
+    """Cross-reference SQLAlchemy model PK types with router path-param types.
+
+    Returns a list of plain error message strings (no check-name prefix).
+    The caller records them under the appropriate check.
+    """
+    errors: List[str] = []
+
+    # --- Step 1: collect model PK column types ---
+    # entity_name (lowercase class name) → SQLAlchemy column type string
+    model_pk_types: Dict[str, str] = {}
+
+    for mf in output_dir.rglob("models/*.py"):
+        try:
+            source = mf.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except (SyntaxError, OSError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ClassDef):
+                continue
+            entity = node.name.lower()
+            for stmt in node.body:
+                if not isinstance(stmt, ast.Assign) or not isinstance(stmt.value, ast.Call):
+                    continue
+                call = stmt.value
+                if isinstance(call.func, ast.Name):
+                    func_name = call.func.id
+                elif isinstance(call.func, ast.Attribute):
+                    func_name = call.func.attr
+                else:
+                    continue
+                if func_name.lower() != "column":
+                    continue
+                # Require primary_key=True keyword argument.
+                is_pk = any(
+                    kw.arg == "primary_key"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                    for kw in call.keywords
+                )
+                if not is_pk or not call.args:
+                    continue
+                type_arg = call.args[0]
+                if isinstance(type_arg, ast.Name):
+                    col_type: str = type_arg.id
+                elif isinstance(type_arg, ast.Attribute):
+                    col_type = type_arg.attr
+                else:
+                    continue
+                model_pk_types[entity] = col_type
+
+    if not model_pk_types:
+        return errors
+
+    # --- Step 2: collect router path-parameter type annotations ---
+    # entity_name → annotation string (from e.g. `product_id: uuid.UUID`)
+    router_param_types: Dict[str, str] = {}
+
+    for rf in output_dir.rglob("routers/*.py"):
+        try:
+            source = rf.read_text(encoding="utf-8", errors="replace")
+            tree = ast.parse(source)
+        except (SyntaxError, OSError):
+            continue
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for arg in node.args.args:
+                if not (arg.arg.endswith("_id") and arg.annotation):
+                    continue
+                entity = arg.arg[: -len("_id")]
+                ann = arg.annotation
+                if isinstance(ann, ast.Name):
+                    ann_str: str = ann.id
+                elif isinstance(ann, ast.Attribute) and isinstance(ann.value, ast.Name):
+                    ann_str = f"{ann.value.id}.{ann.attr}"
+                elif isinstance(ann, ast.Attribute):
+                    ann_str = ann.attr
+                else:
+                    continue
+                router_param_types[entity] = ann_str
+
+    # --- Step 3: cross-reference ---
+    for entity, model_type in model_pk_types.items():
+        router_type = router_param_types.get(entity)
+        if router_type is None:
+            continue
+        expected_router = _SA_TYPE_MAP.get(model_type.lower())
+        if expected_router is None:
+            continue
+        rt_lower = router_type.lower()
+        et_lower = expected_router.lower()
+        if et_lower == "uuid.uuid" and "uuid" not in rt_lower:
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (UUID) "
+                f"but router uses '{router_type}'"
+            )
+        elif et_lower == "int" and rt_lower not in ("int", "integer"):
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (int) "
+                f"but router uses '{router_type}'"
+            )
+        elif et_lower == "str" and rt_lower not in ("str", "string"):
+            errors.append(
+                f"entity '{entity}': model PK is '{model_type}' (str) "
+                f"but router uses '{router_type}'"
+            )
+
+    return errors
 
 
 class ValidationReport:
@@ -185,11 +468,55 @@ def validate_generated_code(
             report.mark_passed("Spec Block Compliance")
         except Exception as e:
             report.add_error("Spec Block Compliance", str(e))
-    
-    # Cold-start import test: attempt to import app.main to catch runtime import errors
-    # such as missing symbols, async driver mismatches, or circular imports.
-    # This is a WARNING (not an error) because third-party deps may not be installed.
-    import subprocess
+
+    # Fix 5: Import completeness check — verify intra-project imports resolve.
+    _pkg_name = (spec_block or {}).get("package_name") or "app"
+    report.checks_run.append("import_completeness")
+    try:
+        _import_errors = _check_import_completeness(output_dir, pkg_name=_pkg_name)
+        if _import_errors:
+            for _ie in _import_errors:
+                report.add_error("import_completeness", _ie)
+            logger.warning(f"❌ import_completeness: {len(_import_errors)} issue(s)")
+        else:
+            report.mark_passed("import_completeness")
+            logger.debug("✅ import_completeness passed")
+    except Exception as _e:
+        report.add_warning("import_completeness", f"Unexpected error: {_e}")
+        logger.warning(f"⚠️  import_completeness check error: {_e}")
+
+    # Fix 6: Router path validation.
+    report.checks_run.append("router_path_validation")
+    try:
+        _router_issues = _check_router_paths(output_dir)
+        if _router_issues:
+            for _ri in _router_issues:
+                report.add_warning("router_path_validation", _ri)
+            logger.warning(f"⚠️  router_path_validation: {len(_router_issues)} issue(s)")
+        else:
+            report.mark_passed("router_path_validation")
+            logger.debug("✅ router_path_validation passed")
+    except Exception as _e:
+        report.add_warning("router_path_validation", f"Unexpected error: {_e}")
+        logger.warning(f"⚠️  router_path_validation check error: {_e}")
+
+    # Fix 7: Type consistency check.
+    report.checks_run.append("type_consistency")
+    try:
+        _type_errors = _check_type_consistency(output_dir)
+        if _type_errors:
+            for _te in _type_errors:
+                report.add_error("type_consistency", _te)
+            logger.warning(f"❌ type_consistency: {len(_type_errors)} mismatch(es)")
+        else:
+            report.mark_passed("type_consistency")
+            logger.debug("✅ type_consistency passed")
+    except Exception as _e:
+        report.add_warning("type_consistency", f"Unexpected error: {_e}")
+        logger.warning(f"⚠️  type_consistency check error: {_e}")
+
+    # Fix 8: Cold-start import test — hard-fail for real app errors; soft-fail
+    # (warning) when deps are simply not installed (ModuleNotFoundError).
     report.checks_run.append("Cold-start Import Test")
     try:
         _import_result = subprocess.run(
@@ -204,13 +531,26 @@ def validate_generated_code(
             logger.debug("✅ Cold-start import test passed")
         else:
             _stderr_snippet = _import_result.stderr[:500] if _import_result.stderr else "(no stderr)"
-            report.add_warning(
-                "Cold-start Import Test",
-                f"import app.main exited with code {_import_result.returncode}: {_stderr_snippet}",
-            )
-            logger.warning(
-                f"⚠️  Cold-start import test failed (exit {_import_result.returncode}): {_stderr_snippet}"
-            )
+            # ModuleNotFoundError means third-party deps are not installed in this
+            # environment — this is expected in CI and is a soft failure.
+            # Any other error (NameError, SyntaxError, ImportError for project-local
+            # symbols, etc.) means the app cannot start and is a hard failure.
+            if "ModuleNotFoundError" in _stderr_snippet or "No module named" in _stderr_snippet:
+                report.add_warning(
+                    "Cold-start Import Test",
+                    f"import app.main exited with code {_import_result.returncode}: {_stderr_snippet}",
+                )
+                logger.warning(
+                    f"⚠️  Cold-start import test failed (exit {_import_result.returncode}): {_stderr_snippet}"
+                )
+            else:
+                report.add_error(
+                    "Cold-start Import Test",
+                    f"import app.main exited with code {_import_result.returncode}: {_stderr_snippet}",
+                )
+                logger.error(
+                    f"❌ Cold-start import test hard-failed (exit {_import_result.returncode}): {_stderr_snippet}"
+                )
     except subprocess.TimeoutExpired:
         report.add_warning("Cold-start Import Test", "import app.main timed out after 30s")
         logger.warning("⚠️  Cold-start import test timed out")
