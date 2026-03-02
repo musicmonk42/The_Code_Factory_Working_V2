@@ -231,6 +231,10 @@ env:
   # Must stay in sync with DB_RETRY_ATTEMPTS / DB_RETRY_DELAY above.
   DATABASE_RETRY_ATTEMPTS: "3"
   DATABASE_RETRY_DELAY: "1.0"
+  # Explicit SSL requirement for all production PostgreSQL connections.
+  # postgres_client.py defaults to 'require' when APP_ENV=production, but this
+  # setting makes the intent unambiguous and overrides any env-detection logic.
+  PG_SSL_MODE: "require"
 
   # Message Bus Configuration
   MESSAGE_BUS_SHARD_COUNT: "8"

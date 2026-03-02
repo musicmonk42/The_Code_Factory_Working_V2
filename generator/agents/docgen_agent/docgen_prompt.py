@@ -372,17 +372,31 @@ async def optimize_prompt_content(prompt_text: str, max_tokens: int) -> str:
             # Fallback to hard truncation if global summary fails
             optimized_text = optimized_text[: max_tokens * 4]  # Approximate
 
-        # Reject optimization if the result is below an absolute minimum length
-        # to ensure critical documentation context isn't lost
+        # Reject optimization if the result is below an absolute minimum length.
+        # Instead of returning the original oversized prompt (which the LLM will
+        # silently truncate from the end), apply a hard token-budget truncation
+        # with a clear marker so the LLM knows content was omitted.
         min_absolute_length = int(os.getenv("DOCGEN_PROMPT_MIN_LENGTH", "800"))
         if len(optimized_text) < min_absolute_length and len(prompt_text) >= min_absolute_length:
             logger.warning(
                 "Prompt optimization result too short: %d chars (minimum: %d). "
-                "Returning original prompt to preserve documentation context.",
+                "Applying hard token-budget truncation instead of returning "
+                "original oversized prompt.",
                 len(optimized_text),
                 min_absolute_length,
             )
-            return prompt_text
+            # Hard truncation at the token budget boundary (~4 chars/token).
+            char_budget = max_tokens * 4
+            truncated = prompt_text[:char_budget]
+            # Count how many characters were omitted so we can annotate the output.
+            omitted_chars = len(prompt_text) - char_budget
+            if omitted_chars > 0:
+                marker = (
+                    f"\n\n[TRUNCATED — {omitted_chars} characters omitted to fit "
+                    f"token budget of {max_tokens} tokens]"
+                )
+                truncated = truncated + marker
+            return truncated
 
         return optimized_text
 

@@ -1360,7 +1360,8 @@ class DeploymentCompletenessValidator(Validator):
         """Validate Dockerfile has required instructions and sane ENTRYPOINT/CMD semantics."""
         required_instructions = ["FROM"]
 
-        lines = content.strip().split('\n')
+        # Use splitlines() to handle LF, CRLF, and CR line endings uniformly.
+        lines = content.splitlines()
         instructions_found: Set[str] = set()
         entrypoint_value: Optional[str] = None
         cmd_value: Optional[str] = None
@@ -1411,14 +1412,29 @@ class DeploymentCompletenessValidator(Validator):
                         f"Dockerfile ENTRYPOINT/CMD conflict in {file_path}: "
                         f"ENTRYPOINT {ep_list} + CMD {cmd_list} produces "
                         f"`{interpreter} {executable} ...` which is invalid. "
-                        f"Either remove ENTRYPOINT and use CMD directly "
-                        f"(e.g. CMD [\"{executable}\", ...]), "
-                        f"or change CMD to use the -m flag "
-                        f"(e.g. CMD [\"-m\", \"{executable}\", ...])."
+                        f"Auto-fixing: removing conflicting ENTRYPOINT line."
                     )
-                    report["invalid_files"].append(f"{file_path}: ENTRYPOINT/CMD conflict")
-                    report["errors"].append(msg)
-                    report["status"] = "failed"
+                    # Auto-fix: strip all ENTRYPOINT lines and keep CMD intact.
+                    # Use splitlines(keepends=True) to preserve the original line endings
+                    # of every retained line, avoiding CRLF corruption.
+                    fixed_content = "".join(
+                        ln for ln in content.splitlines(keepends=True)
+                        if not re.match(r'^\s*ENTRYPOINT\b', ln, re.IGNORECASE)
+                    )
+                    # Persist the fix back to disk. _validate_dockerfile is already
+                    # an async method, so we can await aiofiles directly.
+                    try:
+                        async with aiofiles.open(file_path, 'w', encoding='utf-8') as dockerfile:
+                            await dockerfile.write(fixed_content)
+                    except Exception as _write_err:  # pylint: disable=broad-except
+                        logger.warning(
+                            "Dockerfile auto-fix: could not write fixed content to %s: %s",
+                            file_path,
+                            _write_err,
+                        )
+                    report["warnings"] = report.get("warnings", [])
+                    report["warnings"].append(msg)
+                    logger.warning(msg)
             except (json.JSONDecodeError, TypeError):
                 pass
     

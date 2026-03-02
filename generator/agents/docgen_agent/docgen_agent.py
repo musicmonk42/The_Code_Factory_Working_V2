@@ -825,6 +825,8 @@ class DocgenAgent:
         ]
         self.pre_process_hooks: List[Callable[[str], str]] = []
         self.post_process_hooks: List[Callable[[Dict[str, Any]], Dict[str, Any]]] = []
+        # Built-in post-process: guarantee copyright header in every generated doc.
+        self.post_process_hooks.append(DocgenAgent._ensure_copyright_in_result)
 
         # Initialize plugin registry with dynamic loading
         plugins_path = Path(plugins_dir) if plugins_dir else None
@@ -883,6 +885,44 @@ class DocgenAgent:
         if not callable(hook):
             raise TypeError("Post-process hook must be a callable function.")
         self.post_process_hooks.append(hook)
+
+    @staticmethod
+    def _ensure_copyright_in_result(result: Dict[str, Any]) -> Dict[str, Any]:
+        """Post-process hook: guarantee a copyright notice in generated documentation.
+
+        Reads the copyright holder from the ``COPYRIGHT_HOLDER`` environment variable
+        (defaults to ``"Novatrax Labs LLC"``).  If the generated content already
+        contains a recognisable copyright declaration at the start of the document
+        it is left unchanged; otherwise a formatted header is prepended.
+
+        The detection pattern is intentionally strict: it looks for the canonical
+        ``Copyright © YYYY`` / ``Copyright (c) YYYY`` / ``Copyright YYYY`` forms
+        within the first 500 characters of the document so that code samples or
+        prose that happen to mention the word "copyright" do not suppress the
+        header insertion.
+        """
+        import re as _re
+        from datetime import datetime as _dt
+
+        content = result.get("content", "")
+        if not content:
+            return result
+
+        # Only scan the document preamble (first 500 chars) for an authoritative
+        # copyright declaration to avoid false positives from code examples or
+        # prose references to the concept of "copyright".
+        COPYRIGHT_PATTERN = _re.compile(
+            r"Copyright\s+(?:©|\(c\)|&copy;)?\s*\d{4}",
+            _re.IGNORECASE,
+        )
+        if COPYRIGHT_PATTERN.search(content[:500]):
+            return result
+
+        holder = os.getenv("COPYRIGHT_HOLDER", "Novatrax Labs LLC")
+        year = _dt.now().year
+        header = f"Copyright © {year} {holder}. All Rights Reserved.\n\n"
+        result["content"] = header + content
+        return result
 
     def register_compliance_plugin(self, plugin: CompliancePlugin):
         """Register a compliance plugin."""

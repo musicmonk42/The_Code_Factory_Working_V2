@@ -678,9 +678,20 @@ class PostgresClient:
                     status="attempt",
                 ).inc()
                 try:
+                    # Detect production from any of the environment variables used
+                    # across the different deployment targets:
+                    #   - ENV=prod/production       (legacy / Railway direct)
+                    #   - RAILWAY_ENVIRONMENT=production/prod (Railway platform)
+                    #   - APP_ENV=production         (Kubernetes, Helm, docker-compose)
+                    _PROD_VALUES = frozenset(("prod", "production"))
+                    _is_production = (
+                        os.getenv("ENV", "dev").lower() in _PROD_VALUES
+                        or os.getenv("RAILWAY_ENVIRONMENT", "").lower() in _PROD_VALUES
+                        or os.getenv("APP_ENV", "").lower() in _PROD_VALUES
+                    )
                     ssl_mode = os.getenv(
                         "PG_SSL_MODE",
-                        "require" if os.getenv("ENV", "dev") == "prod" else "prefer",
+                        "require" if _is_production else "prefer",
                     ).lower()
                     env = os.getenv("ENV", "dev").lower()
 

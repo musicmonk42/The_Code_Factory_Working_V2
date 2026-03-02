@@ -40,6 +40,10 @@ data:
   # Must stay in sync with DB_RETRY_ATTEMPTS / DB_RETRY_DELAY above.
   DATABASE_RETRY_ATTEMPTS: "3"
   DATABASE_RETRY_DELAY: "1.0"
+  # Explicit SSL requirement for all production PostgreSQL connections.
+  # postgres_client.py defaults to 'require' when APP_ENV=production, but this
+  # setting makes the intent unambiguous and overrides any env-detection logic.
+  PG_SSL_MODE: "require"
   # Connection timeouts for cloud deployments
   DB_CONNECT_TIMEOUT: "30"  # Connection timeout in seconds
   DB_COMMAND_TIMEOUT: "60"  # Query execution timeout in seconds

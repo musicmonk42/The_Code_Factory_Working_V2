@@ -86,7 +86,11 @@ The Dockerfile must include:
    - Set appropriate WORKDIR
    - Define necessary environment variables
    - Configure proper HEALTHCHECK
-   - Use ENTRYPOINT and CMD appropriately
+   - Use ENTRYPOINT and CMD appropriately:
+     * ✅ CORRECT — CMD only, no ENTRYPOINT: `CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]`
+     * ✅ CORRECT — ENTRYPOINT as the executable, CMD as arguments: `ENTRYPOINT ["uvicorn"]` + `CMD ["app.main:app", "--host", "0.0.0.0", "--port", "8000"]`
+     * ✅ CORRECT — Python -m module invocation: `ENTRYPOINT ["python"]` + `CMD ["-m", "uvicorn", "app.main:app"]`
+     * ❌ NEVER combine `ENTRYPOINT ["python"]` with `CMD ["uvicorn", ...]` — this produces the invalid command `python uvicorn ...` and the container will fail to start
    - Expose required ports
 
 5. **CI/CD Ready**
