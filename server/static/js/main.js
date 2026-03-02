@@ -818,7 +818,7 @@ async function createJobCard(job) {
     card.setAttribute('data-job-id', job.id);
     card.setAttribute('data-job-status', job.status);
     
-    const isCompleted = job.status === 'completed';
+    const isCompleted = job.status === 'completed' || job.status === 'completed_with_warnings';
     const isRunning = job.status === 'running';
     const isFailed = job.status === 'failed';
     const needsClarification = job.status === 'needs_clarification';
