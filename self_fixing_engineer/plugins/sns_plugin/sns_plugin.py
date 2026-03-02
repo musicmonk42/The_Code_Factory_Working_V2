@@ -175,7 +175,7 @@ class AuditJsonFormatter(jsonlogger.JsonFormatter):
         log_record["signature"] = signature
 
 
-AUDIT_LOG_PATH = os.environ.get("SNS_AUDIT_LOG_FILE", "/var/log/sns_audit.log")
+AUDIT_LOG_PATH = os.environ.get("SNS_AUDIT_LOG_FILE", "/app/logs/sns_audit.log")
 try:
     os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
     audit_log_handler = RotatingFileHandler(
@@ -1997,7 +1997,7 @@ class SNSGatewayManager(PluginBase):
 
 # ---- Global Instances & Application Lifecycle ----
 DEAD_LETTER_DIR = os.environ.get(
-    "SNS_GATEWAY_DEAD_LETTER_DIR", "/var/lib/sns_gateway_dead_letters"
+    "SNS_GATEWAY_DEAD_LETTER_DIR", "/app/data/dead_letters/sns_gateway_dead_letters"
 )
 try:
     if not os.path.exists(DEAD_LETTER_DIR):

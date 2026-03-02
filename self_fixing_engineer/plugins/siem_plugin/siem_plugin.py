@@ -157,7 +157,7 @@ class AuditJsonFormatter(jsonlogger.JsonFormatter):
 
 
 # Set up a dedicated logger for audit events.
-AUDIT_LOG_PATH = os.environ.get("SIEM_AUDIT_LOG_FILE", "/var/log/siem_audit.log")
+AUDIT_LOG_PATH = os.environ.get("SIEM_AUDIT_LOG_FILE", "/app/logs/siem_audit.log")
 try:
     if not os.path.exists(os.path.dirname(AUDIT_LOG_PATH)):
         os.makedirs(os.path.dirname(AUDIT_LOG_PATH), exist_ok=True)
@@ -1752,7 +1752,7 @@ class SIEMGatewayManager(PluginBase):
 
 # ---- Global Instances & Application Lifecycle ----
 DEAD_LETTER_DIR = os.environ.get(
-    "SIEM_GATEWAY_DEAD_LETTER_DIR", "/var/lib/siem_gateway_dead_letters"
+    "SIEM_GATEWAY_DEAD_LETTER_DIR", "/app/data/dead_letters/siem_gateway_dead_letters"
 )
 try:
     if not os.path.exists(DEAD_LETTER_DIR):

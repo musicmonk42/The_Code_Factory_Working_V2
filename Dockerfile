@@ -474,8 +474,8 @@ WORKDIR /app
 # Also create the default ChromaDB cache path at /home/appuser/.cache/chroma/ since
 # ChromaDB may not respect CHROMA_CACHE_DIR and defaults to ~/.cache/chroma/onnx_models/
 # Create matplotlib cache directory at /tmp/matplotlib (set via MPLCONFIGDIR)
-RUN mkdir -p /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma /home/appuser/.cache/pylint /tmp/matplotlib && \
-    chown -R appuser:appgroup /opt/venv /app /app/data /var/log/analyzer_audit /app/logs /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma /home/appuser/.cache/pylint /tmp/matplotlib
+RUN mkdir -p /opt/venv /app /app/data /app/data/dead_letters /var/log/analyzer_audit /app/logs /app/logs/analyzer_audit /app/logs/checkpoint /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma /home/appuser/.cache/pylint /tmp/matplotlib && \
+    chown -R appuser:appgroup /opt/venv /app /app/data /app/data/dead_letters /var/log/analyzer_audit /app/logs /app/uploads /var/lib/clarifier /opt/nltk_data /opt/huggingface_cache /opt/chroma_cache /home/appuser/.cache/chroma /home/appuser/.cache/pylint /tmp/matplotlib
 
 # Bring in the venv and application source with proper ownership during copy
 COPY --from=builder --chown=appuser:appgroup /opt/venv /opt/venv
