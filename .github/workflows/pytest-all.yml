@@ -298,7 +298,9 @@ jobs:
           # Check for dependency conflicts
           pip check || (echo "ERROR: Dependency conflicts detected:" && pip list --format=columns && exit 1)
 
-          pip cache purge
+          # pip cache purge is a no-op when PIP_NO_CACHE_DIR=1 (cache is disabled in CI);
+          # use || true so the step never fails when the cache is already disabled.
+          pip cache purge || true
 
       - name: Verify critical test dependencies
         run: |
