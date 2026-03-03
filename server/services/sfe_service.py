@@ -449,7 +449,12 @@ class SFEService:
         """
         from server.storage import jobs_db
 
-        for job_id in list(jobs_db.keys()):
+        job_ids = list(jobs_db.keys())
+        logger.debug(
+            f"Repopulating errors cache from analysis reports for {len(job_ids)} job(s)"
+        )
+
+        for job_id in job_ids:
             try:
                 resolved_path = self._resolve_job_code_path(job_id, "")
                 if not resolved_path:
@@ -482,7 +487,8 @@ class SFEService:
                 )
             except Exception as e:
                 logger.warning(
-                    f"Could not repopulate cache from report for job {job_id}: {e}"
+                    f"Could not repopulate cache from report for job {job_id}: {e}",
+                    exc_info=True,
                 )
 
     def _build_import_error_recommendations(
@@ -1812,121 +1818,121 @@ class SFEService:
                     "Run 'Analyze Code' or 'Detect Errors' first to refresh the error cache."
                 ),
             )
+
+        # Extract error details
+        error_type = error_data.get("type", "unknown")
+        severity = error_data.get("severity", "medium")
+        message = error_data.get("message", "")
+        file_path_str = error_data.get("file", "main.py")
+        line = error_data.get("line", 1)
+        job_id = error_data.get("job_id")
+
+        # Resolve job base path for fix-target classification
+        resolved_base = self._resolve_job_code_path(job_id, ".") if job_id else "."
+
+        # Classify whether the fix should target source or test file
+        fix_target = self._classify_fix_target(error_data, resolved_base)
+        if fix_target == "source" and file_path_str.startswith("tests/"):
+            # Redirect to corresponding source file
+            source_candidate = file_path_str.replace("tests/test_", "app/")
+            if Path(resolved_base, source_candidate).exists():
+                logger.info(
+                    f"[SFE] Redirecting fix from test file {file_path_str} "
+                    f"to source file {source_candidate}"
+                )
+                file_path_str = source_candidate
+
+        # Resolve file path - convert relative to absolute if needed
+        file_path = Path(resolved_base) / file_path_str if job_id else Path(file_path_str)
+
+        # Ensure file_path is absolute
+        if not file_path.is_absolute():
+            file_path = file_path.resolve()
+
+        logger.info(f"Generating fix for {error_type} at {file_path}:{line}")
+
+        # Read source context
+        source_context = self._read_source_context(file_path, line)
+
+        # Generate fix based on error type and analysis
+        fix_result = None
+
+        if "import" in error_type.lower() or "import" in message.lower():
+            # Import error - use ImportFixerEngine
+            fix_result = self._generate_import_fix(file_path, message, source_context)
+            description = f"Add missing import in {file_path_str}"
+
+        elif "complexity" in error_type.lower() or "COMPLEXITY" in error_type:
+            # Complexity issue - provide refactoring guidance
+            fix_result = self._generate_complexity_fix(file_path, line, message, source_context)
+            description = f"Refactor complex code in {file_path_str}"
+
+        elif "security" in error_type.lower() or "B" in error_type.upper():
+            # Security issue - generate concrete fix
+            fix_result = self._generate_security_fix(file_path, line, message, source_context)
+            description = f"Fix security vulnerability in {file_path_str}"
+
         else:
-            # Extract error details
-            error_type = error_data.get("type", "unknown")
-            severity = error_data.get("severity", "medium")
-            message = error_data.get("message", "")
-            file_path_str = error_data.get("file", "main.py")
-            line = error_data.get("line", 1)
-            job_id = error_data.get("job_id")
-
-            # Resolve job base path for fix-target classification
-            resolved_base = self._resolve_job_code_path(job_id, ".") if job_id else "."
-
-            # Classify whether the fix should target source or test file
-            fix_target = self._classify_fix_target(error_data, resolved_base)
-            if fix_target == "source" and file_path_str.startswith("tests/"):
-                # Redirect to corresponding source file
-                source_candidate = file_path_str.replace("tests/test_", "app/")
-                if Path(resolved_base, source_candidate).exists():
-                    logger.info(
-                        f"[SFE] Redirecting fix from test file {file_path_str} "
-                        f"to source file {source_candidate}"
-                    )
-                    file_path_str = source_candidate
-
-            # Resolve file path - convert relative to absolute if needed
-            file_path = Path(resolved_base) / file_path_str if job_id else Path(file_path_str)
-
-            # Ensure file_path is absolute
-            if not file_path.is_absolute():
-                file_path = file_path.resolve()
-            
-            logger.info(f"Generating fix for {error_type} at {file_path}:{line}")
-            
-            # Read source context
-            source_context = self._read_source_context(file_path, line)
-            
-            # Generate fix based on error type and analysis
-            fix_result = None
-            
-            if "import" in error_type.lower() or "import" in message.lower():
-                # Import error - use ImportFixerEngine
-                fix_result = self._generate_import_fix(file_path, message, source_context)
-                description = f"Add missing import in {file_path_str}"
-                
-            elif "complexity" in error_type.lower() or "COMPLEXITY" in error_type:
-                # Complexity issue - provide refactoring guidance
-                fix_result = self._generate_complexity_fix(file_path, line, message, source_context)
-                description = f"Refactor complex code in {file_path_str}"
-                
-            elif "security" in error_type.lower() or "B" in error_type.upper():
-                # Security issue - generate concrete fix
-                fix_result = self._generate_security_fix(file_path, line, message, source_context)
-                description = f"Fix security vulnerability in {file_path_str}"
-                
-            else:
-                # Generic issue - read context and provide guidance with context
-                if source_context.get("success"):
-                    target_line = source_context.get("target_line", "")
-                    fix_result = {
-                        "success": True,
-                        "content": f"# Fix guidance for {error_type}: {message}\n# Line {line}: {target_line.strip()}",
-                        "action": "info",
-                        "line": line,
-                        "reasoning": f"{error_type} detected at line {line}. Review the guidance and apply an appropriate fix.",
-                    }
-                else:
-                    fix_result = {
-                        "success": True,
-                        "content": f"# Fix guidance for {error_type}: {message}",
-                        "action": "info",
-                        "line": line,
-                        "reasoning": f"{error_type} detected. Review the guidance and apply an appropriate fix.",
-                    }
-                description = f"Fix {error_type} in {file_path_str}"
-            
-            # Build proposed changes — only include when a real fix was generated
-            proposed_changes = []
-            if fix_result and fix_result.get("success"):
-                change = {
-                    "file": file_path_str,  # Keep as relative path in the change
-                    "line": fix_result.get("line", line),
-                    "action": fix_result.get("action", "insert"),
-                    "content": fix_result.get("content", ""),
+            # Generic issue - read context and provide guidance with context
+            if source_context.get("success"):
+                target_line = source_context.get("target_line", "")
+                fix_result = {
+                    "success": True,
+                    "content": f"# Fix guidance for {error_type}: {message}\n# Line {line}: {target_line.strip()}",
+                    "action": "info",
+                    "line": line,
+                    "reasoning": f"{error_type} detected at line {line}. Review the guidance and apply an appropriate fix.",
                 }
-                proposed_changes.append(change)
-            
-            # Determine confidence based on fix success
-            if fix_result and fix_result.get("success"):
-                # Use explicitly provided confidence when available (e.g. from
-                # pattern-matched fix generators that already calculated it).
-                if "confidence" in fix_result:
-                    confidence = fix_result["confidence"]
-                else:
-                    # Calculate a dynamic confidence based on fix type and severity
-                    # rather than always defaulting to the arbitrary 0.70 value.
-                    confidence = self._calculate_fix_confidence(
-                        error_type=error_type,
-                        severity=severity,
-                        fix_action=fix_result.get("action", "info"),
-                        proposed_changes=proposed_changes,
-                    )
-                reasoning = fix_result.get("reasoning", "Automated fix generated successfully.")
             else:
-                confidence = 0.50
-                reasoning = fix_result.get("reasoning", "Placeholder fix - manual review required.") if fix_result else "Could not generate automated fix."
-            
-            fix = {
-                "fix_id": f"fix-{error_id}",
-                "error_id": error_id,
-                "job_id": job_id,
-                "description": description,
-                "proposed_changes": proposed_changes,
-                "confidence": confidence,
-                "reasoning": reasoning,
+                fix_result = {
+                    "success": True,
+                    "content": f"# Fix guidance for {error_type}: {message}",
+                    "action": "info",
+                    "line": line,
+                    "reasoning": f"{error_type} detected. Review the guidance and apply an appropriate fix.",
+                }
+            description = f"Fix {error_type} in {file_path_str}"
+
+        # Build proposed changes — only include when a real fix was generated
+        proposed_changes = []
+        if fix_result and fix_result.get("success"):
+            change = {
+                "file": file_path_str,  # Keep as relative path in the change
+                "line": fix_result.get("line", line),
+                "action": fix_result.get("action", "insert"),
+                "content": fix_result.get("content", ""),
             }
+            proposed_changes.append(change)
+
+        # Determine confidence based on fix success
+        if fix_result and fix_result.get("success"):
+            # Use explicitly provided confidence when available (e.g. from
+            # pattern-matched fix generators that already calculated it).
+            if "confidence" in fix_result:
+                confidence = fix_result["confidence"]
+            else:
+                # Calculate a dynamic confidence based on fix type and severity
+                # rather than always defaulting to the arbitrary 0.70 value.
+                confidence = self._calculate_fix_confidence(
+                    error_type=error_type,
+                    severity=severity,
+                    fix_action=fix_result.get("action", "info"),
+                    proposed_changes=proposed_changes,
+                )
+            reasoning = fix_result.get("reasoning", "Automated fix generated successfully.")
+        else:
+            confidence = 0.50
+            reasoning = fix_result.get("reasoning", "Placeholder fix - manual review required.") if fix_result else "Could not generate automated fix."
+
+        fix = {
+            "fix_id": f"fix-{error_id}",
+            "error_id": error_id,
+            "job_id": job_id,
+            "description": description,
+            "proposed_changes": proposed_changes,
+            "confidence": confidence,
+            "reasoning": reasoning,
+        }
 
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
