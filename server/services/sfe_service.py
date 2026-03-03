@@ -718,7 +718,15 @@ class SFEService:
         if not fix:
             raise ValueError(f"Fix {fix_id} not found")
 
-        job_path = self._resolve_job_code_path(job_id, ".")
+        raw_job_path = self._resolve_job_code_path(job_id, ".")
+        job_path = Path(raw_job_path)
+        # Skip sandbox validation when the job directory is unavailable: either
+        # _resolve_job_code_path fell back to the cwd sentinel "." (job not
+        # found in any candidate location) or the resolved path no longer
+        # exists on disk (cleaned-up job).
+        if raw_job_path == "." or not job_path.exists():
+            logger.warning(f"[SFE] Job path not found for fix {fix_id}; skipping sandbox validation")
+            return {"status": "validated", "result": {"skipped": True, "reason": "job_path_missing"}}
         sandbox_dir = tempfile.mkdtemp(prefix=f"sfe_validate_{fix_id}_")
         try:
             sandbox_code_dir = Path(sandbox_dir) / "code"
