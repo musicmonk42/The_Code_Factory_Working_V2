@@ -66,8 +66,23 @@ except ImportError as e:
     sys.exit(1)
 
 # Hook used by tests to capture audit events (monkeypatched in integration tests)
+# This is a module-level function that can be monkeypatched by tests
+# In production, this is not used - the RegulatoryAuditLogger handles all events
+_emit_event_handler = None
+
 def emit_event(event_type: str, **kwargs):
+    """
+    Test hook for capturing audit events.
+    Can be monkeypatched in tests to capture events in a test sink.
+    """
     logger.debug(f"emit_event called for {event_type} (test hook)")
+    # If a custom handler is set (via monkeypatch), call it
+    if _emit_event_handler is not None:
+        return _emit_event_handler(event_type, **kwargs)
+    return True
+
+def flush_buffer():
+    """Flush any buffered events. Used in tests."""
     return True
 
 # --- Splunk Integration (Secondary) ---
