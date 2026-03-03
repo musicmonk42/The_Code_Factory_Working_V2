@@ -10,6 +10,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
+# Save the real aiohttp class references at module-level BEFORE any test-level
+# patches run.  The autouse mock_external_connections fixture replaces
+# aiohttp.ClientSession with a MagicMock for every test function; capturing
+# the real class here ensures fixtures that create spec'd mocks (e.g.
+# MagicMock(spec=_RealClientSession)) do not hit InvalidSpecError.
+_RealClientSession = aiohttp.ClientSession
+
 # Set WindowsSelectorEventLoopPolicy for Windows compatibility
 if sys.platform.startswith("win"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -132,7 +139,7 @@ def reset_mocks():
 @pytest.fixture
 def mock_aiohttp_session():
     """Mock aiohttp.ClientSession with proper async context manager."""
-    mock_session = MagicMock(spec=aiohttp.ClientSession)
+    mock_session = MagicMock(spec=_RealClientSession)
     mock_session.closed = False
 
     class MockResponse:

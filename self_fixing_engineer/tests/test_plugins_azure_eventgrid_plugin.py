@@ -9,6 +9,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import aiohttp
 import pytest
 
+# Save the real aiohttp class reference at module level before any test
+# patches run (see test_plugins_pagerduty_plugin.py for rationale).
+_RealClientSession = aiohttp.ClientSession
+
 # Mock the core modules before any imports
 # First, mock core_secrets
 mock_secrets_manager = MagicMock()
@@ -89,7 +93,7 @@ def reset_mocks():
 @pytest.fixture
 def mock_aiohttp_session():
     """Mock aiohttp.ClientSession with proper async context manager."""
-    mock_session = MagicMock(spec=aiohttp.ClientSession)
+    mock_session = MagicMock(spec=_RealClientSession)
     mock_session.closed = False
 
     # Create a proper async context manager for the response
