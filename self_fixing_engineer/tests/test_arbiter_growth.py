@@ -10,7 +10,7 @@ import types
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -68,7 +68,7 @@ create_module_stub(
     "redis.asyncio",
     {
         "Redis": MagicMock,
-        "from_url": MagicMock,
+        "from_url": AsyncMock(),
         "RedisError": type("RedisError", (Exception,), {}),
     },
 )
@@ -141,7 +141,9 @@ create_module_stub(
 
 # NOTE: sqlalchemy stubs removed - use the real module since sqlalchemy is installed
 
-create_module_stub("aiofiles", {"open": MagicMock})
+# NOTE: aiofiles stub removed from sys.modules; mock is injected directly into
+# arbiter_growth.aiofiles after module load to avoid contaminating other tests
+# that rely on real aiofiles I/O (e.g. test_arbiter_policy_policy_manager).
 
 # Import using direct file loading to avoid package/module conflicts
 import importlib.util
@@ -165,6 +167,14 @@ spec = importlib.util.spec_from_file_location("arbiter_growth", arbiter_growth_f
 arbiter_growth = importlib.util.module_from_spec(spec)
 sys.modules["arbiter_growth"] = arbiter_growth
 spec.loader.exec_module(arbiter_growth)
+
+# Inject a local aiofiles mock into arbiter_growth so that tests can use async
+# file mocking without replacing sys.modules["aiofiles"] globally.  Tests in
+# other files (e.g. policy manager) that need real aiofiles I/O are unaffected.
+_mock_aiofiles_module = types.ModuleType("aiofiles")
+_mock_aiofiles_file = AsyncMock()
+_mock_aiofiles_module.open = MagicMock(return_value=_mock_aiofiles_file)
+arbiter_growth.aiofiles = _mock_aiofiles_module
 
 # Import all needed classes from the loaded module
 ArbiterGrowthManager = arbiter_growth.ArbiterGrowthManager
