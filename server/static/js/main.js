@@ -198,6 +198,12 @@ function showView(viewName) {
     } else {
         stopJobsAutoRefresh();
     }
+
+    // Refresh fixes list whenever the fixes tab becomes active so the user
+    // always sees the latest state without needing to click Refresh manually.
+    if (viewName === 'fixes') {
+        loadFixes();
+    }
 }
 
 /**
@@ -1289,6 +1295,9 @@ async function loadErrors(jobId) {
         const data = await response.json();
         
         if (data.errors.length === 0) {
+            // Hide the propose-all button — no proposable errors in this result.
+            const proposeAllBtnEmpty = document.getElementById('propose-all-btn');
+            if (proposeAllBtnEmpty) proposeAllBtnEmpty.style.display = 'none';
             // Don't replace executive summary, just add message
             const noErrors = document.createElement('p');
             noErrors.className = 'no-data';
@@ -1305,7 +1314,7 @@ async function loadErrors(jobId) {
         
         const hasProposable = data.errors.some(e => e.error_id || e.bug_id);
         const proposeAllBtn = document.getElementById('propose-all-btn');
-        if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
+        if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
         
         // Add each error card
         data.errors.forEach(error => {
@@ -1488,10 +1497,18 @@ async function loadInsights() {
 
 // Fixes Management
 function initFixes() {
-    document.getElementById('refresh-fixes').addEventListener('click', () => loadFixes());
-    document.getElementById('approve-all-btn').addEventListener('click', () => approveAllFixes());
-    document.getElementById('apply-all-btn').addEventListener('click', () => applyAllFixes());
-    document.getElementById('reject-all-btn').addEventListener('click', () => rejectAllFixes());
+    const refreshBtn = document.getElementById('refresh-fixes');
+    if (refreshBtn) refreshBtn.addEventListener('click', () => loadFixes());
+
+    const approveAllBtn = document.getElementById('approve-all-btn');
+    if (approveAllBtn) approveAllBtn.addEventListener('click', () => approveAllFixes());
+
+    const applyAllBtn = document.getElementById('apply-all-btn');
+    if (applyAllBtn) applyAllBtn.addEventListener('click', () => applyAllFixes());
+
+    const rejectAllBtn = document.getElementById('reject-all-btn');
+    if (rejectAllBtn) rejectAllBtn.addEventListener('click', () => rejectAllFixes());
+
     const fixFilter = document.getElementById('fix-status-filter');
     if (fixFilter) {
         fixFilter.addEventListener('change', () => loadFixes());
@@ -1501,17 +1518,53 @@ function initFixes() {
 
 async function loadFixes() {
     const container = document.getElementById('fixes-list');
+    if (!container) return;
     container.innerHTML = '<p class="loading">Loading fixes...</p>';
-    
-    try {
-        const response = await fetchWithRetry(`${API_BASE}/fixes/`);
-        const data = await response.json();
-        
-        currentFixesData = data;
 
-        // Update bulk action button counts
-        const proposedFixes = data.filter(f => f.status === 'proposed');
-        const approvedFixes = data.filter(f => f.status === 'approved');
+    // Read the status filter and pass it as a query parameter so the server
+    // can apply it.  Bulk-action counts are always computed against the full
+    // (unfiltered) dataset so that "Approve All" works regardless of which
+    // filter the user has selected.
+    const fixFilter = document.getElementById('fix-status-filter');
+    const filterStatus = fixFilter ? fixFilter.value : '';
+
+    try {
+        let displayData, allData;
+
+        if (filterStatus) {
+            // When a filter is active we need two requests: one for the
+            // filtered display list and one for the complete list that drives
+            // bulk-action state (counts and disabled flags).
+            const filteredUrl = `${API_BASE}/fixes/?status=${encodeURIComponent(filterStatus)}`;
+            const [filteredResp, allResp] = await Promise.all([
+                fetchWithRetry(filteredUrl),
+                fetchWithRetry(`${API_BASE}/fixes/`),
+            ]);
+            displayData = await filteredResp.json();
+            allData = await allResp.json();
+        } else {
+            // No filter — a single request covers both display and bulk tracking.
+            const resp = await fetchWithRetry(`${API_BASE}/fixes/`);
+            displayData = await resp.json();
+            allData = displayData;
+        }
+
+        // Validate that the server returned array payloads as expected.
+        if (!Array.isArray(allData)) {
+            console.warn('loadFixes: unexpected response format for full list', allData);
+            allData = [];
+        }
+        if (!Array.isArray(displayData)) {
+            console.warn('loadFixes: unexpected response format for display list', displayData);
+            displayData = [];
+        }
+
+        // The full dataset drives bulk operations.
+        currentFixesData = allData;
+
+        // Update bulk action button counts based on the complete dataset.
+        const proposedFixes = currentFixesData.filter(f => f.status === 'proposed');
+        const approvedFixes = currentFixesData.filter(f => f.status === 'approved');
         const approveAllBtn = document.getElementById('approve-all-btn');
         const applyAllBtn = document.getElementById('apply-all-btn');
         const rejectAllBtn = document.getElementById('reject-all-btn');
@@ -1528,13 +1581,13 @@ async function loadFixes() {
             rejectAllBtn.disabled = proposedFixes.length === 0;
         }
 
-        if (data.length === 0) {
+        if (displayData.length === 0) {
             container.innerHTML = '<p class="no-data">No fixes found</p>';
             return;
         }
-        
+
         container.innerHTML = '';
-        data.forEach(fix => {
+        displayData.forEach(fix => {
             const card = createFixCard(fix);
             container.appendChild(card);
         });
@@ -2994,6 +3047,9 @@ async function analyzeServerModule(btn) {
         
         if (data.error) {
             showError(`Analysis error: ${data.error}`);
+            // Hide the propose-all button — analysis returned an error.
+            const proposeAllBtnErr = document.getElementById('propose-all-btn');
+            if (proposeAllBtnErr) proposeAllBtnErr.style.display = 'none';
             return;
         }
         
@@ -3057,10 +3113,13 @@ async function analyzeServerModule(btn) {
             });
             const hasProposable = data.issues.some(i => i.error_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
-            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
         } else {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">✅ No issues found in ${targetLower} module</p>`;
+            // Hide the propose-all button — no issues found.
+            const proposeAllBtnNone = document.getElementById('propose-all-btn');
+            if (proposeAllBtnNone) proposeAllBtnNone.style.display = 'none';
         }
     } catch (error) {
         showError('Server module analysis failed: ' + error.message);
@@ -3095,6 +3154,9 @@ async function detectBugs(btn) {
             showError(`Bug detection unavailable: ${data.note}`);
             const container = document.getElementById('errors-list');
             container.innerHTML = `<div class="error-message">${escapeHtml(data.note)}</div>`;
+            // Hide the propose-all button — detection was unavailable.
+            const proposeAllBtnNote = document.getElementById('propose-all-btn');
+            if (proposeAllBtnNote) proposeAllBtnNote.style.display = 'none';
             return;
         }
         
@@ -3136,8 +3198,11 @@ async function detectBugs(btn) {
             });
             const hasProposable = data.bugs.some(b => b.bug_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
-            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
         } else {
+            // No bugs detected — ensure the propose-all button is hidden.
+            const proposeAllBtnNone = document.getElementById('propose-all-btn');
+            if (proposeAllBtnNone) proposeAllBtnNone.style.display = 'none';
             container.innerHTML = '<p class="no-data">No bugs detected</p>';
         }
     } catch (error) {
@@ -3200,10 +3265,6 @@ async function analyzeCodebase(btn) {
         showSuccess('Codebase analysis complete');
         alert(resultMessage);
 
-        // Reset propose-all button visibility
-        const proposeAllBtn = document.getElementById('propose-all-btn');
-        if (proposeAllBtn) proposeAllBtn.style.display = '';
-        
         // If there are issues/bugs found, populate the errors list
         if (data.issues && data.issues.length > 0) {
             const container = document.getElementById('errors-list');
@@ -3211,21 +3272,44 @@ async function analyzeCodebase(btn) {
             data.issues.forEach(issue => {
                 const card = document.createElement('div');
                 card.className = 'error-card';
-                
+
                 // Escape all user-generated content to prevent XSS
                 const issueType = escapeHtml(issue.type || 'Issue');
                 const issueMessage = escapeHtml(issue.message || '');
                 const issueFile = escapeHtml(issue.file || 'N/A');
                 const issueLine = escapeHtml(String(issue.line || 'N/A'));
                 const issueSeverity = escapeHtml(issue.severity || 'medium');
-                
+
                 card.innerHTML = `
                     <h4>${issueType}: ${issueMessage}</h4>
                     <p>File: ${issueFile}, Line: ${issueLine}</p>
                     <p>Severity: <span class="severity-${issueSeverity}">${issueSeverity}</span></p>
                 `;
+
+                // Add propose-fix button when the issue carries an identifier so
+                // both "Propose Fix" per-card and "Propose All Fixes" can work.
+                const idForFix = issue.error_id || issue.bug_id;
+                if (idForFix) {
+                    const button = document.createElement('button');
+                    button.className = 'btn btn-primary';
+                    button.textContent = 'Propose Fix';
+                    button.dataset.fixId = idForFix;
+                    button.dataset.state = 'pending';
+                    button.addEventListener('click', () => proposeFix(idForFix, button));
+                    card.appendChild(button);
+                }
+
                 container.appendChild(card);
             });
+
+            // Show propose-all button only when at least one issue is proposable.
+            const hasProposable = data.issues.some(i => i.error_id || i.bug_id);
+            const proposeAllBtn = document.getElementById('propose-all-btn');
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
+        } else {
+            // No issues — ensure the propose-all button is hidden.
+            const proposeAllBtn = document.getElementById('propose-all-btn');
+            if (proposeAllBtn) proposeAllBtn.style.display = 'none';
         }
     } catch (error) {
         showError('Analysis failed: ' + error.message);
@@ -3313,13 +3397,17 @@ async function prioritizeBugs(btn) {
             });
             const hasProposable = data.prioritized_bugs.some(b => b.bug_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
-            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
         } else if (data.message || data.note) {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">${escapeHtml(data.message || data.note)}</p>`;
+            const proposeAllBtnMsg = document.getElementById('propose-all-btn');
+            if (proposeAllBtnMsg) proposeAllBtnMsg.style.display = 'none';
         } else {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">No bugs found for this job.</p>`;
+            const proposeAllBtnEmpty = document.getElementById('propose-all-btn');
+            if (proposeAllBtnEmpty) proposeAllBtnEmpty.style.display = 'none';
         }
     } catch (error) {
         showError('Prioritization failed: ' + error.message);
