@@ -4072,24 +4072,16 @@ class SFEService:
         }
     
     def _check_gdpr_compliance(self, content: str, file_path: str) -> List[Dict[str, Any]]:
-        """Check for GDPR compliance issues (PII handling)."""
-        violations = []
-        
-        # Pattern matching for common PII fields without proper handling
-        # re module already imported at module level
-        
-        pii_patterns = [
-            (r'\b(email|e-mail|mail)\b.*=.*input', "Email collection without consent mechanism"),
-            (r'\b(ssn|social.?security)\b', "Social Security Number handling detected"),
-            (r'\b(credit.?card|card.?number|cvv)\b', "Credit card data handling detected"),
-            (r'\b(password|passwd)\b.*=.*input', "Password handling without encryption"),
-            (r'\b(dob|date.?of.?birth|birthday)\b', "Date of birth collection detected"),
-        ]
-        
-        for pattern, message in pii_patterns:
-            matches = re.finditer(pattern, content, re.IGNORECASE)
-            for match in matches:
-                line_num = content[:match.start()].count('\n') + 1
+        """Check for GDPR compliance issues (PII handling).
+
+        Delegates entirely to ``generator.specs.gdpr._PII_PATTERNS`` — the
+        single source of truth for PII detection patterns across the platform.
+        """
+        from generator.specs.gdpr import _PII_PATTERNS  # noqa: PLC0415
+        violations: List[Dict[str, Any]] = []
+        for pattern, message, nist_ctrl in _PII_PATTERNS:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                line_num = content[: match.start()].count("\n") + 1
                 violations.append({
                     "standard": "GDPR",
                     "severity": "high",
@@ -4097,27 +4089,25 @@ class SFEService:
                     "message": message,
                     "file": file_path,
                     "line": line_num,
-                    "recommendation": "Ensure proper consent, encryption, and data protection measures"
+                    "recommendation": (
+                        f"Ensure proper consent, encryption, and data "
+                        f"protection measures (NIST {nist_ctrl})"
+                    ),
+                    "nist_control": nist_ctrl,
                 })
-        
         return violations
-    
+
     def _check_hipaa_compliance(self, content: str, file_path: str) -> List[Dict[str, Any]]:
-        """Check for HIPAA compliance issues (PHI handling)."""
-        violations = []
-        
-        # re module already imported at module level
-        
-        phi_patterns = [
-            (r'\b(patient|medical|health).?record', "Medical record handling detected"),
-            (r'\b(diagnosis|prescription|treatment)\b', "PHI data handling detected"),
-            (r'\b(mrn|medical.?record.?number)\b', "Medical Record Number handling detected"),
-        ]
-        
-        for pattern, message in phi_patterns:
-            matches = re.finditer(pattern, content, re.IGNORECASE)
-            for match in matches:
-                line_num = content[:match.start()].count('\n') + 1
+        """Check for HIPAA compliance issues (PHI handling).
+
+        Delegates entirely to ``generator.specs.hipaa._PHI_PATTERNS`` — the
+        single source of truth for PHI detection patterns across the platform.
+        """
+        from generator.specs.hipaa import _PHI_PATTERNS  # noqa: PLC0415
+        violations: List[Dict[str, Any]] = []
+        for pattern, message, nist_ctrl in _PHI_PATTERNS:
+            for match in re.finditer(pattern, content, re.IGNORECASE):
+                line_num = content[: match.start()].count("\n") + 1
                 violations.append({
                     "standard": "HIPAA",
                     "severity": "critical",
@@ -4125,11 +4115,14 @@ class SFEService:
                     "message": message,
                     "file": file_path,
                     "line": line_num,
-                    "recommendation": "Ensure HIPAA-compliant encryption, access controls, and audit logging"
+                    "recommendation": (
+                        f"Ensure HIPAA-compliant encryption, access controls, "
+                        f"and audit logging (NIST {nist_ctrl})"
+                    ),
+                    "nist_control": nist_ctrl,
                 })
-        
         return violations
-    
+
     def _check_pci_compliance(self, content: str, file_path: str) -> List[Dict[str, Any]]:
         """Check for PCI-DSS compliance issues."""
         violations = []

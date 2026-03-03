@@ -303,13 +303,52 @@ class ComplianceViolation(BaseModel):
             raise ValueError(f"severity must be one of {allowed}, got {v!r}")
         return v
 
-
 # =============================================================================
 # INTERNAL STATE — thread-safe lazy loading
 # =============================================================================
 
 _plugin_lock: threading.Lock = threading.Lock()
 _cached_plugin: Optional[Any] = None
+
+# =============================================================================
+# PII DETECTION PATTERNS — single source of truth
+#
+# These patterns are the authoritative definition for what constitutes
+# unprotected PII handling in generated Python code.
+# ``server.services.sfe_service.SFEService._check_gdpr_compliance`` imports
+# this constant directly so there is only one definition across the entire
+# platform.  Do NOT duplicate or shadow these patterns elsewhere.
+# =============================================================================
+
+#: PII pattern tuples: ``(regex, human_message, nist_control_id)``.
+#: Imported by ``sfe_service._check_gdpr_compliance`` — the single source of truth.
+_PII_PATTERNS: List[tuple[str, str, str]] = [
+    (
+        r"\b(email|e-mail|mail)\b.*=.*input",
+        "Email collection without consent mechanism",
+        "AC-3",
+    ),
+    (
+        r"\b(ssn|social.?security)\b",
+        "Social Security Number handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(credit.?card|card.?number|cvv)\b",
+        "Credit card data handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(password|passwd)\b.*=.*input",
+        "Password handling without encryption",
+        "SC-28",
+    ),
+    (
+        r"\b(dob|date.?of.?birth|birthday)\b",
+        "Date of birth collection detected",
+        "SC-28",
+    ),
+]
 
 # =============================================================================
 # PUBLIC API
@@ -413,34 +452,6 @@ def check_generated_code(output_dir: str) -> List[Dict[str, Any]]:
         >>> isinstance(violations, list)
         True
     """
-    _pii_patterns: List[tuple[str, str, str]] = [
-        (
-            r"\b(email|e-mail|mail)\b.*=.*input",
-            "Email collection without consent mechanism",
-            "AC-3",
-        ),
-        (
-            r"\b(ssn|social.?security)\b",
-            "Social Security Number handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(credit.?card|card.?number|cvv)\b",
-            "Credit card data handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(password|passwd)\b.*=.*input",
-            "Password handling without encryption",
-            "SC-28",
-        ),
-        (
-            r"\b(dob|date.?of.?birth|birthday)\b",
-            "Date of birth collection detected",
-            "SC-28",
-        ),
-    ]
-
     with _tracer.start_as_current_span("gdpr_spec.check_generated_code") as span:
         span.set_attribute("output_dir", output_dir)
 
@@ -471,7 +482,7 @@ def check_generated_code(output_dir: str) -> List[Dict[str, Any]]:
             files_scanned += 1
             rel_path = str(py_file.relative_to(base))
 
-            for pattern, message, nist_ctrl in _pii_patterns:
+            for pattern, message, nist_ctrl in _PII_PATTERNS:
                 for match in re.finditer(pattern, content, re.IGNORECASE):
                     line_num = content[: match.start()].count("\n") + 1
                     violation = ComplianceViolation(

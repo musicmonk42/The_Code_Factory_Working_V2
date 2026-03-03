@@ -302,9 +302,48 @@ _plugin_lock: threading.Lock = threading.Lock()
 _cached_plugin: Optional[Any] = None
 
 # =============================================================================
-# PUBLIC API
+# PHI DETECTION PATTERNS — single source of truth
+#
+# These patterns are the authoritative definition for what constitutes
+# unprotected PHI handling in generated Python code.
+# ``server.services.sfe_service.SFEService._check_hipaa_compliance`` imports
+# this constant directly so there is only one definition across the entire
+# platform.  Do NOT duplicate or shadow these patterns elsewhere.
 # =============================================================================
 
+#: PHI pattern tuples: ``(regex, human_message, nist_control_id)``.
+#: Imported by ``sfe_service._check_hipaa_compliance`` — the single source of truth.
+_PHI_PATTERNS: List[tuple[str, str, str]] = [
+    (
+        r"\b(patient|medical|health).?record",
+        "Medical record handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(diagnosis|prescription|treatment)\b",
+        "PHI data handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(mrn|medical.?record.?number)\b",
+        "Medical Record Number handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(ssn|social.?security)\b",
+        "Social Security Number handling detected",
+        "SC-28",
+    ),
+    (
+        r"\b(dob|date.?of.?birth)\b",
+        "Date of birth handling detected",
+        "SC-28",
+    ),
+]
+
+# =============================================================================
+# PUBLIC API
+# =============================================================================
 
 def make_compliance_plugin() -> Any:
     """Return a ``CompliancePlugin`` instance that audits generated docs for HIPAA sections.
@@ -403,34 +442,6 @@ def check_generated_code(output_dir: str) -> List[Dict[str, Any]]:
         >>> isinstance(violations, list)
         True
     """
-    _phi_patterns: List[tuple[str, str, str]] = [
-        (
-            r"\b(patient|medical|health).?record",
-            "Medical record handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(diagnosis|prescription|treatment)\b",
-            "PHI data handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(mrn|medical.?record.?number)\b",
-            "Medical Record Number handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(ssn|social.?security)\b",
-            "Social Security Number handling detected",
-            "SC-28",
-        ),
-        (
-            r"\b(dob|date.?of.?birth)\b",
-            "Date of birth handling detected",
-            "SC-28",
-        ),
-    ]
-
     with _tracer.start_as_current_span("hipaa_spec.check_generated_code") as span:
         span.set_attribute("output_dir", output_dir)
 
@@ -461,7 +472,7 @@ def check_generated_code(output_dir: str) -> List[Dict[str, Any]]:
             files_scanned += 1
             rel_path = str(py_file.relative_to(base))
 
-            for pattern, message, nist_ctrl in _phi_patterns:
+            for pattern, message, nist_ctrl in _PHI_PATTERNS:
                 for match in re.finditer(pattern, content, re.IGNORECASE):
                     line_num = content[: match.start()].count("\n") + 1
                     violation = ComplianceViolation(

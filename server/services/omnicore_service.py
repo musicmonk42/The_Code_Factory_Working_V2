@@ -3285,6 +3285,20 @@ class OmniCoreService:
                     requirements_dict["project_type"] = project_type
                     logger.info(f"[CODEGEN] Injecting project_type={project_type!r} into requirements for job {job_id}")
 
+                # Inject compliance_preferences from the clarifier into requirements so
+                # generator.specs router can activate the correct compliance spec even
+                # when keywords are absent from the spec text (e.g. user answered
+                # phi_data=True in the clarifier question loop).
+                compliance_preferences = payload.get("compliance_preferences") or {}
+                if compliance_preferences:
+                    requirements_dict["compliance_preferences"] = compliance_preferences
+                    logger.info(
+                        "[CODEGEN] Injecting compliance_preferences into requirements for job %s: %s",
+                        job_id,
+                        list(compliance_preferences.keys()),
+                        extra={"job_id": job_id, "compliance_preferences": compliance_preferences},
+                    )
+
                 # Inject previous_error from payload so build_code_generation_prompt can
                 # include it in the prompt, giving the LLM context about what failed.
                 # This also changes the prompt content and therefore the LLM cache key,
@@ -3926,6 +3940,45 @@ class OmniCoreService:
                         logger.warning(
                             f"[CODEGEN] post_materialize failed: {pm_err}",
                             extra={"job_id": job_id}
+                        )
+
+                    # Run post-generation compliance validation via generator.specs router.
+                    # Scans generated files for PHI/PII patterns that indicate missing
+                    # security controls (e.g. unencrypted PHI fields, missing audit logs).
+                    # Violations are logged as warnings and recorded in job metadata but
+                    # do NOT block the pipeline — they inform retry and reporting.
+                    try:
+                        from generator.specs import check_generated_output  # noqa: PLC0415
+                        _spec_violations = check_generated_output(
+                            str(output_path),
+                            requirements,
+                            compliance_preferences,
+                        )
+                        if _spec_violations:
+                            logger.warning(
+                                "[CODEGEN] Post-generation compliance scan found %d violation(s) "
+                                "in job %s — review generated code for missing security controls",
+                                len(_spec_violations),
+                                job_id,
+                                extra={
+                                    "job_id": job_id,
+                                    "violation_count": len(_spec_violations),
+                                    "violations": _spec_violations[:10],  # cap log size
+                                },
+                            )
+                        else:
+                            logger.info(
+                                "[CODEGEN] Post-generation compliance scan passed for job %s",
+                                job_id,
+                                extra={"job_id": job_id},
+                            )
+                    except Exception as _cv_err:
+                        logger.warning(
+                            "[CODEGEN] Post-generation compliance scan failed for job %s: %s",
+                            job_id,
+                            _cv_err,
+                            extra={"job_id": job_id},
+                            exc_info=True,
                         )
 
                     # Fix any double-nesting that the LLM may have introduced
