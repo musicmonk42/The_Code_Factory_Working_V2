@@ -1290,35 +1290,136 @@ def validate_spec_fidelity(
                 _router_prefix_map[_var] = _prefix
 
         if _router_prefix_map:
-            # Build a reverse map: router module stem → prefix
-            # e.g. "from app.routers.orders import router as orders_router"
+            # Build a map from router variable name → source file stem.
+            # Handles three import patterns:
+            #   1. from app.routers.auth import router as auth_router  (alias)
+            #   2. from app.routes import auth_router                  (direct, no alias)
+            #   3. from app.routes import (auth_router, patients_router, ...) (multi-import)
+            _var_to_stem: Dict[str, str] = {}
+
+            # Pattern 1: aliased import — captures (stem, alias)
             _IMPORT_AS_RE = re.compile(
-                r'from\s+\S+\.(\w+)\s+import\s+\w+\s+as\s+(\w+)'
+                r'from\s+(\S+)\s+import\s+\w+\s+as\s+(\w+)'
+            )
+            for _module, _alias in _IMPORT_AS_RE.findall(_main_file_content):
+                _stem = _module.split(".")[-1]
+                _var_to_stem[_alias] = _stem
+
+            # Pattern 2 & 3: direct imports (with or without parentheses).
+            # Matches: from some.module import name1, name2
+            #          from some.module import (name1, name2,)
+            _IMPORT_DIRECT_RE = re.compile(
+                r'from\s+(\S+)\s+import\s+\(([^)]+)\)|from\s+(\S+)\s+import\s+([^\n(]+)',
+                re.DOTALL,
+            )
+            for _m_paren, _names_paren, _m_direct, _names_direct in _IMPORT_DIRECT_RE.findall(
+                _main_file_content
+            ):
+                if _m_paren and _names_paren:
+                    _module, _names_raw = _m_paren, _names_paren
+                elif _m_direct and _names_direct:
+                    _module, _names_raw = _m_direct, _names_direct
+                else:
+                    continue
+                _stem = _module.split(".")[-1]
+                for _name_entry in re.split(r'[,\s]+', _names_raw):
+                    _name_entry = _name_entry.strip().rstrip(",")
+                    if not _name_entry or _name_entry == "as":
+                        continue
+                    # Skip aliased parts (handled above)
+                    if re.match(r'^\w+$', _name_entry):
+                        _var_to_stem.setdefault(_name_entry, _stem)
+
+            # Build stem → prefix map from the discovered variable→stem mapping.
+            # IMPORTANT: Only include stems that have exactly ONE router variable
+            # mapped to them. When multiple router variables share the same stem
+            # (the single-file pattern, e.g. app/routes.py), the stem is excluded
+            # here and handled via the per-variable AST analysis below.
+            from collections import Counter as _Counter
+            _stem_router_count = _Counter(
+                _stem for _var, _stem in _var_to_stem.items()
+                if _var in _router_prefix_map
             )
             _stem_to_prefix: Dict[str, str] = {}
-            for _stem, _var in _IMPORT_AS_RE.findall(_main_file_content):
-                if _var in _router_prefix_map:
+            for _var, _stem in _var_to_stem.items():
+                if _var in _router_prefix_map and _stem_router_count[_stem] == 1:
                     _stem_to_prefix[_stem] = _router_prefix_map[_var]
+
+            # Also build a direct variable → prefix map for single-file patterns
+            # where multiple routers live in one file (e.g. app/routes.py).
+            # In that case we need to map each router variable to its prefix and
+            # then, within the file, assign the correct prefix per endpoint by
+            # inspecting which router variable each decorator is attached to.
+            _var_to_prefix: Dict[str, str] = {
+                _var: _router_prefix_map[_var]
+                for _var in _var_to_stem
+                if _var in _router_prefix_map
+            }
 
             # Re-extract endpoints from router files with the prefix prepended.
             for _filename, _content in generated_files.items():
                 if not _filename.endswith(".py"):
                     continue
-                # Determine if this file is a router file and get its prefix.
                 _module_stem = _filename.replace("/", ".").removesuffix(".py").split(".")[-1]
-                _prefix = _stem_to_prefix.get(_module_stem, "")
-                if not _prefix:
-                    continue
-                # Re-extract routes and prepend the include_router prefix.
-                _raw = extract_endpoints_from_code(_content, _filename)
-                for _ep in _raw:
-                    _raw_path = _ep.get("path", "")
-                    _full_path = (
-                        _prefix.rstrip("/") + "/" + _raw_path.lstrip("/")
-                    )
-                    all_found_endpoints.append(
-                        {"method": _ep["method"], "path": _full_path}
-                    )
+                _file_prefix = _stem_to_prefix.get(_module_stem, "")
+
+                if _file_prefix:
+                    # Standard multi-file pattern: one prefix applies to the whole file.
+                    _raw = extract_endpoints_from_code(_content, _filename)
+                    for _ep in _raw:
+                        _raw_path = _ep.get("path", "")
+                        _full_path = _file_prefix.rstrip("/") + "/" + _raw_path.lstrip("/")
+                        all_found_endpoints.append({"method": _ep["method"], "path": _full_path})
+                else:
+                    # Single-file pattern: multiple router variables defined in one file.
+                    # Determine which router variables are defined here and have a prefix.
+                    _routers_in_file = [
+                        _var for _var, _stem in _var_to_stem.items()
+                        if _stem == _module_stem and _var in _var_to_prefix
+                    ]
+                    if not _routers_in_file:
+                        continue
+                    # Parse the file with AST to map each function to its router variable.
+                    try:
+                        _tree = ast.parse(_content)
+                    except SyntaxError:
+                        continue
+                    for _node in ast.walk(_tree):
+                        if not isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            continue
+                        for _dec in _node.decorator_list:
+                            # Match patterns: router_var.get('/path'), router_var.post('/path')
+                            if not (
+                                isinstance(_dec, ast.Call)
+                                and isinstance(_dec.func, ast.Attribute)
+                                and isinstance(_dec.func.value, ast.Name)
+                            ):
+                                continue
+                            _dec_var = _dec.func.value.id
+                            _http_method = _dec.func.attr.upper()
+                            if _http_method not in {
+                                "GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"
+                            }:
+                                continue
+                            _dec_prefix = _var_to_prefix.get(_dec_var, "")
+                            if not _dec_prefix:
+                                continue
+                            # Extract the path string from the decorator call.
+                            _path_arg = ""
+                            if _dec.args:
+                                _first = _dec.args[0]
+                                if isinstance(_first, ast.Constant) and isinstance(
+                                    _first.value, str
+                                ):
+                                    _path_arg = _first.value
+                            if not _path_arg:
+                                continue
+                            _full_path = (
+                                _dec_prefix.rstrip("/") + "/" + _path_arg.lstrip("/")
+                            )
+                            all_found_endpoints.append(
+                                {"method": _http_method, "path": _full_path}
+                            )
 
         result["found_endpoints"] = all_found_endpoints
 

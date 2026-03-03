@@ -321,8 +321,19 @@ def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
 
 
 def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
-    """Return True when the spec is large enough to warrant multi-pass generation."""
-    return _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD
+    """Return True when the spec is large enough to warrant multi-pass generation.
+
+    Triggers multi-pass when either:
+    - The spec has at least :data:`MULTIPASS_ENDPOINT_THRESHOLD` API endpoints, or
+    - The combined prompt content exceeds 50 000 characters (a rough proxy for
+      prompts that would exceed the LLM's 16K output token limit in a single pass).
+    """
+    if _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD:
+        return True
+    md = requirements.get("md_content", "") or requirements.get("description", "")
+    if len(md) > 50_000:
+        return True
+    return False
 
 
 def _build_symbol_manifest(files: Dict[str, str]) -> str:
