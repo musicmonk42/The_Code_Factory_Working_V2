@@ -341,11 +341,11 @@ docker-up: ## Start all services with Docker Compose
 	@echo "$(BLUE)Starting Docker Compose services...$(NC)"
 	docker compose up -d
 	@echo "$(GREEN)Services started!$(NC)"
-	@echo "$(YELLOW)Generator: http://localhost:8000$(NC)"
-	@echo "$(YELLOW)OmniCore: http://localhost:8001$(NC)"
-	@echo "$(YELLOW)OmniCore Prometheus Metrics: http://localhost:9090/metrics$(NC)"
-	@echo "$(YELLOW)Grafana: http://localhost:3000$(NC)"
-	@echo "$(YELLOW)Prometheus Server: http://localhost:9090$(NC)"
+	@echo "$(YELLOW)Code Factory API:    http://localhost:8000$(NC)"
+	@echo "$(YELLOW)API Docs:            http://localhost:8000/docs$(NC)"
+	@echo "$(YELLOW)Prometheus Metrics:  http://localhost:9090/metrics$(NC)"
+	@echo "$(YELLOW)Prometheus Server:   http://localhost:9091$(NC)"
+	@echo "$(YELLOW)Grafana:             http://localhost:3000$(NC)"
 
 docker-down: ## Stop all Docker Compose services
 	@echo "$(BLUE)Stopping Docker Compose services...$(NC)"
@@ -371,10 +371,9 @@ deployment-validate: ## Validate generated deployment files (Docker, K8s, Helm)
 	@echo "$(YELLOW)This validates deployment artifacts from code generation jobs$(NC)"
 	@if [ -d "./uploads" ]; then \
 		python3 -c "import asyncio; from generator.agents.deploy_agent.deploy_validator import DeploymentCompletenessValidator; \
-		validator = DeploymentCompletenessValidator(); \
 		import sys; \
-		loop = asyncio.get_event_loop(); \
-		result = loop.run_until_complete(validator.validate('', 'all')); \
+		validator = DeploymentCompletenessValidator(); \
+		result = asyncio.run(validator.validate('', 'all')); \
 		print(f\"Status: {result.get('status')}\"); \
 		errors = result.get('errors', []); \
 		[print(f\"ERROR: {e}\") for e in errors]; \
@@ -765,10 +764,10 @@ metrics: ## Show current metrics
 
 ci-local: ## Run CI checks locally
 	@echo "$(BLUE)Running CI checks locally...$(NC)"
-	make lint
-	make type-check
-	make security-scan
-	make test
+	$(MAKE) lint
+	$(MAKE) type-check
+	$(MAKE) security-scan
+	$(MAKE) test
 	@echo "$(GREEN)CI checks complete!$(NC)"
 
 # =============================================================================
@@ -814,9 +813,14 @@ codegen-multipass-status: ## Show current multi-pass code-generation thresholds 
 
 setup: ## Initial setup for new developers
 	@echo "$(BLUE)Setting up Code Factory Platform...$(NC)"
-	cp .env.example .env
-	@echo "$(YELLOW)Please update .env file with your configuration$(NC)"
-	make install-dev
+	@if [ -f .env ]; then \
+		echo "$(YELLOW).env already exists — skipping copy to avoid overwriting your configuration.$(NC)"; \
+		echo "$(YELLOW)Delete .env and re-run 'make setup' to reset from .env.example.$(NC)"; \
+	else \
+		cp .env.example .env; \
+		echo "$(GREEN).env created from .env.example — update it with your configuration.$(NC)"; \
+	fi
+	$(MAKE) install-dev
 	@echo "$(GREEN)Setup complete! Edit .env and run 'make docker-up' to start$(NC)"
 
 setup-monitoring: ## Setup monitoring stack (Prometheus, Grafana)

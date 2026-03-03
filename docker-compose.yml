@@ -262,7 +262,6 @@ services:
       - MESSAGE_BUS_SHARDS=${MESSAGE_BUS_SHARDS:-4}
     ports:
       - "8000:8000"  # Main API endpoint
-      - "8001:8001"  # Metrics port
       - "9090:9090"  # Prometheus metrics HTTP server
     volumes:
       - platform-output:/app/output
