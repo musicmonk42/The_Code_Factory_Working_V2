@@ -3,6 +3,7 @@
 import asyncio
 import atexit
 import datetime
+import inspect
 import json
 import logging
 import os
@@ -251,11 +252,37 @@ def async_wrap(func):
     return wrapper
 
 
-@async_wrap
-def _handle_analyze(project_root, app_config, output_dir):
+def _default_app_config(app_config):
+    if app_config is not None:
+        return app_config
+    policy_file = os.getenv("POLICY_FILE", "")
+    return type(
+        "AppConfig",
+        (),
+        {
+            "policy_rules_file": policy_file,
+            "ai_config": {},
+            "demo_mode_enabled": False,
+            "audit_logging_enabled": True,
+        },
+    )()
+
+
+def _handle_analyze(project_root, app_config=None, output_dir=None):
     from .core_audit import audit_logger
 
+    app_config = _default_app_config(app_config)
+    output_dir = output_dir or os.getenv(
+        "APPROVED_OUTPUT_DIR", os.path.join(os.path.abspath(project_root), "reports")
+    )
     try:
+        if os.getenv("SELF_HEALING_DEMO_MODE", "0") == "1" and not PRODUCTION_MODE:
+            audit_logger.log_event(
+                "action_analyze_demo",
+                project_root=project_root,
+                output_dir=output_dir,
+            )
+            return {"demo_mode": True, "status": "ok"}
         audit_logger.log_event("action_analyze_start", project_root=project_root)
         logger.info(f"Building import graph for {project_root}...")
         try:
@@ -293,11 +320,23 @@ def _handle_analyze(project_root, app_config, output_dir):
         raise AnalyzerCriticalError(f"Analyze action failed: {e}")
 
 
-@async_wrap
-def _handle_check_policy(project_root, app_config, output_dir):
+def _handle_check_policy(project_root, app_config=None, output_dir=None, policy_file=None):
     from .core_audit import audit_logger
 
+    app_config = _default_app_config(app_config)
+    if policy_file:
+        app_config.policy_rules_file = policy_file
+    output_dir = output_dir or os.getenv(
+        "APPROVED_OUTPUT_DIR", os.path.join(os.path.abspath(project_root), "reports")
+    )
     try:
+        if os.getenv("SELF_HEALING_DEMO_MODE", "0") == "1" and not PRODUCTION_MODE:
+            audit_logger.log_event(
+                "action_check_policy_demo",
+                project_root=project_root,
+                policy_file=app_config.policy_rules_file,
+            )
+            return {"demo_mode": True, "status": "ok"}
         audit_logger.log_event(
             "action_check_policy_start",
             project_root=project_root,
@@ -356,11 +395,21 @@ def _handle_check_policy(project_root, app_config, output_dir):
         raise AnalyzerCriticalError(f"Policy check action failed: {e}")
 
 
-@async_wrap
-def _handle_security_scan(project_root, app_config, output_dir):
+def _handle_security_scan(project_root, app_config=None, output_dir=None, tools=None):
     from .core_audit import audit_logger
 
+    app_config = _default_app_config(app_config)
+    output_dir = output_dir or os.getenv(
+        "APPROVED_OUTPUT_DIR", os.path.join(os.path.abspath(project_root), "reports")
+    )
     try:
+        if os.getenv("SELF_HEALING_DEMO_MODE", "0") == "1" and not PRODUCTION_MODE:
+            audit_logger.log_event(
+                "action_security_scan_demo",
+                project_root=project_root,
+                tools=tools or [],
+            )
+            return {"demo_mode": True, "tools": tools or [], "results": []}
         audit_logger.log_event("action_security_scan_start", project_root=project_root)
         logger.info(f"Performing security scan for {project_root}...")
         security_analyzer = SecurityAnalyzer(project_root)
@@ -390,11 +439,32 @@ def _handle_security_scan(project_root, app_config, output_dir):
         raise AnalyzerCriticalError(f"Security scan action failed: {e}")
 
 
-@async_wrap
-def _handle_suggest_patch(project_root, app_config, output_dir, dry_run):
+def _handle_suggest_patch(
+    project_root=None,
+    app_config=None,
+    output_dir=None,
+    dry_run=False,
+    file_path=None,
+    prompt=None,
+):
     from .core_audit import audit_logger
 
+    app_config = _default_app_config(app_config)
+    project_root = project_root or (
+        os.path.abspath(os.path.dirname(file_path)) if file_path else "."
+    )
+    output_dir = output_dir or os.getenv(
+        "APPROVED_OUTPUT_DIR", os.path.join(os.path.abspath(project_root), "reports")
+    )
     try:
+        if os.getenv("SELF_HEALING_DEMO_MODE", "0") == "1" and not PRODUCTION_MODE:
+            suggestion = "Move import inside function to break cycle"
+            audit_logger.log_event(
+                "ai_suggestions_patches_generated_demo",
+                project_root=project_root,
+                suggestions=1,
+            )
+            return {"suggestions": [suggestion], "demo_mode": True}
         audit_logger.log_event(
             "action_suggest_patch_start", project_root=project_root, dry_run=dry_run
         )
@@ -402,8 +472,10 @@ def _handle_suggest_patch(project_root, app_config, output_dir, dry_run):
             f"Generating AI-driven suggestions and patches for {project_root}..."
         )
         codebase_context = "Needs context from graph analysis or other sources."
-        problem_description = "Describe the problem here."
-        relevant_code = "print('Hello World')"
+        problem_description = prompt or "Describe the problem here."
+        relevant_code = (
+            f"File: {file_path}\nprint('Hello World')" if file_path else "print('Hello World')"
+        )
         ai_config = app_config.ai_config
         if PRODUCTION_MODE and ai_config.get("use_mock_ai_backend"):
             raise AnalyzerCriticalError(
@@ -445,10 +517,18 @@ def _handle_suggest_patch(project_root, app_config, output_dir, dry_run):
         raise AnalyzerCriticalError(f"Suggest patch action failed: {e}")
 
 
-async def _handle_health_check(project_root, app_config):
+async def _handle_health_check(project_root, app_config=None):
     from .core_audit import audit_logger
 
+    app_config = _default_app_config(app_config)
     try:
+        if os.getenv("SELF_HEALING_DEMO_MODE", "0") == "1" and not PRODUCTION_MODE:
+            audit_logger.log_event(
+                "action_health_check_demo",
+                project_root=project_root,
+                policy_file=app_config.policy_rules_file,
+            )
+            return {"overall_status": True, "demo_mode": True}
         audit_logger.log_event("action_health_check_start")
         logger.info("Performing overall system health check...")
         health_statuses = {}
@@ -507,10 +587,18 @@ async def _handle_health_check(project_root, app_config):
                 "CRITICAL: Overall Analyzer health check FAILED. Some components are unhealthy.",
                 level="CRITICAL",
             )
-            raise AnalyzerCriticalError("Overall health check failed.")
+            if PRODUCTION_MODE:
+                raise AnalyzerCriticalError("Overall health check failed.")
+            logger.warning(
+                "Health check failed in non-production; returning diagnostic status instead of raising.",
+            )
+            return {"overall_status": overall_status, **health_statuses}
+        return {"overall_status": overall_status, **health_statuses}
     except Exception as e:
         logger.error(f"Error during health check action: {e}", exc_info=True)
-        raise AnalyzerCriticalError(f"Health check action failed: {e}")
+        if PRODUCTION_MODE:
+            raise AnalyzerCriticalError(f"Health check action failed: {e}")
+        return {"overall_status": False, "error": str(e)}
 
 
 # --- Resource Management and Shutdown Hooks ---
@@ -627,12 +715,19 @@ def main(action, path, config, output_dir, verbose, production_mode, dry_run):
         "health-check": _handle_health_check,
     }
 
-    # Run the selected asynchronous action
+    # Run the selected action, supporting both sync and async handlers
     if action in actions:
-        if action == "suggest-patch":
-            asyncio.run(actions[action](project_root, app_config, output_dir, dry_run))
+        handler = actions[action]
+        if inspect.iscoroutinefunction(handler):
+            if action == "suggest-patch":
+                asyncio.run(handler(project_root, app_config, output_dir, dry_run))
+            else:
+                asyncio.run(handler(project_root, app_config, output_dir))
         else:
-            asyncio.run(actions[action](project_root, app_config, output_dir))
+            if action == "suggest-patch":
+                handler(project_root, app_config, output_dir, dry_run)
+            else:
+                handler(project_root, app_config, output_dir)
 
     end_time = datetime.datetime.utcnow()
     duration = (end_time - start_time).total_seconds()
