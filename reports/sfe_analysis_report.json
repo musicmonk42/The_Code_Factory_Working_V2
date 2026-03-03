@@ -1,6 +1,6 @@
 {
   "job_id": "test-job",
-  "code_path": "/tmp/tmpw8mh5d61",
+  "code_path": "/tmp/tmps4w3qty_",
   "issues_found": 0,
   "issues": [],
   "analyzer_module": "self_fixing_engineer.arbiter.codebase_analyzer",
