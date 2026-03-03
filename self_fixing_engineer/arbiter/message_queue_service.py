@@ -181,13 +181,11 @@ except ImportError:
 
     class ArbiterConfig:
         def __init__(self):
-            self.REDIS_URL = "redis://localhost:6379/0"
-            self.KAFKA_BOOTSTRAP_SERVERS = "localhost:9092"
-            self.ENCRYPTION_KEY = (
-                "default-encryption-key-for-tests-only-must-be-32-bytes"
-            )
-            self.REDIS_MAX_CONNECTIONS = 10
-            self.MESSAGE_BUS_MAX_QUEUE_SIZE = 100
+            self.REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+            self.KAFKA_BOOTSTRAP_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092")
+            self.ENCRYPTION_KEY = os.getenv("ENCRYPTION_KEY")
+            self.REDIS_MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
+            self.MESSAGE_BUS_MAX_QUEUE_SIZE = int(os.getenv("MESSAGE_BUS_MAX_QUEUE_SIZE", "100"))
 
     class PermissionManager:
         def __init__(self, config):
