@@ -694,6 +694,39 @@ h3 {
     cursor: not-allowed;
 }
 
+.btn-success {
+    background: #28a745;
+    color: #fff;
+}
+
+.btn-success:hover {
+    background: #218838;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #c82333;
+}
+
+.btn-proposed {
+    background: #6c757d;
+    color: #fff;
+    opacity: 0.7;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.bulk-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
 /* View Header */
 .view-header {
     display: flex;

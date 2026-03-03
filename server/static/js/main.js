@@ -25,6 +25,7 @@ let heartbeatInterval = null;
 let isReconnecting = false;
 let reconnectTimeoutId = null;
 let wsEventHandlers = null; // Store event handlers for cleanup
+let currentFixesData = []; // Store latest fixes data for bulk operations
 
 // Constants for validation and configuration
 // UUID validation pattern (RFC 4122) - used throughout for job ID validation
@@ -1296,6 +1297,10 @@ async function loadErrors(jobId) {
         header.style.marginTop = '20px';
         container.appendChild(header);
         
+        const hasProposable = data.errors.some(e => e.error_id);
+        const proposeAllBtn = document.getElementById('propose-all-btn');
+        if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
+        
         // Add each error card
         data.errors.forEach(error => {
             const card = document.createElement('div');
@@ -1319,7 +1324,8 @@ async function loadErrors(jobId) {
                 const button = document.createElement('button');
                 button.className = 'btn btn-primary';
                 button.textContent = 'Propose Fix';
-                button.addEventListener('click', () => proposeFix(error.error_id));
+                button.dataset.fixId = error.error_id;
+                button.addEventListener('click', () => proposeFix(error.error_id, button));
                 card.appendChild(button);
             }
             
@@ -1336,7 +1342,11 @@ async function loadErrors(jobId) {
     }
 }
 
-async function proposeFix(errorId) {
+async function proposeFix(errorId, btn) {
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '⏳ Proposing...';
+    }
     try {
         // Try the error endpoint first (for issues from analyze_code)
         const response = await fetchWithRetry(`${API_BASE}/sfe/errors/${errorId}/propose-fix`, {
@@ -1345,7 +1355,12 @@ async function proposeFix(errorId) {
         const data = await response.json();
         
         showSuccess(`Fix proposed: ${data.description}`);
+        if (btn) {
+            btn.textContent = '✅ Fix Proposed';
+            btn.className = 'btn btn-proposed';
+        }
         loadFixes();
+        return true;
     } catch (error) {
         // If the error endpoint doesn't work, try the bug analysis endpoint as fallback
         // (for bugs from detect_bugs which use bug_id instead of error_id)
@@ -1366,9 +1381,43 @@ async function proposeFix(errorId) {
                 showSuccess('Bug analysis complete - check console for details');
                 console.log('Bug analysis result:', data);
             }
+            if (btn) {
+                btn.textContent = '✅ Fix Proposed';
+                btn.className = 'btn btn-proposed';
+            }
+            return true;
         } catch (bugError) {
             showError('Failed to propose fix: ' + error.message);
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = 'Propose Fix';
+            }
+            return false;
         }
+    }
+}
+
+async function proposeAllFixes(proposeAllBtn) {
+    const buttons = Array.from(document.querySelectorAll('#errors-list .btn-primary')).filter(
+        b => b.textContent === 'Propose Fix' && !b.disabled && b.dataset.fixId
+    );
+    if (buttons.length === 0) {
+        showSuccess('No pending fixes to propose');
+        return;
+    }
+    if (proposeAllBtn) {
+        proposeAllBtn.disabled = true;
+        proposeAllBtn.textContent = '⏳ Proposing...';
+    }
+    let succeeded = 0;
+    for (const btn of buttons) {
+        const ok = await proposeFix(btn.dataset.fixId, btn);
+        if (ok) succeeded++;
+    }
+    showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
+    if (proposeAllBtn) {
+        proposeAllBtn.textContent = '✅ All Fixes Proposed';
+        proposeAllBtn.disabled = true;
     }
 }
 
@@ -1434,6 +1483,9 @@ async function loadInsights() {
 // Fixes Management
 function initFixes() {
     document.getElementById('refresh-fixes').addEventListener('click', () => loadFixes());
+    document.getElementById('approve-all-btn').addEventListener('click', () => approveAllFixes());
+    document.getElementById('apply-all-btn').addEventListener('click', () => applyAllFixes());
+    document.getElementById('reject-all-btn').addEventListener('click', () => rejectAllFixes());
     loadFixes();
 }
 
@@ -1445,6 +1497,27 @@ async function loadFixes() {
         const response = await fetchWithRetry(`${API_BASE}/fixes/`);
         const data = await response.json();
         
+        currentFixesData = data;
+
+        // Update bulk action button counts
+        const proposedFixes = data.filter(f => f.status === 'proposed');
+        const approvedFixes = data.filter(f => f.status === 'approved');
+        const approveAllBtn = document.getElementById('approve-all-btn');
+        const applyAllBtn = document.getElementById('apply-all-btn');
+        const rejectAllBtn = document.getElementById('reject-all-btn');
+        if (approveAllBtn) {
+            approveAllBtn.textContent = `✅ Approve All${proposedFixes.length ? ` (${proposedFixes.length})` : ''}`;
+            approveAllBtn.disabled = proposedFixes.length === 0;
+        }
+        if (applyAllBtn) {
+            applyAllBtn.textContent = `🚀 Apply All${approvedFixes.length ? ` (${approvedFixes.length})` : ''}`;
+            applyAllBtn.disabled = approvedFixes.length === 0;
+        }
+        if (rejectAllBtn) {
+            rejectAllBtn.textContent = `❌ Reject All${proposedFixes.length ? ` (${proposedFixes.length})` : ''}`;
+            rejectAllBtn.disabled = proposedFixes.length === 0;
+        }
+
         if (data.length === 0) {
             container.innerHTML = '<p class="no-data">No fixes found</p>';
             return;
@@ -1534,6 +1607,45 @@ async function rollbackFix(fixId) {
     } catch (error) {
         showError('Failed to rollback fix: ' + error.message);
     }
+}
+
+async function approveAllFixes() {
+    const proposed = currentFixesData.filter(f => f.status === 'proposed');
+    if (proposed.length === 0) return;
+    const btn = document.getElementById('approve-all-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Approving...'; }
+    let count = 0;
+    for (const fix of proposed) {
+        try { await reviewFix(fix.fix_id, true); count++; } catch (e) { /* skip */ }
+    }
+    showSuccess(`Approved ${count} fixes`);
+    loadFixes();
+}
+
+async function applyAllFixes() {
+    const approved = currentFixesData.filter(f => f.status === 'approved');
+    if (approved.length === 0) return;
+    const btn = document.getElementById('apply-all-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Applying...'; }
+    let count = 0;
+    for (const fix of approved) {
+        try { await applyFix(fix.fix_id); count++; } catch (e) { /* skip */ }
+    }
+    showSuccess(`Applied ${count} fixes`);
+    loadFixes();
+}
+
+async function rejectAllFixes() {
+    const proposed = currentFixesData.filter(f => f.status === 'proposed');
+    if (proposed.length === 0) return;
+    const btn = document.getElementById('reject-all-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...'; }
+    let count = 0;
+    for (const fix of proposed) {
+        try { await reviewFix(fix.fix_id, false); count++; } catch (e) { /* skip */ }
+    }
+    showSuccess(`Rejected ${count} fixes`);
+    loadFixes();
 }
 
 // System Status
@@ -2893,12 +3005,16 @@ async function analyzeServerModule(btn) {
                     const button = document.createElement('button');
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
-                    button.addEventListener('click', () => proposeFix(issue.error_id));
+                    button.dataset.fixId = issue.error_id;
+                    button.addEventListener('click', () => proposeFix(issue.error_id, button));
                     card.appendChild(button);
                 }
                 
                 container.appendChild(card);
             });
+            const hasProposable = data.issues.some(i => i.error_id);
+            const proposeAllBtn = document.getElementById('propose-all-btn');
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
         } else {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">✅ No issues found in ${targetLower} module</p>`;
@@ -2967,12 +3083,16 @@ async function detectBugs(btn) {
                     const button = document.createElement('button');
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
-                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    button.dataset.fixId = bug.bug_id;
+                    button.addEventListener('click', () => proposeFix(bug.bug_id, button));
                     card.appendChild(button);
                 }
                 
                 container.appendChild(card);
             });
+            const hasProposable = data.bugs.some(b => b.bug_id);
+            const proposeAllBtn = document.getElementById('propose-all-btn');
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
         } else {
             container.innerHTML = '<p class="no-data">No bugs detected</p>';
         }
@@ -3126,12 +3246,16 @@ async function prioritizeBugs(btn) {
                     const button = document.createElement('button');
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
-                    button.addEventListener('click', () => proposeFix(bug.bug_id));
+                    button.dataset.fixId = bug.bug_id;
+                    button.addEventListener('click', () => proposeFix(bug.bug_id, button));
                     card.appendChild(button);
                 }
                 
                 container.appendChild(card);
             });
+            const hasProposable = data.prioritized_bugs.some(b => b.bug_id);
+            const proposeAllBtn = document.getElementById('propose-all-btn');
+            if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
         } else if (data.message || data.note) {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">${escapeHtml(data.message || data.note)}</p>`;

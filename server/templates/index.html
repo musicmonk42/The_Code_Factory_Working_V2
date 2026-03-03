@@ -364,7 +364,10 @@ Support multiple users.
             </div>
 
             <div class="errors-section">
-                <h3>Detected Errors</h3>
+                <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
+                    <h3 style="margin:0;">Detected Errors</h3>
+                    <button id="propose-all-btn" class="btn btn-primary" onclick="proposeAllFixes(this)" style="display:none;">🔧 Propose All Fixes</button>
+                </div>
                 <div class="errors-list" id="errors-list">
                     <p class="no-data">No errors detected</p>
                 </div>
@@ -462,6 +465,11 @@ Support multiple users.
                     </select>
                 </label>
                 <button id="refresh-fixes" class="btn btn-secondary">🔄 Refresh</button>
+                <div class="bulk-actions">
+                    <button id="approve-all-btn" class="btn btn-success" disabled>✅ Approve All</button>
+                    <button id="apply-all-btn" class="btn btn-primary" disabled>🚀 Apply All</button>
+                    <button id="reject-all-btn" class="btn btn-danger" disabled>❌ Reject All</button>
+                </div>
             </div>
 
             <div class="fixes-list" id="fixes-list">
