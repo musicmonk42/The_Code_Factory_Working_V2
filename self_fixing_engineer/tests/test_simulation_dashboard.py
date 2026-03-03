@@ -57,11 +57,16 @@ def render_main_component(main):
         json.dump({"test_file": "session_1_tests", "status": "COMPLETED"}, f)
 
     # Patch Config class to use temporary directories
-    with patch("self_fixing_engineer.simulation.dashboard.Config") as mock_config:
-        mock_config.PLUGINS_DIR = plugins_dir
-        mock_config.RESULTS_DIR = results_dir
-        mock_config.CONFIG_DIR = configs_dir
-        yield mock_config
+    from self_fixing_engineer.simulation import dashboard
+
+    with patch.object(
+        dashboard.Config, "PLUGINS_DIR", plugins_dir
+    ), patch.object(
+        dashboard.Config, "RESULTS_DIR", results_dir
+    ), patch.object(
+        dashboard.Config, "CONFIG_DIR", configs_dir
+    ):
+        yield {"PLUGINS_DIR": plugins_dir, "RESULTS_DIR": results_dir, "CONFIG_DIR": configs_dir}
 
     # Cleanup
     shutil.rmtree(temp_dir)
@@ -125,7 +130,7 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
     """
     # Create a dummy plugin file with a dangerous name
     dangerous_plugin_path = os.path.join(
-        mock_plugin_and_result_dirs.PLUGINS_DIR, "os.py"
+        mock_plugin_and_result_dirs["PLUGINS_DIR"], "os.py"
     )
     with open(dangerous_plugin_path, "w") as f:
         f.write("def register_my_dashboard_panels(register_func): pass")
@@ -170,12 +175,12 @@ def test_display_onboarding_wizard_config_generation(
         dashboard.display_onboarding_wizard()
 
     # Check if config.json was created
-    config_path = os.path.join(mock_plugin_and_result_dirs.CONFIG_DIR, "config.json")
+    config_path = os.path.join(mock_plugin_and_result_dirs["CONFIG_DIR"], "config.json")
     assert os.path.exists(config_path)
 
     # Check if demo plugin was created
     plugin_dir = os.path.join(
-        mock_plugin_and_result_dirs.PLUGINS_DIR, "demo_python_plugin"
+        mock_plugin_and_result_dirs["PLUGINS_DIR"], "demo_python_plugin"
     )
     assert os.path.exists(plugin_dir)
     assert os.path.exists(os.path.join(plugin_dir, "manifest.json"))
@@ -223,7 +228,7 @@ def test_load_all_simulation_results(mock_plugin_and_result_dirs):
     from self_fixing_engineer.simulation import dashboard
 
     results = dashboard.load_all_simulation_results(
-        mock_plugin_and_result_dirs.RESULTS_DIR
+        mock_plugin_and_result_dirs["RESULTS_DIR"]
     )
 
     assert len(results) == 1
@@ -234,7 +239,7 @@ def test_load_all_simulation_results(mock_plugin_and_result_dirs):
 def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_dirs):
     """Test that invalid JSON files are skipped without crashing."""
     invalid_json_path = os.path.join(
-        mock_plugin_and_result_dirs.RESULTS_DIR, "corrupted.json"
+        mock_plugin_and_result_dirs["RESULTS_DIR"], "corrupted.json"
     )
     with open(invalid_json_path, "w") as f:
         f.write("{'key': 'invalid_json'")
@@ -242,7 +247,7 @@ def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_di
     from self_fixing_engineer.simulation import dashboard
 
     results = dashboard.load_all_simulation_results(
-        mock_plugin_and_result_dirs.RESULTS_DIR
+        mock_plugin_and_result_dirs["RESULTS_DIR"]
     )
     assert len(results) == 1  # Only the valid one should be loaded
 
