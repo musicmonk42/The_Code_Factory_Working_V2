@@ -151,6 +151,13 @@ PIPELINE_CODEGEN_TIMEOUT_SECONDS: int = int(
 MULTIPASS_FILE_THRESHOLD: int = int(
     os.environ.get("CODEGEN_MULTIPASS_FILE_THRESHOLD", "20")
 )
+# Threshold: use multi-pass generation when the spec content exceeds this many characters.
+# A ~30,000-char spec produces an ~87,000-char prompt that saturates the 16K output
+# token limit in a single pass, causing truncated responses.
+# Configurable at runtime via CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD (default: 30000).
+MULTIPASS_MD_SIZE_THRESHOLD: int = int(
+    os.environ.get("CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD", "30000")
+)
 
 # File generation groups for multi-pass mode (processed in order).
 # Each pass focuses on a logical subset of files; earlier passes are provided as

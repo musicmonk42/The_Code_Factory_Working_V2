@@ -83,6 +83,7 @@ services:
       # Raise to disable multi-pass for all but the largest specs; lower to enable earlier.
       - CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}
       - CODEGEN_MULTIPASS_FILE_THRESHOLD=${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}
+      - CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD=${CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD:-30000}
 
       # Infrastructure — provided by Railway
       - REDIS_URL=${REDIS_URL}

@@ -125,6 +125,7 @@ services:
       # sequential passes and auto-enables ensemble voting per chunk.
       - CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-15}
       - CODEGEN_MULTIPASS_FILE_THRESHOLD=${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}
+      - CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD=${CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD:-30000}
 
       # ============================================
       # Infrastructure — provided by Railway
