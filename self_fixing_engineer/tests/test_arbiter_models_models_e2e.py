@@ -97,26 +97,22 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     try:
         import redis.asyncio as aioredis
 
-        from unittest.mock import MagicMock as _MagicMock
-        _redis_spec = aioredis.Redis if not isinstance(aioredis.Redis, _MagicMock) else None
-        mock_redis = mocker.MagicMock(spec=_redis_spec)
-        mock_redis.ping = mocker.AsyncMock(return_value=True)
-        mock_redis.set = mocker.AsyncMock(return_value=True)
-        mock_redis.get = mocker.AsyncMock(
-            return_value=json.dumps("test_value").encode()
-        )
-        mock_redis.delete = mocker.AsyncMock(return_value=1)
-        mock_redis.close = mocker.AsyncMock()
-        mock_redis.info = mocker.AsyncMock(return_value={"used_memory": 1048576})
-        mock_redis.dbsize = mocker.AsyncMock(return_value=100)
+        mock_redis = mocker.AsyncMock()
+        mock_redis.ping.return_value = True
+        mock_redis.set.return_value = True
+        mock_redis.get.return_value = json.dumps("test_value").encode()
+        mock_redis.delete.return_value = 1
+        mock_redis.close.return_value = None
+        mock_redis.info.return_value = {"used_memory": 1048576}
+        mock_redis.dbsize.return_value = 100
 
         # Mock lock
-        mock_lock = mocker.MagicMock()
-        mock_lock.acquire = mocker.AsyncMock(return_value=True)
-        mock_lock.release = mocker.AsyncMock()
-        mock_lock.__aenter__ = mocker.AsyncMock(return_value=mock_lock)
-        mock_lock.__aexit__ = mocker.AsyncMock()
-        mock_redis.lock = mocker.MagicMock(return_value=mock_lock)
+        mock_lock = mocker.AsyncMock()
+        mock_lock.acquire.return_value = True
+        mock_lock.release.return_value = None
+        mock_lock.__aenter__.return_value = mock_lock
+        mock_lock.__aexit__.return_value = None
+        mock_redis.lock.return_value = mock_lock
 
         mocker.patch("redis.asyncio.from_url", return_value=mock_redis)
     except ImportError:
@@ -535,7 +531,7 @@ async def test_e2e_data_integrity_flow(setup_e2e_env):
 
 
 @pytest.mark.asyncio
-async def test_e2e_cross_component_transaction(setup_e2e_env):
+async def test_e2e_cross_component_transaction(setup_e2e_env, mocker: MockerFixture):
     """E2E Test: Cross-component transactional integrity."""
     redis_client = RedisClient()
     pg_client = PostgresClient()
@@ -574,7 +570,7 @@ async def test_e2e_cross_component_transaction(setup_e2e_env):
     )
 
     # Verify all components have the data
-    redis_client._pool.get = AsyncMock(
+    redis_client._pool.get = mocker.AsyncMock(
         return_value=json.dumps(transaction_data).encode()
     )
     cached_data = await redis_client.get(f"txn:{transaction_id}")
