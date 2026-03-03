@@ -429,8 +429,9 @@ async def review_fix(
         )
         low_confidence = (fix.confidence or 0.0) < 0.6
 
-        if not already_validated and not force_override and not is_info_fix and not low_confidence:
-            job_id = fix.job_id or ""
+        job_id = fix.job_id or ""
+        no_job_context = not job_id.strip()
+        if not already_validated and not force_override and not is_info_fix and not low_confidence and not no_job_context:
             try:
                 validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
                 fix.validation_status = validation.get("status")
