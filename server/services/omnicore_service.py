@@ -7628,6 +7628,26 @@ class OmniCoreService:
                                                     )
                                             except Exception:
                                                 pass
+                                        # Augment with ProjectEndpointAnalyzer so that
+                                        # include_router(prefix=...) paths are resolved
+                                        # across files before the coverage gate fires.
+                                        try:
+                                            from generator.utils.project_endpoint_analyzer import (  # noqa: PLC0415
+                                                ProjectEndpointAnalyzer as _PEA,
+                                            )
+                                            _pea_files: dict = {}
+                                            for _py_file in _gen_dir_pre.rglob("*.py"):
+                                                _rel = _py_file.relative_to(_gen_dir_pre).as_posix()
+                                                _pea_files[_rel] = _py_file.read_text(encoding="utf-8")
+                                            for _pea_ep in _PEA(_pea_files).get_endpoints():
+                                                _found_pre.add(
+                                                    f"{_pea_ep['method'].upper()} {_pea_ep['path']}"
+                                                )
+                                        except Exception as _pea_pre_err:
+                                            logger.debug(
+                                                "[PIPELINE] ProjectEndpointAnalyzer pre-wire "
+                                                "augmentation skipped: %s", _pea_pre_err
+                                            )
                                         _pre_wire_missing = _required_pre_set - _found_pre
                                         _pre_wire_coverage = (
                                             1.0 - len(_pre_wire_missing) / len(_required_pre_set)

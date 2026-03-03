@@ -1397,3 +1397,129 @@ class TestNormalizePathParameterVariants:
             f"Router prefix + differing param name must match spec; "
             f"missing: {result['missing_endpoints']}"
         )
+
+
+class TestImportPatternFixes:
+    """Tests for the expanded import pattern matching in validate_spec_fidelity.
+
+    Covers the P0 fix for _IMPORT_AS_RE being too restrictive.
+    """
+
+    def test_direct_import_no_alias(self):
+        """Direct import without 'as' alias is correctly mapped to prefix."""
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routes import auth_router, patients_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(auth_router, prefix=\"/api/v1/auth\")\n"
+                "app.include_router(patients_router, prefix=\"/api/v1/patients\")\n"
+            ),
+            "app/routes.py": (
+                "from fastapi import APIRouter\n"
+                "auth_router = APIRouter()\n"
+                "patients_router = APIRouter()\n\n"
+                "@auth_router.post('/login')\n"
+                "def login(): pass\n\n"
+                "@patients_router.get('/')\n"
+                "def get_patients(): pass\n"
+            ),
+        }
+        md = "- POST /api/v1/auth/login\n- GET /api/v1/patients\n"
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Direct import without alias must be resolved; "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == []
+
+    def test_multi_import_parentheses(self):
+        """Multi-import with parentheses is correctly resolved."""
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routes import (\n"
+                "    auth_router,\n"
+                "    patients_router,\n"
+                ")\n"
+                "app = FastAPI()\n"
+                "app.include_router(auth_router, prefix=\"/api/v1/auth\")\n"
+                "app.include_router(patients_router, prefix=\"/api/v1/patients\")\n"
+            ),
+            "app/routes.py": (
+                "from fastapi import APIRouter\n"
+                "auth_router = APIRouter()\n"
+                "patients_router = APIRouter()\n\n"
+                "@auth_router.post('/login')\n"
+                "def login(): pass\n\n"
+                "@patients_router.get('/')\n"
+                "def get_patients(): pass\n"
+            ),
+        }
+        md = "- POST /api/v1/auth/login\n- GET /api/v1/patients\n"
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Multi-import with parentheses must be resolved; "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == []
+
+    def test_single_file_all_routers(self):
+        """All routers in a single file are each assigned the correct prefix."""
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routes import auth_router, patients_router, encounters_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(auth_router, prefix=\"/api/v1/auth\")\n"
+                "app.include_router(patients_router, prefix=\"/api/v1/patients\")\n"
+                "app.include_router(encounters_router, prefix=\"/api/v1/encounters\")\n"
+            ),
+            "app/routes.py": (
+                "from fastapi import APIRouter\n"
+                "auth_router = APIRouter()\n"
+                "patients_router = APIRouter()\n"
+                "encounters_router = APIRouter()\n\n"
+                "@auth_router.post('/login')\n"
+                "def login(): pass\n\n"
+                "@patients_router.get('/')\n"
+                "def list_patients(): pass\n\n"
+                "@encounters_router.post('/')\n"
+                "def create_encounter(): pass\n"
+            ),
+        }
+        md = (
+            "- POST /api/v1/auth/login\n"
+            "- GET /api/v1/patients\n"
+            "- POST /api/v1/encounters\n"
+        )
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Single-file router pattern must be resolved; "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == []
+
+    def test_aliased_import_still_works(self):
+        """Existing aliased import pattern (from X import Y as Z) still works."""
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers.auth import router as auth_router\n"
+                "app = FastAPI()\n"
+                "app.include_router(auth_router, prefix=\"/api/v1/auth\")\n"
+            ),
+            "app/routers/auth.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.post('/login')\n"
+                "def login(): pass\n"
+            ),
+        }
+        md = "- POST /api/v1/auth/login\n"
+        result = validate_spec_fidelity(md, files)
+        assert result["valid"] is True, (
+            f"Aliased import must still work after fix; "
+            f"missing: {result['missing_endpoints']}"
+        )
+        assert result["missing_endpoints"] == []

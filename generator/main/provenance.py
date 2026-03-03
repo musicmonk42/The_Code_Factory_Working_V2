@@ -1263,62 +1263,44 @@ def validate_spec_fidelity(
         # per-file extractor therefore produces ``/stats``, not the full
         # ``/api/v1/orders/stats`` that the spec requires.
         #
-        # We resolve this by:
-        #   1. Scanning main.py (or app/main.py) for ``include_router`` calls
-        #      that carry an explicit ``prefix=`` keyword argument.
-        #   2. Building a map from router-file module name to its prefix.
-        #   3. Re-processing each router-file's endpoints to prepend the
-        #      resolved prefix, then adding the fully-qualified paths to the
-        #      found set.
+        # Delegated to ProjectEndpointAnalyzer, which handles all three
+        # import styles (aliased, direct, parenthesised) and both router
+        # layouts (multi-file and single-file).
+        #
+        # Note: the per-file scan above may already have recorded the raw
+        # sub-path (e.g. ``/stats``) for the same handler.  The reconciled
+        # fully-qualified path is deduplicated by (method, path) key so that
+        # ``result["found_endpoints"]`` never contains exact duplicates.
+        # Paths that only differ in their /api/v{N} prefix are treated as
+        # equivalent by the downstream ``normalize_path`` / set logic.
         # ------------------------------------------------------------------
-        _INCLUDE_ROUTER_RE = re.compile(
-            r'include_router\s*\(\s*(\w+)\s*,\s*(?:[^)]*\s)?prefix\s*=\s*["\']([^"\']+)["\']',
-            re.DOTALL,
-        )
-
-        # Identify main.py files (prefer app/main.py, fall back to main.py)
-        _main_file_content: str = ""
-        for _candidate in ("app/main.py", "main.py"):
-            if _candidate in generated_files:
-                _main_file_content = generated_files[_candidate]
-                break
-
-        # router_var_name → prefix string  (e.g. "orders_router" → "/api/v1/orders")
-        _router_prefix_map: Dict[str, str] = {}
-        if _main_file_content:
-            for _var, _prefix in _INCLUDE_ROUTER_RE.findall(_main_file_content):
-                _router_prefix_map[_var] = _prefix
-
-        if _router_prefix_map:
-            # Build a reverse map: router module stem → prefix
-            # e.g. "from app.routers.orders import router as orders_router"
-            _IMPORT_AS_RE = re.compile(
-                r'from\s+\S+\.(\w+)\s+import\s+\w+\s+as\s+(\w+)'
+        _seen_ep_keys: set = {
+            (ep["method"], ep.get("path", "")) for ep in all_found_endpoints
+        }
+        try:
+            from generator.utils.project_endpoint_analyzer import (  # noqa: PLC0415
+                ProjectEndpointAnalyzer as _ProjectEndpointAnalyzer,
             )
-            _stem_to_prefix: Dict[str, str] = {}
-            for _stem, _var in _IMPORT_AS_RE.findall(_main_file_content):
-                if _var in _router_prefix_map:
-                    _stem_to_prefix[_stem] = _router_prefix_map[_var]
-
-            # Re-extract endpoints from router files with the prefix prepended.
-            for _filename, _content in generated_files.items():
-                if not _filename.endswith(".py"):
-                    continue
-                # Determine if this file is a router file and get its prefix.
-                _module_stem = _filename.replace("/", ".").removesuffix(".py").split(".")[-1]
-                _prefix = _stem_to_prefix.get(_module_stem, "")
-                if not _prefix:
-                    continue
-                # Re-extract routes and prepend the include_router prefix.
-                _raw = extract_endpoints_from_code(_content, _filename)
-                for _ep in _raw:
-                    _raw_path = _ep.get("path", "")
-                    _full_path = (
-                        _prefix.rstrip("/") + "/" + _raw_path.lstrip("/")
-                    )
-                    all_found_endpoints.append(
-                        {"method": _ep["method"], "path": _full_path}
-                    )
+            _reconciled = _ProjectEndpointAnalyzer(generated_files).get_endpoints()
+            _added = 0
+            for _ep in _reconciled:
+                _key = (_ep["method"], _ep.get("path", ""))
+                if _key not in _seen_ep_keys:
+                    all_found_endpoints.append(_ep)
+                    _seen_ep_keys.add(_key)
+                    _added += 1
+            if _added:
+                logger.debug(
+                    "[SPEC_VALIDATE] ProjectEndpointAnalyzer contributed %d "
+                    "unique fully-qualified endpoint(s) via include_router prefix resolution",
+                    _added,
+                )
+        except Exception as _pea_err:
+            logger.warning(
+                "[SPEC_VALIDATE] ProjectEndpointAnalyzer unavailable or raised "
+                "(%s) — include_router prefix reconciliation skipped",
+                _pea_err,
+            )
 
         result["found_endpoints"] = all_found_endpoints
 

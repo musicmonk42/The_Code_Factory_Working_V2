@@ -383,7 +383,7 @@ deployment-validate: ## Validate generated deployment files (Docker, K8s, Helm)
 	fi
 	@echo "$(GREEN)Deployment validation complete!$(NC)"
 
-mutation-test: ## Run mutation tests with mutmut (targets generator/main/provenance.py and testgen_agent.py)
+mutation-test: ## Run mutation tests with mutmut (targets generator/main/provenance.py, generator/utils/project_endpoint_analyzer.py, and testgen_agent.py)
 	@echo "$(BLUE)Running mutation tests...$(NC)"
 	@echo "$(YELLOW)Note: This may take several minutes. See docs/MUTATION_TESTING.md for details.$(NC)"
 	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && mutmut run --no-progress

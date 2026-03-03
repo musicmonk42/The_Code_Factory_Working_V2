@@ -411,6 +411,7 @@ The following are MANDATORY checks:
    - uvicorn>=0.27.0   (NOT 0.15.0 from 2021)
    - pydantic>=2.5.0   (Pydantic V2 - REQUIRED as explicit dependency)
    - pydantic-settings>=2.0.0  (REQUIRED when using BaseSettings for config - separate package in v2)
+   - email-validator>=2.0.0  (REQUIRED when any schema uses EmailStr - install alongside pydantic)
    - pytest>=8.0.0     (NOT 6.2.5 from 2021)
    - httpx>=0.26.0     (for testing)
    
@@ -419,6 +420,8 @@ The following are MANDATORY checks:
    CRITICAL: If any file uses BaseSettings, ALWAYS add pydantic-settings>=2.0.0 to requirements.txt.
              In Pydantic v2, BaseSettings moved to the separate pydantic-settings package.
              Import it as: from pydantic_settings import BaseSettings  (NOT from pydantic import BaseSettings)
+   CRITICAL: If any schema uses EmailStr, ALWAYS add email-validator>=2.0.0 to requirements.txt.
+             EmailStr requires the email-validator package; without it pydantic raises ImportError.
    Check PyPI for latest stable versions if unsure.
 
 5c. PYDANTIC V2 MIGRATION (CRITICAL - these v1 patterns raise TypeError/errors at runtime):
