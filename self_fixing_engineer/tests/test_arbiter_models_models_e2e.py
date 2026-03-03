@@ -179,16 +179,20 @@ async def setup_e2e_env(mocker: MockerFixture, tmp_path):
     mocker.patch(
         "self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWeb3",
         return_value=mock_web3_instance,
+        create=True,
     )
     mocker.patch(
         "self_fixing_engineer.arbiter.models.audit_ledger_client.AsyncWebsocketProvider",
+        create=True,
     )
     mocker.patch(
         "self_fixing_engineer.arbiter.models.audit_ledger_client.Account",
+        create=True,
     )
     mocker.patch(
         "self_fixing_engineer.arbiter.models.audit_ledger_client.to_checksum_address",
         return_value="0xMockContract",
+        create=True,
     )
 
     yield
