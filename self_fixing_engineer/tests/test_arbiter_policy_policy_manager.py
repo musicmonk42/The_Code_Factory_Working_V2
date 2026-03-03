@@ -66,6 +66,8 @@ async def policy_manager(mock_config, temp_policy_file):
     """Create a PolicyManager instance with temp file"""
     mock_config.POLICY_CONFIG_FILE_PATH = str(temp_policy_file.absolute())
     manager = PolicyManager(mock_config)
+    # Ensure db_client is None to avoid async context manager issues
+    manager.db_client = None
     return manager
 
 
@@ -226,6 +228,7 @@ async def test_load_policies_file_not_found(policy_manager):
     if policy_manager.policy_file.exists():
         policy_manager.policy_file.unlink()
 
+    # No mocking needed - use real aiofiles since we have a real temp file
     await policy_manager.load_policies()
 
     assert policy_manager.policies is not None
