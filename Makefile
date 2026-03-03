@@ -787,7 +787,7 @@ codegen-multipass-status: ## Show current multi-pass code-generation thresholds 
 	@echo "$(BLUE)Codegen Multi-Pass Configuration$(NC)"
 	@echo ""
 	@echo "$(YELLOW)Active thresholds (override via environment variables):$(NC)"
-	@echo "  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD     = $${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-25}     (API endpoints; auto-enables ensemble + multi-pass)"
+	@echo "  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD     = $${CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD:-10}     (API endpoints; auto-enables ensemble + multi-pass)"
 	@echo "  CODEGEN_MULTIPASS_FILE_THRESHOLD         = $${CODEGEN_MULTIPASS_FILE_THRESHOLD:-20}     (required files; secondary trigger)"
 	@echo "  CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD      = $${CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD:-30000}  (spec chars; triggers multi-pass for large specs)"
 	@echo "  SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD = $${SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD:-0.50}  (fraction; hard-failure gate: 0.0–1.0)"
