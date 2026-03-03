@@ -218,9 +218,7 @@ class TestRemoteIntegration:
     async def test_remote_send_success(self, mock_settings):
         mock_settings.REMOTE_AUDIT_SERVICE_ENABLED = True
         manager = AuditLogManager(settings=mock_settings)
-        await manager.initialize()
 
-        mock_session = MagicMock()
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.text = AsyncMock(return_value="OK")
@@ -229,16 +227,16 @@ class TestRemoteIntegration:
         mock_context.__aenter__ = AsyncMock(return_value=mock_response)
         mock_context.__aexit__ = AsyncMock(return_value=None)
 
+        mock_session = MagicMock()
         mock_session.post.return_value = mock_context
         mock_session.closed = False
+        mock_session.close = AsyncMock()
 
-        # Replace the real session with our mock
-        if manager._session and not manager._session.closed:
-            await manager._session.close()
-        manager._session = mock_session
+        with patch("aiohttp.ClientSession", return_value=mock_session):
+            await manager.initialize()
 
-        await manager.audit("remote_event", {"id": "remote1"})
-        await manager._flush_buffer()
+            await manager.audit("remote_event", {"id": "remote1"})
+            await manager._flush_buffer()
 
         mock_session.post.assert_called()
         sent_json = mock_session.post.call_args.kwargs["json"]
