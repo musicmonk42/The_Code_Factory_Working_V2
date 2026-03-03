@@ -805,6 +805,7 @@ class ExplainAudit:
         self._tables_initialized = False  # Track if database tables have been created
         self._eager_init_task: Optional[asyncio.Task] = None  # Background eager-init task
         self._flush_task: Optional[asyncio.Task] = None  # Periodic flush task
+        self._background_tasks: set[asyncio.Task] = set()  # Track fire-and-forget tasks
 
         self.web3 = None
         self.encrypter: Optional[Fernet] = None
@@ -1016,7 +1017,9 @@ class ExplainAudit:
             # Try to get the running loop first
             try:
                 asyncio.get_running_loop()  # Raises RuntimeError if no loop
-                asyncio.create_task(coro)
+                task = asyncio.create_task(coro)
+                self._background_tasks.add(task)
+                task.add_done_callback(self._background_tasks.discard)
             except RuntimeError:
                 # No running loop - try to run it synchronously
                 logger.warning(
@@ -1946,6 +1949,10 @@ class ExplainAudit:
             tasks_to_cancel.append(self._eager_init_task)
         if self._flush_task is not None and not self._flush_task.done():
             tasks_to_cancel.append(self._flush_task)
+        # Cancel any outstanding fire-and-forget tasks created via safe_create_task
+        for task in list(self._background_tasks):
+            if not task.done():
+                tasks_to_cancel.append(task)
         for task in tasks_to_cancel:
             task.cancel()
         if tasks_to_cancel:
