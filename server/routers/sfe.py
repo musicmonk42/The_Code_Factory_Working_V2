@@ -392,11 +392,19 @@ async def review_fix(
     """
     Review a proposed fix (approve or reject).
 
-    When ``approved=True`` the fix is automatically validated in a sandbox
-    first.  If sandbox validation fails (the fix did not improve test
-    outcomes) the fix is rejected rather than approved, even if the human
-    reviewer requested approval.  Pass ``force=True`` in the comments to
-    override sandbox rejection (not recommended for production).
+    When ``approved=True`` the fix is validated in a sandbox before approval,
+    unless any of the following conditions apply — in which case the human
+    decision is honoured directly:
+
+    - The fix was already validated (``validation_status == "validated"``)
+    - The reviewer included the word ``force`` in their comments
+    - Every proposed change has ``action == "info"`` (guidance-only fix)
+    - The fix has low confidence (``confidence < 0.6``)
+    - The fix has no associated job directory (``job_id`` is absent or blank)
+
+    When sandbox validation *does* run and the fix fails, it is rejected even
+    if the human reviewer requested approval.  Pass ``force=True`` in the
+    comments to override that behaviour (not recommended for production).
 
     **Path Parameters:**
     - fix_id: Fix identifier
@@ -431,6 +439,8 @@ async def review_fix(
 
         job_id = fix.job_id or ""
         no_job_context = not job_id.strip()
+        if no_job_context:
+            logger.debug(f"Fix {fix_id}: no job_id — skipping sandbox validation")
         if not already_validated and not force_override and not is_info_fix and not low_confidence and not no_job_context:
             try:
                 validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
