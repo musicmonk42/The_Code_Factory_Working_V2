@@ -288,6 +288,19 @@ class EventBusBridge:
         self.running = True
         logger.info("EventBusBridge: Starting event bridge")
 
+        # Ensure the Arbiter MQS is connected before starting bridge legs
+        if self.arbiter_mqs:
+            try:
+                await self.arbiter_mqs.connect()
+                logger.info("EventBusBridge: Arbiter MQS connected successfully")
+            except Exception:
+                logger.error(
+                    "EventBusBridge: Failed to connect Arbiter MQS — "
+                    "disabling Arbiter bridge legs",
+                    exc_info=True,
+                )
+                self.arbiter_mqs = None
+
         if self.mesh_bus and self.arbiter_mqs:
             self._tasks.append(
                 asyncio.create_task(
@@ -337,6 +350,14 @@ class EventBusBridge:
             await asyncio.gather(*self._tasks, return_exceptions=True)
 
         self._tasks.clear()
+
+        # Disconnect the Arbiter MQS if it was connected
+        if self.arbiter_mqs:
+            try:
+                await self.arbiter_mqs.disconnect()
+            except Exception:
+                logger.debug("EventBusBridge: MQS disconnect error (ignored)", exc_info=True)
+
         logger.info("EventBusBridge: Stopped")
 
     # ------------------------------------------------------------------
