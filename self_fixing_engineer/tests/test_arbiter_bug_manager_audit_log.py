@@ -220,16 +220,30 @@ class TestRemoteIntegration:
         manager = AuditLogManager(settings=mock_settings)
         await manager.initialize()
 
-        with patch("aiohttp.ClientSession.post", new_callable=AsyncMock) as mock_post:
-            mock_post.return_value.__aenter__.return_value.status = 200
+        mock_session = MagicMock()
+        mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.text = AsyncMock(return_value="OK")
 
-            await manager.audit("remote_event", {"id": "remote1"})
-            await manager._flush_buffer()
+        mock_context = MagicMock()
+        mock_context.__aenter__ = AsyncMock(return_value=mock_response)
+        mock_context.__aexit__ = AsyncMock(return_value=None)
 
-            mock_post.assert_called()
-            sent_json = mock_post.call_args.kwargs["json"]
-            assert len(sent_json) == 1
-            assert sent_json[0]["details"]["id"] == "remote1"
+        mock_session.post.return_value = mock_context
+        mock_session.closed = False
+
+        # Replace the real session with our mock
+        if manager._session and not manager._session.closed:
+            await manager._session.close()
+        manager._session = mock_session
+
+        await manager.audit("remote_event", {"id": "remote1"})
+        await manager._flush_buffer()
+
+        mock_session.post.assert_called()
+        sent_json = mock_session.post.call_args.kwargs["json"]
+        assert len(sent_json) == 1
+        assert sent_json[0]["details"]["id"] == "remote1"
         await manager.shutdown()
 
     @pytest.mark.asyncio

@@ -43,6 +43,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Save real aiohttp class references before any patching can occur
+_RealClientSession = aiohttp.ClientSession
+_RealClientResponse = aiohttp.ClientResponse
+
 # Get tracer for this module
 tracer = get_tracer(__name__)
 
@@ -67,7 +71,7 @@ async def setup_env(mocker: MockerFixture):
 @pytest_asyncio.fixture
 async def mock_response(mocker: MockerFixture):
     """Fixture for mocked aiohttp ClientResponse."""
-    _mock_response = mocker.MagicMock(spec=ClientResponse)
+    _mock_response = mocker.MagicMock(spec=_RealClientResponse)
     _mock_response.status = 200
     _mock_response.raise_for_status = mocker.MagicMock()
     _mock_response.json = mocker.AsyncMock(
@@ -87,7 +91,7 @@ async def mock_response(mocker: MockerFixture):
 @pytest_asyncio.fixture
 async def mock_session(mocker: MockerFixture, mock_response):
     """Fixture for mocked aiohttp ClientSession."""
-    mock_session = mocker.MagicMock(spec=aiohttp.ClientSession)
+    mock_session = mocker.MagicMock(spec=_RealClientSession)
 
     # Create a proper async context manager for request
     class MockRequestContext:
@@ -394,7 +398,7 @@ async def test_http_error_handling(ml_client, mocker: MockerFixture, caplog):
     # Create a mock response that raises an error
     class MockErrorContext:
         def __init__(self, mocker):
-            self.response = mocker.MagicMock(spec=ClientResponse)
+            self.response = mocker.MagicMock(spec=_RealClientResponse)
             self.response.raise_for_status.side_effect = ClientResponseError(
                 request_info=mocker.MagicMock(),
                 history=(),
@@ -443,7 +447,7 @@ async def test_concurrent_requests(ml_client, mock_session):
 async def test_session_close(mocker: MockerFixture):
     """Test session close in context manager."""
     # Test with externally managed session (should not close)
-    mock_external_session = mocker.MagicMock(spec=aiohttp.ClientSession)
+    mock_external_session = mocker.MagicMock(spec=_RealClientSession)
     mock_external_session.close = mocker.AsyncMock()
     mock_external_session.closed = False
 
@@ -456,7 +460,7 @@ async def test_session_close(mocker: MockerFixture):
 
     # Test with internally managed session (should close)
     # Mock the creation of the session
-    mock_internal_session = mocker.MagicMock(spec=aiohttp.ClientSession)
+    mock_internal_session = mocker.MagicMock(spec=_RealClientSession)
     mock_internal_session.close = mocker.AsyncMock()
     mock_internal_session.closed = False
 
@@ -474,7 +478,7 @@ async def test_no_api_key_warning(mocker: MockerFixture, caplog):
 
     with caplog.at_level(logging.WARNING):
         # Need to mock the session creation since we're not providing one
-        mock_session = mocker.MagicMock(spec=aiohttp.ClientSession)
+        mock_session = mocker.MagicMock(spec=_RealClientSession)
         with mocker.patch("aiohttp.ClientSession", return_value=mock_session):
             client_no_key = MLPlatformClient(endpoint="http://mock.com")
 
