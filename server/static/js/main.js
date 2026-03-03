@@ -1325,6 +1325,7 @@ async function loadErrors(jobId) {
                 button.className = 'btn btn-primary';
                 button.textContent = 'Propose Fix';
                 button.dataset.fixId = error.error_id;
+                button.dataset.state = 'pending';
                 button.addEventListener('click', () => proposeFix(error.error_id, button));
                 card.appendChild(button);
             }
@@ -1342,7 +1343,7 @@ async function loadErrors(jobId) {
     }
 }
 
-async function proposeFix(errorId, btn) {
+async function proposeFix(errorId, btn, silent = false) {
     if (btn) {
         btn.disabled = true;
         btn.textContent = '⏳ Proposing...';
@@ -1354,12 +1355,13 @@ async function proposeFix(errorId, btn) {
         });
         const data = await response.json();
         
-        showSuccess(`Fix proposed: ${data.description}`);
+        if (!silent) showSuccess(`Fix proposed: ${data.description}`);
         if (btn) {
             btn.textContent = '✅ Fix Proposed';
             btn.className = 'btn btn-proposed';
+            btn.dataset.state = 'proposed';
         }
-        loadFixes();
+        if (!silent) loadFixes();
         return true;
     } catch (error) {
         // If the error endpoint doesn't work, try the bug analysis endpoint as fallback
@@ -1375,22 +1377,27 @@ async function proposeFix(errorId, btn) {
             });
             const data = await response.json();
             
-            if (data.fix_suggestions && data.fix_suggestions.length > 0) {
-                showSuccess(`Fix suggested: ${data.fix_suggestions[0]}`);
-            } else {
-                showSuccess('Bug analysis complete - check console for details');
-                console.log('Bug analysis result:', data);
+            if (!silent) {
+                if (data.fix_suggestions && data.fix_suggestions.length > 0) {
+                    showSuccess(`Fix suggested: ${data.fix_suggestions[0]}`);
+                } else {
+                    showSuccess('Bug analysis complete - check console for details');
+                    console.log('Bug analysis result:', data);
+                }
             }
             if (btn) {
                 btn.textContent = '✅ Fix Proposed';
                 btn.className = 'btn btn-proposed';
+                btn.dataset.state = 'proposed';
             }
+            if (!silent) loadFixes();
             return true;
         } catch (bugError) {
-            showError('Failed to propose fix: ' + error.message);
+            if (!silent) showError('Failed to propose fix: ' + error.message);
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = 'Propose Fix';
+                btn.dataset.state = 'pending';
             }
             return false;
         }
@@ -1398,9 +1405,7 @@ async function proposeFix(errorId, btn) {
 }
 
 async function proposeAllFixes(proposeAllBtn) {
-    const buttons = Array.from(document.querySelectorAll('#errors-list .btn-primary')).filter(
-        b => b.textContent === 'Propose Fix' && !b.disabled && b.dataset.fixId
-    );
+    const buttons = Array.from(document.querySelectorAll('#errors-list [data-state="pending"][data-fix-id]'));
     if (buttons.length === 0) {
         showSuccess('No pending fixes to propose');
         return;
@@ -1411,13 +1416,19 @@ async function proposeAllFixes(proposeAllBtn) {
     }
     let succeeded = 0;
     for (const btn of buttons) {
-        const ok = await proposeFix(btn.dataset.fixId, btn);
+        const ok = await proposeFix(btn.dataset.fixId, btn, true);
         if (ok) succeeded++;
     }
     showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
+    loadFixes();
     if (proposeAllBtn) {
-        proposeAllBtn.textContent = '✅ All Fixes Proposed';
-        proposeAllBtn.disabled = true;
+        if (succeeded > 0) {
+            proposeAllBtn.textContent = '✅ All Fixes Proposed';
+            proposeAllBtn.disabled = true;
+        } else {
+            proposeAllBtn.textContent = '🔧 Propose All Fixes';
+            proposeAllBtn.disabled = false;
+        }
     }
 }
 
@@ -1558,7 +1569,7 @@ function createFixCard(fix) {
     return card;
 }
 
-async function reviewFix(fixId, approved) {
+async function reviewFix(fixId, approved, silent = false) {
     try {
         const response = await fetchWithRetry(`${API_BASE}/sfe/fixes/${fixId}/review`, {
             method: 'POST',
@@ -1567,15 +1578,18 @@ async function reviewFix(fixId, approved) {
         });
         
         if (response.ok) {
-            showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
-            loadFixes();
+            if (!silent) showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
+            if (!silent) loadFixes();
+            return true;
         }
+        return false;
     } catch (error) {
-        showError('Failed to review fix: ' + error.message);
+        if (!silent) showError('Failed to review fix: ' + error.message);
+        return false;
     }
 }
 
-async function applyFix(fixId) {
+async function applyFix(fixId, silent = false) {
     try {
         const response = await fetchWithRetry(`${API_BASE}/sfe/fixes/${fixId}/apply`, {
             method: 'POST',
@@ -1584,11 +1598,14 @@ async function applyFix(fixId) {
         });
         
         if (response.ok) {
-            showSuccess('Fix applied successfully');
-            loadFixes();
+            if (!silent) showSuccess('Fix applied successfully');
+            if (!silent) loadFixes();
+            return true;
         }
+        return false;
     } catch (error) {
-        showError('Failed to apply fix: ' + error.message);
+        if (!silent) showError('Failed to apply fix: ' + error.message);
+        return false;
     }
 }
 
@@ -1616,9 +1633,10 @@ async function approveAllFixes() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Approving...'; }
     let count = 0;
     for (const fix of proposed) {
-        try { await reviewFix(fix.fix_id, true); count++; } catch (e) { /* skip */ }
+        const ok = await reviewFix(fix.fix_id, true, true);
+        if (ok) count++;
     }
-    showSuccess(`Approved ${count} fixes`);
+    showSuccess(`Approved ${count} of ${proposed.length} fixes`);
     loadFixes();
 }
 
@@ -1629,9 +1647,10 @@ async function applyAllFixes() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Applying...'; }
     let count = 0;
     for (const fix of approved) {
-        try { await applyFix(fix.fix_id); count++; } catch (e) { /* skip */ }
+        const ok = await applyFix(fix.fix_id, true);
+        if (ok) count++;
     }
-    showSuccess(`Applied ${count} fixes`);
+    showSuccess(`Applied ${count} of ${approved.length} fixes`);
     loadFixes();
 }
 
@@ -1642,9 +1661,10 @@ async function rejectAllFixes() {
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...'; }
     let count = 0;
     for (const fix of proposed) {
-        try { await reviewFix(fix.fix_id, false); count++; } catch (e) { /* skip */ }
+        const ok = await reviewFix(fix.fix_id, false, true);
+        if (ok) count++;
     }
-    showSuccess(`Rejected ${count} fixes`);
+    showSuccess(`Rejected ${count} of ${proposed.length} fixes`);
     loadFixes();
 }
 
@@ -3006,6 +3026,7 @@ async function analyzeServerModule(btn) {
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
                     button.dataset.fixId = issue.error_id;
+                    button.dataset.state = 'pending';
                     button.addEventListener('click', () => proposeFix(issue.error_id, button));
                     card.appendChild(button);
                 }
@@ -3084,6 +3105,7 @@ async function detectBugs(btn) {
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
                     button.dataset.fixId = bug.bug_id;
+                    button.dataset.state = 'pending';
                     button.addEventListener('click', () => proposeFix(bug.bug_id, button));
                     card.appendChild(button);
                 }
@@ -3247,6 +3269,7 @@ async function prioritizeBugs(btn) {
                     button.className = 'btn btn-primary';
                     button.textContent = 'Propose Fix';
                     button.dataset.fixId = bug.bug_id;
+                    button.dataset.state = 'pending';
                     button.addEventListener('click', () => proposeFix(bug.bug_id, button));
                     card.appendChild(button);
                 }
