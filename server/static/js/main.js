@@ -1357,9 +1357,55 @@ async function loadErrors(jobId) {
         const hasProposable = data.errors.some(e => e.error_id || e.bug_id);
         const proposeAllBtn = document.getElementById('propose-all-btn');
         if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
-        
+        const proposeSelectedBtn = document.getElementById('propose-selected-btn');
+        if (proposeSelectedBtn) proposeSelectedBtn.style.display = hasProposable ? 'inline-block' : 'none';
+
+        // Add Select All / Deselect All controls when there are proposable errors
+        if (hasProposable) {
+            const selectAllControls = document.createElement('div');
+            selectAllControls.className = 'select-all-controls';
+
+            const selectAllCheckbox = document.createElement('input');
+            selectAllCheckbox.type = 'checkbox';
+            selectAllCheckbox.id = 'select-all-errors';
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.setAttribute('aria-label', 'Select all errors');
+
+            const selectAllLabel = document.createElement('label');
+            selectAllLabel.htmlFor = 'select-all-errors';
+            selectAllLabel.appendChild(selectAllCheckbox);
+            selectAllLabel.appendChild(document.createTextNode(' Select All'));
+
+            selectAllCheckbox.addEventListener('change', () => {
+                document.querySelectorAll('#errors-list .error-select-checkbox').forEach(cb => {
+                    cb.checked = selectAllCheckbox.checked;
+                });
+            });
+
+            selectAllControls.appendChild(selectAllLabel);
+            container.appendChild(selectAllControls);
+        }
+
+        // Helper to sync the "Select All" checkbox state (checked / indeterminate / unchecked)
+        function syncSelectAll() {
+            const all = document.querySelectorAll('#errors-list .error-select-checkbox');
+            const checked = document.querySelectorAll('#errors-list .error-select-checkbox:checked');
+            const selectAll = document.getElementById('select-all-errors');
+            if (!selectAll) return;
+            if (checked.length === 0) {
+                selectAll.checked = false;
+                selectAll.indeterminate = false;
+            } else if (checked.length === all.length) {
+                selectAll.checked = true;
+                selectAll.indeterminate = false;
+            } else {
+                selectAll.checked = false;
+                selectAll.indeterminate = true;
+            }
+        }
+
         // Add each error card
-        data.errors.forEach(error => {
+        data.errors.forEach((error, index) => {
             const card = document.createElement('div');
             card.className = 'error-card';
             
@@ -1369,15 +1415,31 @@ async function loadErrors(jobId) {
             const errorFile = escapeHtml(error.file || 'N/A');
             const errorLine = escapeHtml(String(error.line || 'N/A'));
             const errorSeverity = escapeHtml(error.severity || 'medium');
-            
-            card.innerHTML = `
+
+            // Add checkbox for selection when this error is proposable
+            const idForFix = error.error_id || error.bug_id;
+            if (idForFix) {
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.className = 'error-select-checkbox';
+                checkbox.dataset.index = index;
+                checkbox.dataset.fixId = idForFix;
+                checkbox.checked = true;
+                checkbox.setAttribute('aria-label', `Select error: ${error.type || 'Error'} — ${error.message || ''}`);
+                checkbox.addEventListener('change', syncSelectAll);
+                card.appendChild(checkbox);
+            }
+
+            const cardContent = document.createElement('div');
+            cardContent.className = 'error-card-content';
+            cardContent.innerHTML = `
                 <h4>${errorType}: ${errorMessage}</h4>
                 <p>File: ${errorFile}, Line: ${errorLine}</p>
                 <p>Severity: <span class="severity-${errorSeverity}">${errorSeverity}</span></p>
             `;
+            card.appendChild(cardContent);
             
             // Add button using safe method if error_id or bug_id exists
-            const idForFix = error.error_id || error.bug_id;
             if (idForFix) {
                 const button = document.createElement('button');
                 button.className = 'btn btn-primary';
@@ -1385,7 +1447,7 @@ async function loadErrors(jobId) {
                 button.dataset.fixId = idForFix;
                 button.dataset.state = 'pending';
                 button.addEventListener('click', () => proposeFix(idForFix, button));
-                card.appendChild(button);
+                cardContent.appendChild(button);
             }
             
             container.appendChild(card);
@@ -1445,8 +1507,22 @@ async function proposeFix(errorId, btn, silent = false) {
     }
 }
 
-async function proposeAllFixes(proposeAllBtn) {
-    const buttons = Array.from(document.querySelectorAll('#errors-list [data-state="pending"][data-fix-id]'));
+/**
+ * Returns pending "Propose Fix" buttons filtered to checked checkboxes.
+ * @param {boolean} strict - When true, returns only checked items with no fallback.
+ *                           When false (default), falls back to all pending if nothing is checked.
+ */
+function getSelectedPendingButtons(strict = false) {
+    const checkboxes = Array.from(document.querySelectorAll('#errors-list .error-select-checkbox:checked'));
+    const allPending = Array.from(document.querySelectorAll('#errors-list [data-state="pending"][data-fix-id]'));
+    if (checkboxes.length === 0) return strict ? [] : allPending;
+    const selectedIds = new Set(checkboxes.map(cb => cb.dataset.fixId));
+    return allPending.filter(btn => selectedIds.has(btn.dataset.fixId));
+}
+
+async function proposeAllFixes(proposeAllBtn, selectedOnly = false) {
+    const buttons = getSelectedPendingButtons(selectedOnly);
+
     if (buttons.length === 0) {
         showSuccess('No pending fixes to propose');
         return;
@@ -1455,26 +1531,218 @@ async function proposeAllFixes(proposeAllBtn) {
         proposeAllBtn.disabled = true;
         proposeAllBtn.textContent = '⏳ Proposing...';
     }
+    showProgressModal('Proposing Fixes', buttons.length);
     let succeeded = 0;
-    for (const btn of buttons) {
-        const ok = await proposeFix(btn.dataset.fixId, btn, true);
-        if (ok) succeeded++;
-    }
-    if (succeeded === 0) {
-        showError(`Failed to propose any fixes (${buttons.length} attempted). Re-run 'Analyze Code' or 'Detect Bugs' first to refresh the error cache, then try again.`);
-    } else {
-        showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
-    }
-    loadFixes();
-    if (proposeAllBtn) {
-        if (succeeded > 0) {
-            proposeAllBtn.textContent = '✅ All Fixes Proposed';
-            proposeAllBtn.disabled = true;
-        } else {
-            proposeAllBtn.textContent = '🔧 Propose All Fixes';
-            proposeAllBtn.disabled = false;
+    let failed = 0;
+    try {
+        for (let i = 0; i < buttons.length; i++) {
+            const btn = buttons[i];
+            updateProgress(i, buttons.length, `Proposing fix ${btn.dataset.fixId.substring(0, 8)}…`);
+            const ok = await proposeFix(btn.dataset.fixId, btn, true);
+            if (ok) succeeded++; else failed++;
+            updateProgress(i + 1, buttons.length);
+        }
+    } finally {
+        closeProgressModal();
+        showBulkResultModal('Propose Fixes', {
+            successful: succeeded,
+            sandboxRejected: 0,
+            failed: failed,
+            total: buttons.length
+        });
+        loadFixes();
+        if (proposeAllBtn) {
+            if (succeeded > 0) {
+                proposeAllBtn.textContent = selectedOnly ? '✅ Selected Fixes Proposed' : '✅ All Fixes Proposed';
+                proposeAllBtn.disabled = true;
+            } else {
+                proposeAllBtn.textContent = selectedOnly ? '🔧 Propose Selected' : '🔧 Propose All Fixes';
+                proposeAllBtn.disabled = false;
+            }
         }
     }
+}
+
+function showBulkResultModal(operation, results) {
+    const { successful, sandboxRejected, failed, total } = results;
+
+    let modal = document.getElementById('bulk-result-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'bulk-result-modal';
+        modal.className = 'modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'bulk-result-title');
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+
+        const header = document.createElement('div');
+        header.className = 'modal-header';
+        const title = document.createElement('h3');
+        title.id = 'bulk-result-title';
+        title.textContent = 'Operation Complete';
+        const closeBtn = document.createElement('button');
+        closeBtn.className = 'modal-close';
+        closeBtn.setAttribute('aria-label', 'Close');
+        closeBtn.textContent = '×';
+        closeBtn.addEventListener('click', closeBulkResultModal);
+        header.appendChild(title);
+        header.appendChild(closeBtn);
+
+        const body = document.createElement('div');
+        body.id = 'bulk-result-body';
+        body.className = 'modal-body';
+
+        const footer = document.createElement('div');
+        footer.className = 'modal-footer';
+        const okBtn = document.createElement('button');
+        okBtn.id = 'bulk-result-ok';
+        okBtn.className = 'btn btn-primary';
+        okBtn.textContent = 'OK';
+        okBtn.addEventListener('click', closeBulkResultModal);
+        footer.appendChild(okBtn);
+
+        content.appendChild(header);
+        content.appendChild(body);
+        content.appendChild(footer);
+        modal.appendChild(content);
+
+        // Close on backdrop click
+        modal.addEventListener('click', (e) => { if (e.target === modal) closeBulkResultModal(); });
+        document.body.appendChild(modal);
+    }
+
+    document.getElementById('bulk-result-title').textContent = `${operation} Complete`;
+
+    const body = document.getElementById('bulk-result-body');
+    const summary = document.createElement('div');
+    summary.className = 'result-summary';
+    if (successful > 0) {
+        const el = document.createElement('div');
+        el.className = 'result-item success';
+        el.textContent = `✅ Successful: ${successful}`;
+        summary.appendChild(el);
+    }
+    if (sandboxRejected > 0) {
+        const el = document.createElement('div');
+        el.className = 'result-item warning';
+        el.textContent = `🧪 Sandbox Rejected: ${sandboxRejected}`;
+        summary.appendChild(el);
+    }
+    if (failed > 0) {
+        const el = document.createElement('div');
+        el.className = 'result-item error';
+        el.textContent = `❌ Failed: ${failed}`;
+        summary.appendChild(el);
+    }
+    const totalEl = document.createElement('div');
+    totalEl.className = 'result-item total';
+    totalEl.textContent = `📊 Total Processed: ${total}`;
+    summary.appendChild(totalEl);
+    body.replaceChildren(summary);
+
+    modal.classList.add('active');
+
+    // Focus OK button for keyboard users
+    const okBtn = document.getElementById('bulk-result-ok');
+    if (okBtn) okBtn.focus();
+
+    // Close on Escape
+    modal._escHandler = (e) => { if (e.key === 'Escape') closeBulkResultModal(); };
+    document.addEventListener('keydown', modal._escHandler);
+}
+
+function closeBulkResultModal() {
+    const modal = document.getElementById('bulk-result-modal');
+    if (!modal) return;
+    modal.classList.remove('active');
+    if (modal._escHandler) {
+        document.removeEventListener('keydown', modal._escHandler);
+        modal._escHandler = null;
+    }
+}
+
+function showProgressModal(operation, total) {
+    let modal = document.getElementById('progress-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'progress-modal';
+        modal.className = 'modal';
+        modal.setAttribute('role', 'dialog');
+        modal.setAttribute('aria-modal', 'true');
+        modal.setAttribute('aria-labelledby', 'progress-title');
+
+        const content = document.createElement('div');
+        content.className = 'modal-content';
+
+        const header = document.createElement('div');
+        header.className = 'modal-header';
+        const title = document.createElement('h3');
+        title.id = 'progress-title';
+        title.textContent = 'Processing…';
+        header.appendChild(title);
+
+        const body = document.createElement('div');
+        body.className = 'modal-body';
+
+        const barContainer = document.createElement('div');
+        barContainer.className = 'progress-bar-container';
+        const bar = document.createElement('div');
+        bar.id = 'progress-bar';
+        bar.className = 'progress-bar';
+        bar.setAttribute('role', 'progressbar');
+        bar.setAttribute('aria-valuemin', '0');
+        bar.setAttribute('aria-valuemax', '100');
+        bar.setAttribute('aria-valuenow', '0');
+        bar.style.width = '0%';
+        barContainer.appendChild(bar);
+
+        const progressText = document.createElement('p');
+        progressText.id = 'progress-text';
+        progressText.setAttribute('aria-live', 'polite');
+        progressText.setAttribute('aria-atomic', 'true');
+
+        const progressCurrent = document.createElement('p');
+        progressCurrent.id = 'progress-current';
+        progressCurrent.className = 'progress-current';
+        progressCurrent.setAttribute('aria-live', 'polite');
+
+        body.appendChild(barContainer);
+        body.appendChild(progressText);
+        body.appendChild(progressCurrent);
+
+        content.appendChild(header);
+        content.appendChild(body);
+        modal.appendChild(content);
+        document.body.appendChild(modal);
+    }
+
+    document.getElementById('progress-title').textContent = operation;
+    document.getElementById('progress-bar').style.width = '0%';
+    document.getElementById('progress-bar').setAttribute('aria-valuenow', '0');
+    document.getElementById('progress-text').textContent = `0 of ${total} complete`;
+    document.getElementById('progress-current').textContent = '';
+    modal.classList.add('active');
+}
+
+function updateProgress(completed, total, currentItem = '') {
+    const percent = Math.round((completed / total) * 100);
+    const bar = document.getElementById('progress-bar');
+    if (bar) {
+        bar.style.width = `${percent}%`;
+        bar.setAttribute('aria-valuenow', String(percent));
+    }
+    const text = document.getElementById('progress-text');
+    if (text) text.textContent = `${completed} of ${total} complete`;
+    const current = document.getElementById('progress-current');
+    if (current && currentItem) current.textContent = currentItem;
+}
+
+function closeProgressModal() {
+    const modal = document.getElementById('progress-modal');
+    if (modal) modal.classList.remove('active');
 }
 
 async function loadInsights() {
@@ -1738,13 +2006,19 @@ async function approveAllFixes() {
         showError('No proposed fixes to approve.');
         return;
     }
+    if (!confirm(`Are you sure you want to approve ${proposed.length} fix(es)?\n\nEach fix will be validated in a sandbox before approval. Fixes that fail validation will be automatically rejected.`)) {
+        return;
+    }
     const btn = document.getElementById('approve-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Approving...'; }
     let count = 0;
     let sandboxRejected = 0;
     let failed = 0;
+    showProgressModal('Approving Fixes', proposed.length);
     try {
-        for (const fix of proposed) {
+        for (let i = 0; i < proposed.length; i++) {
+            const fix = proposed[i];
+            updateProgress(i, proposed.length, `Approving fix ${fix.fix_id.substring(0, 8)}…`);
             const result = await reviewFix(fix.fix_id, true, true);
             if (result.ok) {
                 count++;
@@ -1753,22 +2027,16 @@ async function approveAllFixes() {
             } else {
                 failed++;
             }
-        }
-        const parts = [];
-        if (count > 0) parts.push(`Approved ${count}`);
-        if (sandboxRejected > 0) parts.push(`${sandboxRejected} rejected by sandbox`);
-        if (failed > 0) parts.push(`${failed} failed`);
-        if (count === 0) {
-            const failParts = [];
-            if (sandboxRejected > 0) failParts.push(`${sandboxRejected} rejected by sandbox`);
-            if (failed > 0) failParts.push(`${failed} failed`);
-            showError(`Failed to approve any fixes — ${failParts.join(', ') || 'unknown error'}`);
-        } else if (sandboxRejected > 0 || failed > 0) {
-            showSuccess(parts.join(', ') + ` of ${proposed.length} fixes`);
-        } else {
-            showSuccess(`Approved all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+            updateProgress(i + 1, proposed.length);
         }
     } finally {
+        closeProgressModal();
+        showBulkResultModal('Approve All Fixes', {
+            successful: count,
+            sandboxRejected: sandboxRejected,
+            failed: failed,
+            total: proposed.length
+        });
         loadFixes();
     }
 }
@@ -1779,30 +2047,34 @@ async function applyAllFixes() {
         showError('No approved fixes to apply. Approve fixes first.');
         return;
     }
+    if (!confirm(`⚠️ WARNING: This will modify ${approved.length} file(s) in your codebase.\n\nAre you sure you want to apply all approved fixes?`)) {
+        return;
+    }
     const btn = document.getElementById('apply-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Applying...'; }
     let count = 0;
-    const errors = [];
+    let failed = 0;
+    showProgressModal('Applying Fixes', approved.length);
     try {
-        for (const fix of approved) {
+        for (let i = 0; i < approved.length; i++) {
+            const fix = approved[i];
+            updateProgress(i, approved.length, `Applying fix ${fix.fix_id.substring(0, 8)}…`);
             const result = await applyFix(fix.fix_id, true);
             if (result.ok) {
                 count++;
             } else {
-                errors.push(result.message || 'unknown error');
+                failed++;
             }
-        }
-        if (count === 0) {
-            const detail = errors.length > 1
-                ? `${errors.length} errors — first: ${errors[0]}`
-                : (errors[0] || 'Check that fixes are in "approved" status.');
-            showError(`Failed to apply any fixes. ${detail}`);
-        } else if (errors.length > 0) {
-            showSuccess(`Applied ${count} of ${approved.length} fixes (${errors.length} failed)`);
-        } else {
-            showSuccess(`Applied all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+            updateProgress(i + 1, approved.length);
         }
     } finally {
+        closeProgressModal();
+        showBulkResultModal('Apply All Fixes', {
+            successful: count,
+            sandboxRejected: 0,
+            failed: failed,
+            total: approved.length
+        });
         loadFixes();
     }
 }
@@ -1813,30 +2085,34 @@ async function rejectAllFixes() {
         showError('No proposed fixes to reject.');
         return;
     }
+    if (!confirm(`Are you sure you want to reject ${proposed.length} proposed fix(es)?\n\nThis action cannot be undone.`)) {
+        return;
+    }
     const btn = document.getElementById('reject-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...'; }
     let count = 0;
-    const errors = [];
+    let failed = 0;
+    showProgressModal('Rejecting Fixes', proposed.length);
     try {
-        for (const fix of proposed) {
+        for (let i = 0; i < proposed.length; i++) {
+            const fix = proposed[i];
+            updateProgress(i, proposed.length, `Rejecting fix ${fix.fix_id.substring(0, 8)}…`);
             const result = await reviewFix(fix.fix_id, false, true);
             if (result.ok) {
                 count++;
             } else {
-                errors.push(result.message || 'unknown error');
+                failed++;
             }
-        }
-        if (count === 0) {
-            const detail = errors.length > 1
-                ? `${errors.length} errors — first: ${errors[0]}`
-                : (errors[0] || 'Check that fixes are in "proposed" status.');
-            showError(`Failed to reject any fixes. ${detail}`);
-        } else if (errors.length > 0) {
-            showSuccess(`Rejected ${count} of ${proposed.length} fixes (${errors.length} failed)`);
-        } else {
-            showSuccess(`Rejected all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+            updateProgress(i + 1, proposed.length);
         }
     } finally {
+        closeProgressModal();
+        showBulkResultModal('Reject All Fixes', {
+            successful: count,
+            sandboxRejected: 0,
+            failed: failed,
+            total: proposed.length
+        });
         loadFixes();
     }
 }

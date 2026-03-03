@@ -366,7 +366,10 @@ Support multiple users.
             <div class="errors-section">
                 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.5rem;">
                     <h3 style="margin:0;">Detected Errors</h3>
-                    <button id="propose-all-btn" class="btn btn-primary" onclick="proposeAllFixes(this)" style="display:none;">🔧 Propose All Fixes</button>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+                        <button id="propose-selected-btn" class="btn btn-secondary" onclick="proposeAllFixes(this, true)" style="display:none;">🔧 Propose Selected</button>
+                        <button id="propose-all-btn" class="btn btn-primary" onclick="proposeAllFixes(this)" style="display:none;">🔧 Propose All Fixes</button>
+                    </div>
                 </div>
                 <div class="errors-list" id="errors-list">
                     <p class="no-data">No errors detected</p>
