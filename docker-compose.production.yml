@@ -130,7 +130,7 @@ services:
       # Infrastructure — provided by Railway
       # ============================================
       - REDIS_URL=${REDIS_URL}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:?KAFKA_BOOTSTRAP_SERVERS is required in production — set to your Kafka broker addresses}  # Kafka broker addresses
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}  # Required when ENABLE_KAFKA=1 — set to your Kafka broker addresses
 
       # ============================================
       # Citus Extension Configuration
@@ -303,6 +303,7 @@ services:
       - platform-output:/app/output
       - platform-uploads:/app/uploads
       - platform-logs:/app/logs
+      - platform-data:/app/data  # Persists policies.json, provenance.json, reports, DLT data
     restart: always
     networks:
       - codefactory-network
@@ -379,6 +380,8 @@ volumes:
   platform-uploads:
     driver: local
   platform-logs:
+    driver: local
+  platform-data:
     driver: local
   prometheus-data:
     driver: local
