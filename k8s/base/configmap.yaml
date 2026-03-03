@@ -90,7 +90,7 @@ data:
   # sequential passes (core → routes/services → infrastructure) and auto-enables
   # ensemble voting per chunk.  Raise these values to disable multi-pass for all but
   # the very largest specs; lower them to enable it more aggressively.
-  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "25"
+  CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "10"
   CODEGEN_MULTIPASS_FILE_THRESHOLD: "20"
   # Trigger multi-pass generation when the raw spec content exceeds this many characters.
   # A ~30 000-char spec produces an ~87 000-char prompt that saturates the 16K output
