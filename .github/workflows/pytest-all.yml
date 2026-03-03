@@ -935,7 +935,7 @@ jobs:
 
       - name: Run self_fixing_engineer tests - Arbiter
         if: always() && matrix.module == 'self_fixing_engineer'
-        timeout-minutes: 65  # Increased from 30; Arbiter tests need ~70min at current rate
+        timeout-minutes: 85  # Arbiter tests need ~70min; 75m timeout command + 10min headroom
         env:
           TESTING: "1"
           PROMETHEUS_MULTIPROC_DIR: "${{ runner.temp }}/prometheus_multiproc"
@@ -966,7 +966,7 @@ jobs:
           ulimit -s unlimited 2>/dev/null || ulimit -s 65536 || true
           
           echo "=== Running Arbiter Tests ==="
-          timeout --signal=TERM --kill-after=30s 55m python -m pytest \
+          timeout --signal=TERM --kill-after=30s 75m python -m pytest \
             self_fixing_engineer/tests/test_arbiter*.py \
             -v \
             --tb=long \
@@ -979,14 +979,14 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-arbiter.xml \
-            > test-output-sfe-arbiter.log 2>&1 || {
+            2>&1 | tee test-output-sfe-arbiter.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Arbiter tests failed with exit code $EXIT_CODE"
             echo "======================================"
             if [ $EXIT_CODE -eq 124 ]; then
               echo "ERROR: Arbiter test execution timed out (timeout command)"
-              echo "Wall-clock time limit (55 minutes) was exceeded"
+              echo "Wall-clock time limit (75 minutes) was exceeded"
               echo ""
               echo "=== Last 200 lines of test output ==="
               tail -200 test-output-sfe-arbiter.log || true
@@ -1099,7 +1099,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-mesh.xml \
-            > test-output-sfe-mesh.log 2>&1 || {
+            2>&1 | tee test-output-sfe-mesh.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Mesh tests failed with exit code $EXIT_CODE"
@@ -1199,7 +1199,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-simulation.xml \
-            > test-output-sfe-simulation.log 2>&1 || {
+            2>&1 | tee test-output-sfe-simulation.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Simulation tests failed with exit code $EXIT_CODE"
@@ -1250,7 +1250,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-self-healing.xml \
-            > test-output-sfe-self-healing.log 2>&1 || {
+            2>&1 | tee test-output-sfe-self-healing.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Self-Healing tests failed with exit code $EXIT_CODE"
@@ -1308,7 +1308,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-remaining-a.xml \
-            > test-output-sfe-remaining-a.log 2>&1 || {
+            2>&1 | tee test-output-sfe-remaining-a.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Remaining-A tests failed with exit code $EXIT_CODE"
@@ -1359,7 +1359,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-remaining-b.xml \
-            > test-output-sfe-remaining-b.log 2>&1 || {
+            2>&1 | tee test-output-sfe-remaining-b.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Remaining-B tests failed with exit code $EXIT_CODE"
@@ -1409,7 +1409,7 @@ jobs:
             -p no:cacheprovider \
             --import-mode=importlib \
             --junitxml=junit-sfe-remaining-c.xml \
-            > test-output-sfe-remaining-c.log 2>&1 || {
+            2>&1 | tee test-output-sfe-remaining-c.log || {
             EXIT_CODE=$?
             echo "======================================"
             echo "Remaining-C tests failed with exit code $EXIT_CODE"
