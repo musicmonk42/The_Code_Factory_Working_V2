@@ -51,7 +51,7 @@ def mock_secrets_manager():
 @pytest.fixture
 def mock_audit_logger_ai():
     """Mocks the audit_logger for testing."""
-    with patch("analyzer.core_ai.audit_logger") as mock:
+    with patch("analyzer.core_audit.audit_logger") as mock:
         yield mock
 
 
