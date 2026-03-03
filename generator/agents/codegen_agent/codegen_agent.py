@@ -323,16 +323,23 @@ def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
 def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
     """Return True when the spec is large enough to warrant multi-pass generation.
 
-    Triggers multi-pass when either:
+    Triggers multi-pass when any of the following conditions hold:
     - The spec has at least :data:`MULTIPASS_ENDPOINT_THRESHOLD` API endpoints, or
-    - The combined prompt content exceeds 50 000 characters (a rough proxy for
-      prompts that would exceed the LLM's 16K output token limit in a single pass).
+    - The combined prompt content exceeds 30 000 characters (a rough proxy for
+      prompts that would approach the LLM's 16K output token limit in a single
+      pass, reducing the risk of truncated / incomplete responses), or
+    - The spec references at least :data:`MULTIPASS_FILE_THRESHOLD` files.
     """
     if _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD:
         return True
     md = requirements.get("md_content", "") or requirements.get("description", "")
-    if len(md) > 50_000:
+    if len(md) > MULTIPASS_MD_SIZE_THRESHOLD:
         return True
+    if md:
+        # Count file references in the spec as a proxy for project size.
+        file_refs = len(re.findall(r'`[^`]+\.py`|```python', md))
+        if file_refs >= MULTIPASS_FILE_THRESHOLD:
+            return True
     return False
 
 
@@ -4375,6 +4382,19 @@ if PLUGIN_AVAILABLE:
                         f"[CODEGEN] Parsed {len(code_files)} files from LLM response",
                         extra={"files": list(code_files.keys())}
                     )
+
+                    # Detect potentially truncated LLM response — a very short
+                    # response relative to a large prompt is a strong signal that
+                    # the model hit its output token limit mid-generation.
+                    _resp_str = str(response)
+                    if len(prompt) > LARGE_PROMPT_THRESHOLD and len(_resp_str) < len(prompt) * 0.1:
+                        logger.warning(
+                            "[CODEGEN] Response may be truncated: prompt was %d chars "
+                            "but response is only %d chars — consider reducing prompt "
+                            "size or enabling multi-pass generation",
+                            len(prompt),
+                            len(_resp_str),
+                        )
                     
                     code_files = add_traceability_comments(
                         code_files,
@@ -4383,9 +4403,28 @@ if PLUGIN_AVAILABLE:
                     )
 
                     # Post-Processing and Scans
+                    # Merge spec-specific compliance rules from generator.specs router
+                    # so SecurityUtils.apply_compliance() enforces regime-specific
+                    # banned functions/imports without manual config.
+                    _effective_compliance_rules = dict(config.compliance_rules)
+                    try:
+                        from generator.specs import get_compliance_rules  # noqa: PLC0415
+                        _spec_rules = get_compliance_rules(
+                            requirements.get("md_content", ""),
+                            requirements.get("compliance_preferences"),
+                        )
+                        for _rule_key in ("banned_functions", "banned_imports"):
+                            _existing = _effective_compliance_rules.get(_rule_key, [])
+                            for _item in _spec_rules.get(_rule_key, []):
+                                if _item not in _existing:
+                                    _existing.append(_item)
+                            _effective_compliance_rules[_rule_key] = _existing
+                    except Exception as _cr_err:
+                        logger.debug("Could not load spec compliance rules: %s", _cr_err)
+
                     for code in code_files.values():
                         violations = security_utils.apply_compliance(
-                            code, config.compliance_rules
+                            code, _effective_compliance_rules
                         )
                         if violations:
                             # --- Audit/Logging Change: Use log_audit_event ---
@@ -4935,6 +4974,17 @@ else:
 
                 with tracer.start_as_current_span("parse_response_and_scan"):
                     code_files = parse_llm_response(response)
+
+                    # Detect potentially truncated LLM response.
+                    _resp_str2 = str(response)
+                    if len(prompt) > LARGE_PROMPT_THRESHOLD and len(_resp_str2) < len(prompt) * 0.1:
+                        logger.warning(
+                            "[CODEGEN] Response may be truncated: prompt was %d chars "
+                            "but response is only %d chars — consider reducing prompt "
+                            "size or enabling multi-pass generation",
+                            len(prompt),
+                            len(_resp_str2),
+                        )
 
                     # --- Security Scans Change: Use unified scanning utility ---
                     code_files = await perform_security_scans(code_files)

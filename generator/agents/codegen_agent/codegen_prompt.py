@@ -1786,6 +1786,32 @@ Review the error carefully and ensure your generated code does not repeat the sa
                     len(required_endpoints),
                 )
 
+            # 7c. Inject compliance / security spec directives for any regulated
+            # domains detected in the spec (e.g. HIPAA, GDPR).  Directives are
+            # resolved via the generator.specs router so that each compliance
+            # regime lives in its own routable module rather than being hardcoded
+            # here.  The router consults both MD keyword detection and the
+            # clarifier's compliance_preferences answers (question IDs from
+            # generator.clarifier.clarifier_user_prompt.COMPLIANCE_QUESTIONS).
+            _spec_text = md_content or requirements.get("md_content", "")
+            _compliance_prefs = requirements.get("compliance_preferences") or {}
+            if _spec_text or _compliance_prefs:
+                try:
+                    from generator.specs import get_security_directives  # noqa: PLC0415
+                    _security_directives = get_security_directives(
+                        _spec_text, _compliance_prefs
+                    )
+                    if _security_directives:
+                        prompt += _security_directives
+                        logger.info(
+                            "Injected %d security spec directive(s) into prompt",
+                            _security_directives.count("##"),
+                        )
+                except Exception as _spec_err:  # pragma: no cover
+                    logger.warning(
+                        "Failed to load security spec directives: %s", _spec_err
+                    )
+
             # 9. Final self-critique and refinement (if enabled)
             if enable_meta_llm_critique and META_LLM_API_KEY:
                 with tracer.start_as_current_span("meta_llm_critique"):

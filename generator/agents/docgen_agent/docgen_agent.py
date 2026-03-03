@@ -1409,7 +1409,35 @@ class DocgenAgent:
                 )
 
                 # 6. Run Compliance Checks (using plugin registry)
+                # Auto-register spec CompliancePlugins for any regulated domain detected
+                # in the instructions/spec text so HIPAA/GDPR documentation requirements
+                # are enforced without manual plugin configuration.
                 doc_content_str = validator_result.get("docs", "")
+                _spec_text_for_plugins = instructions or ""
+                if _spec_text_for_plugins:
+                    try:
+                        from generator.specs import as_compliance_plugins  # noqa: PLC0415
+                        _spec_plugins = as_compliance_plugins(
+                            _spec_text_for_plugins,
+                            kwargs.get("compliance_preferences"),
+                        )
+                        for _sp in _spec_plugins:
+                            if self.plugin_registry.get_plugin(_sp.name) is None:
+                                self.plugin_registry.register(_sp)
+                                logger.debug(
+                                    "Auto-registered spec compliance plugin %r for docgen run %s",
+                                    _sp.name,
+                                    run_id,
+                                    extra={"run_id": run_id, "plugin": _sp.name},
+                                )
+                    except Exception as _spe:
+                        logger.warning(
+                            "Failed to auto-register spec compliance plugins for run %s: %s",
+                            run_id,
+                            _spe,
+                            exc_info=True,
+                        )
+
                 agent_compliance_issues = []
 
                 for plugin in self.plugin_registry.get_all_plugins():

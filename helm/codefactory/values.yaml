@@ -276,6 +276,17 @@ env:
   #   helm upgrade --set env.CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD=20 ...
   CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD: "25"
   CODEGEN_MULTIPASS_FILE_THRESHOLD: "20"
+  # Trigger multi-pass generation when the raw spec content exceeds this many characters.
+  # A ~30 000-char spec produces an ~87 000-char prompt that saturates the 16K output
+  # token limit in a single pass, causing truncated responses.
+  # Override: helm upgrade --set env.CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD=40000 ...
+  CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD: "30000"
+  # Fraction of required spec endpoints allowed to be missing before the pipeline
+  # triggers a hard spec-fidelity failure and additive retry.  Range: 0.0–1.0.
+  # Lower this value to enforce stricter endpoint coverage; raise it to be more
+  # permissive during development.
+  # Override: helm upgrade --set env.SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD=0.30 ...
+  SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD: "0.50"
   # Pipeline codegen outer budget: maximum wall-clock seconds for one full multi-pass
   # code-generation job (3 sequential ensemble passes).  900 s = 15 minutes.
   # Override: helm upgrade --set env.PIPELINE_CODEGEN_TIMEOUT_SECONDS=1200 ...
