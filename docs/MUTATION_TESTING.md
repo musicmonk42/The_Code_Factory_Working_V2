@@ -63,7 +63,7 @@ repository root:
 
 ```ini
 [mutmut]
-paths_to_mutate=generator/main/provenance.py generator/agents/testgen_agent/testgen_agent.py
+paths_to_mutate=generator/main/provenance.py generator/utils/project_endpoint_analyzer.py generator/agents/testgen_agent/testgen_agent.py
 runner=python -m pytest generator/tests/ -x -q --tb=short --timeout=60
 tests_dir=generator/tests/
 ```
