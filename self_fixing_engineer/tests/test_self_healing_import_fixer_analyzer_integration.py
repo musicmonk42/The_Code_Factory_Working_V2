@@ -282,7 +282,14 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
 
     # 5) health check (wires through multiple subsystems)
     if hasattr(analyzer, "_handle_health_check"):
-        res = analyzer._handle_health_check()
+        import inspect
+        app_config = type('Config', (), {'policy_rules_file': str(policy_path), 'ai_config': {}})()
+        if inspect.iscoroutinefunction(analyzer._handle_health_check):
+            res = asyncio.run(
+                analyzer._handle_health_check(project_root=str(proj_root), app_config=app_config)
+            )
+        else:
+            res = analyzer._handle_health_check(project_root=str(proj_root), app_config=app_config)
         results["health_check"] = res
         handler_calls += 1
 

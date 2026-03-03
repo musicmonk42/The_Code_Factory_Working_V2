@@ -1646,6 +1646,9 @@ except NameError:
         def inc(self, *a, **k):
             pass
 
+        def set(self, *a, **k):
+            pass
+
         def observe(self, *a, **k):
             pass
 

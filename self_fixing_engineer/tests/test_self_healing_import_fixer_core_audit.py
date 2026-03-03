@@ -14,7 +14,7 @@ import pytest
 
 # Setup paths
 current_dir = os.path.dirname(os.path.abspath(__file__))
-analyzer_dir = os.path.join(os.path.dirname(current_dir), "analyzer")
+analyzer_dir = os.path.join(os.path.dirname(current_dir), "self_healing_import_fixer", "analyzer")
 sys.path.insert(0, analyzer_dir)
 
 # Mock dependencies before import
