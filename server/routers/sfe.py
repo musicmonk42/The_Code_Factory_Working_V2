@@ -1026,6 +1026,55 @@ async def detect_bugs(
     return result
 
 
+@router.post("/bugs/{bug_id}/propose-fix", response_model=FixProposal)
+async def propose_fix_for_bug(
+    bug_id: str,
+    sfe_service: SFEService = Depends(get_sfe_service),
+) -> FixProposal:
+    """
+    Propose a fix for a detected bug.
+
+    Uses the same fix proposal mechanism as errors but for bugs
+    detected via the detect_bugs endpoint.
+
+    **Path Parameters:**
+    - bug_id: Bug identifier
+
+    **Returns:**
+    - Fix proposal with proposed changes
+
+    **Errors:**
+    - 404: Bug not found
+    """
+    result = await sfe_service.propose_fix(bug_id)
+
+    # Store fix proposal
+    fix = Fix(
+        fix_id=result["fix_id"],
+        error_id=bug_id,
+        job_id=result.get("job_id"),
+        status=FixStatus.PROPOSED,
+        description=result["description"],
+        proposed_changes=result["proposed_changes"],
+        confidence=result["confidence"],
+        reasoning=result.get("reasoning"),
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
+    )
+    fixes_db[fix.fix_id] = fix
+
+    return FixProposal(
+        fix_id=fix.fix_id,
+        error_id=bug_id,
+        job_id=fix.job_id,
+        description=fix.description,
+        proposed_changes=fix.proposed_changes,
+        confidence=fix.confidence,
+        reasoning=fix.reasoning,
+        created_at=fix.created_at,
+    )
+
+
 @router.post("/bugs/{bug_id}/analyze")
 async def analyze_bug(
     bug_id: str,
