@@ -3370,6 +3370,15 @@ class SFEService:
                         )
                     code_path_obj = fallback_path
 
+                # Enforce file-count cap before starting the (potentially slow) analysis
+                python_files = list(code_path_obj.rglob("*.py")) if code_path_obj.is_dir() else [code_path_obj]
+                if len(python_files) > MAX_DEEP_ANALYSIS_FILES:
+                    logger.warning(
+                        f"[SFE] Deep analysis: {len(python_files)} Python files found in "
+                        f"{code_path_obj}; capping at {MAX_DEEP_ANALYSIS_FILES} "
+                        f"(MAX_DEEP_ANALYSIS_FILES). Set SFE_FAST_MODE=true or reduce scope."
+                    )
+
                 # Use CodebaseAnalyzer to perform deep analysis
                 async with CodebaseAnalyzer(
                     root_dir=str(code_path_obj),

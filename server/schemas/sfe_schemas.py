@@ -6,8 +6,8 @@ Self-Fixing Engineer specific schemas.
 Request and response models for SFE control endpoints.
 """
 
-from enum import Enum
 import re
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field, field_validator

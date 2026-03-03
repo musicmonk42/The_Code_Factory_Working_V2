@@ -130,7 +130,7 @@ services:
       # Infrastructure — provided by Railway
       # ============================================
       - REDIS_URL=${REDIS_URL}
-      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}  # Required when ENABLE_KAFKA=1 — set to your Kafka broker addresses
+      - KAFKA_BOOTSTRAP_SERVERS=${KAFKA_BOOTSTRAP_SERVERS:-}  # Required when ENABLE_KAFKA=1; validated at app startup if Kafka is enabled
 
       # ============================================
       # Citus Extension Configuration
@@ -351,6 +351,12 @@ services:
     restart: always
     networks:
       - codefactory-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # Grafana for visualization
   grafana:
@@ -369,7 +375,8 @@ services:
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
     restart: always
     networks:
       - codefactory-network

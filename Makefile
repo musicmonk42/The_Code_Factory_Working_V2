@@ -563,8 +563,10 @@ helm-install-dev: ## Install with Helm (development environment)
 		--wait --atomic
 	@echo "$(GREEN)Dev Helm release installed!$(NC)"
 
-helm-install-prod: ## Install with Helm (production environment) — set IMAGE_TAG=<sha> for immutable tag
+helm-install-prod: ## Install with Helm (production environment) — usage: make helm-install-prod IMAGE_TAG=<git-sha-or-semver>
 	@echo "$(BLUE)Installing Code Factory with Helm (production)...$(NC)"
+	@# IMAGE_TAG must be passed as a Make variable: make helm-install-prod IMAGE_TAG=abc1234
+	@# It intentionally cannot be set as a shell environment variable to force explicit intent.
 	@if [ -z "$(IMAGE_TAG)" ]; then \
 		echo "$(RED)ERROR: IMAGE_TAG must be set for production deployments. Never use 'latest'.$(NC)"; \
 		echo "$(YELLOW)Usage: make helm-install-prod IMAGE_TAG=<git-sha-or-semver-tag>$(NC)"; \
