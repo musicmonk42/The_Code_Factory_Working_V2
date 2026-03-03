@@ -227,7 +227,7 @@ DIRECTIVE_TEXT: str = (
     "- Never serialise PHI with `pickle`; use JSON + encrypted field storage.\n\n"
     "### Authentication & Access Control (NIST AC-3, AC-6, IA-5)\n"
     "- Sign JWTs with RS256 (asymmetric); never use HS256 for PHI-bearing tokens.\n"
-    "- Implement Role-Based Access Control (RBAC) restricting PHI to authorised "
+    "- Implement Role-Based Access Control (RBAC) restricting PHI to authorized "
     "roles only (principle of least privilege — AC-6).\n"
     "- Enforce short-lived tokens (≤ 15 min) with refresh-token rotation.\n\n"
     "### Audit Logging (NIST AU-2, AU-6)\n"

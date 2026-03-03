@@ -333,7 +333,7 @@ def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
     if _count_spec_endpoints(requirements) >= MULTIPASS_ENDPOINT_THRESHOLD:
         return True
     md = requirements.get("md_content", "") or requirements.get("description", "")
-    if len(md) > 30_000:
+    if len(md) > MULTIPASS_MD_SIZE_THRESHOLD:
         return True
     if md:
         # Count file references in the spec as a proxy for project size.

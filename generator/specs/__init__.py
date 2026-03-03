@@ -38,7 +38,7 @@ routing decisions:
 
 Adding a New Compliance Regime
 ------------------------------
-1. Create ``generator/specs/<regime>.py`` implementing all nine attributes
+1. Create ``generator/specs/<regime>.py`` implementing all eight attributes
    listed above.
 2. Append the module's short name (e.g. ``"pci"`` for PCI-DSS) to
    ``generator.specs.router._SPEC_MODULES``.

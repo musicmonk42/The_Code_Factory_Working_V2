@@ -242,7 +242,7 @@ DIRECTIVE_TEXT: str = (
     "- Encrypt all personal data at rest using AES-256 or equivalent.\n"
     "- Encrypt personal data in transit with TLS 1.2+ (prefer TLS 1.3).\n\n"
     "### Access Control (NIST AC-3 — Access Enforcement)\n"
-    "- Restrict personal data access to authorised roles only.\n"
+    "- Restrict personal data access to authorized roles only.\n"
     "- Implement field-level encryption or masking for sensitive fields "
     "(e.g. email, SSN, credit card).\n\n"
     "### Minimum Required Sections in Generated Docs\n"
