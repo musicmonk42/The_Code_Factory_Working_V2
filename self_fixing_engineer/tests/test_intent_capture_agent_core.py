@@ -1,5 +1,6 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+import asyncio
 import datetime
 import gc
 import json
@@ -439,6 +440,10 @@ async def test_agent_predict(mock_env_vars, mock_llm, mock_redis_client):
 
     # Create a proper async function for the circuit breaker mock
     async def mock_breaker_call(func, *args, **kwargs):
+        # Close any coroutine arguments to prevent "coroutine was never awaited" warnings
+        for arg in args:
+            if asyncio.iscoroutine(arg):
+                arg.close()
         # Just return our mock response directly
         return AgentResponse(
             response="Test response",
@@ -495,6 +500,10 @@ async def test_agent_state_persistence(mock_env_vars, mock_llm, mock_redis_clien
 
     # Create a proper async function for the circuit breaker mock
     async def mock_breaker_call(func, *args, **kwargs):
+        # Close any coroutine arguments to prevent "coroutine was never awaited" warnings
+        for arg in args:
+            if asyncio.iscoroutine(arg):
+                arg.close()
         return AgentResponse(
             response="Test response",
             confidence_score=0.95,
@@ -610,6 +619,10 @@ async def test_full_integration(mock_env_vars, mock_redis_client):
 
     # Mock the circuit breaker to return our response directly
     async def mock_breaker_call(func, *args, **kwargs):
+        # Close any coroutine arguments to prevent "coroutine was never awaited" warnings
+        for arg in args:
+            if asyncio.iscoroutine(arg):
+                arg.close()
         return AgentResponse(
             response="Paris is the capital of France",
             confidence_score=0.99,
@@ -663,6 +676,10 @@ async def test_agent_predict_error_handling(mock_env_vars, mock_llm, mock_redis_
 
     # Create a proper async function for the circuit breaker mock
     async def mock_breaker_call(func, *args, **kwargs):
+        # Close any coroutine arguments to prevent "coroutine was never awaited" warnings
+        for arg in args:
+            if asyncio.iscoroutine(arg):
+                arg.close()
         # Simulate the error from the runnable
         raise Exception("LLM Error during invoke")
 
