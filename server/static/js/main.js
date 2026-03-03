@@ -1521,43 +1521,23 @@ async function loadFixes() {
     if (!container) return;
     container.innerHTML = '<p class="loading">Loading fixes...</p>';
 
-    // Read the status filter and pass it as a query parameter so the server
-    // can apply it.  Bulk-action counts are always computed against the full
-    // (unfiltered) dataset so that "Approve All" works regardless of which
-    // filter the user has selected.
+    // Read the status filter value; filtering is done client-side.
     const fixFilter = document.getElementById('fix-status-filter');
     const filterStatus = fixFilter ? fixFilter.value : '';
 
     try {
-        let displayData, allData;
+        const resp = await fetchWithRetry(`${API_BASE}/fixes/`);
+        let allData = await resp.json();
 
-        if (filterStatus) {
-            // When a filter is active we need two requests: one for the
-            // filtered display list and one for the complete list that drives
-            // bulk-action state (counts and disabled flags).
-            const filteredUrl = `${API_BASE}/fixes/?status=${encodeURIComponent(filterStatus)}`;
-            const [filteredResp, allResp] = await Promise.all([
-                fetchWithRetry(filteredUrl),
-                fetchWithRetry(`${API_BASE}/fixes/`),
-            ]);
-            displayData = await filteredResp.json();
-            allData = await allResp.json();
-        } else {
-            // No filter — a single request covers both display and bulk tracking.
-            const resp = await fetchWithRetry(`${API_BASE}/fixes/`);
-            displayData = await resp.json();
-            allData = displayData;
-        }
-
-        // Validate that the server returned array payloads as expected.
+        // Validate that the server returned an array payload as expected.
         if (!Array.isArray(allData)) {
             console.warn('loadFixes: unexpected response format for full list', allData);
             allData = [];
         }
-        if (!Array.isArray(displayData)) {
-            console.warn('loadFixes: unexpected response format for display list', displayData);
-            displayData = [];
-        }
+
+        const displayData = filterStatus
+            ? allData.filter(f => f.status === filterStatus)
+            : allData;
 
         // The full dataset drives bulk operations.
         currentFixesData = allData;
@@ -1600,24 +1580,50 @@ async function loadFixes() {
 function createFixCard(fix) {
     const card = document.createElement('div');
     card.className = 'fix-card';
+
+    const fixIdShort = escapeHtml(fix.fix_id.substring(0, 8));
+    const description = escapeHtml(fix.description);
+    const confidence = escapeHtml((fix.confidence * 100).toFixed(1));
+    const status = escapeHtml(fix.status);
+    // Validate status against known values for safe CSS class construction.
+    const KNOWN_STATUSES = ['proposed', 'approved', 'applied', 'rejected'];
+    const safeStatusClass = KNOWN_STATUSES.includes(fix.status) ? fix.status : 'unknown';
+
     card.innerHTML = `
-        <h4>Fix ${fix.fix_id.substring(0, 8)}</h4>
-        <p>${fix.description}</p>
-        <p>Confidence: ${(fix.confidence * 100).toFixed(1)}%</p>
-        <p>Status: <span class="status-badge status-${fix.status}">${fix.status}</span></p>
-        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;">
-            ${fix.status === 'proposed' ? `
-                <button class="btn btn-success" onclick="reviewFix('${fix.fix_id}', true)">✅ Approve</button>
-                <button class="btn btn-danger" onclick="reviewFix('${fix.fix_id}', false)">❌ Reject</button>
-            ` : ''}
-            ${fix.status === 'approved' ? `
-                <button class="btn btn-primary" onclick="applyFix('${fix.fix_id}')">Apply</button>
-            ` : ''}
-            ${fix.status === 'applied' ? `
-                <button class="btn btn-secondary" onclick="rollbackFix('${fix.fix_id}')">Rollback</button>
-            ` : ''}
-        </div>
+        <h4>Fix ${fixIdShort}</h4>
+        <p>${description}</p>
+        <p>Confidence: ${confidence}%</p>
+        <p>Status: <span class="status-badge status-${safeStatusClass}">${status}</span></p>
+        <div style="margin-top: 1rem; display: flex; gap: 0.5rem;" class="fix-card-actions"></div>
     `;
+
+    const actions = card.querySelector('.fix-card-actions');
+    if (fix.status === 'proposed') {
+        const approveBtn = document.createElement('button');
+        approveBtn.className = 'btn btn-success';
+        approveBtn.textContent = '✅ Approve';
+        approveBtn.addEventListener('click', () => reviewFix(fix.fix_id, true));
+        actions.appendChild(approveBtn);
+
+        const rejectBtn = document.createElement('button');
+        rejectBtn.className = 'btn btn-danger';
+        rejectBtn.textContent = '❌ Reject';
+        rejectBtn.addEventListener('click', () => reviewFix(fix.fix_id, false));
+        actions.appendChild(rejectBtn);
+    } else if (fix.status === 'approved') {
+        const applyBtn = document.createElement('button');
+        applyBtn.className = 'btn btn-primary';
+        applyBtn.textContent = 'Apply';
+        applyBtn.addEventListener('click', () => applyFix(fix.fix_id));
+        actions.appendChild(applyBtn);
+    } else if (fix.status === 'applied') {
+        const rollbackBtn = document.createElement('button');
+        rollbackBtn.className = 'btn btn-secondary';
+        rollbackBtn.textContent = 'Rollback';
+        rollbackBtn.addEventListener('click', () => rollbackFix(fix.fix_id));
+        actions.appendChild(rollbackBtn);
+    }
+
     return card;
 }
 
@@ -1628,9 +1634,21 @@ async function reviewFix(fixId, approved, silent = false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({approved: approved})
         });
-        // fetchWithRetry throws on non-OK; reaching here means success
-        if (!silent) showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
-        if (!silent) loadFixes();
+        const data = await response.json();
+
+        // Check if the server actually approved/rejected as requested
+        if (approved && data.status === 'rejected') {
+            if (!silent) {
+                showError(`Fix ${fixId.substring(0, 8)} was rejected by sandbox validation`);
+                loadFixes();
+            }
+            return false;
+        }
+
+        if (!silent) {
+            showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
+            loadFixes();
+        }
         return true;
     } catch (error) {
         if (!silent) showError('Failed to review fix: ' + error.message);
@@ -1645,9 +1663,10 @@ async function applyFix(fixId, silent = false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({force: false, dry_run: false})
         });
-        // fetchWithRetry throws on non-OK; reaching here means success
-        if (!silent) showSuccess('Fix applied successfully');
-        if (!silent) loadFixes();
+        if (!silent) {
+            showSuccess('Fix applied successfully');
+            loadFixes();
+        }
         return true;
     } catch (error) {
         if (!silent) showError('Failed to apply fix: ' + error.message);
@@ -1674,7 +1693,10 @@ async function rollbackFix(fixId) {
 
 async function approveAllFixes() {
     const proposed = currentFixesData.filter(f => f.status === 'proposed');
-    if (proposed.length === 0) return;
+    if (proposed.length === 0) {
+        showError('No proposed fixes to approve.');
+        return;
+    }
     const btn = document.getElementById('approve-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Approving...'; }
     let count = 0;
@@ -1692,7 +1714,10 @@ async function approveAllFixes() {
 
 async function applyAllFixes() {
     const approved = currentFixesData.filter(f => f.status === 'approved');
-    if (approved.length === 0) return;
+    if (approved.length === 0) {
+        showError('No approved fixes to apply. Approve fixes first.');
+        return;
+    }
     const btn = document.getElementById('apply-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Applying...'; }
     let count = 0;
@@ -1710,7 +1735,10 @@ async function applyAllFixes() {
 
 async function rejectAllFixes() {
     const proposed = currentFixesData.filter(f => f.status === 'proposed');
-    if (proposed.length === 0) return;
+    if (proposed.length === 0) {
+        showError('No proposed fixes to reject.');
+        return;
+    }
     const btn = document.getElementById('reject-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...'; }
     let count = 0;
