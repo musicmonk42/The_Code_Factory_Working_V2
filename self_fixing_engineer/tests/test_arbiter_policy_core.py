@@ -337,6 +337,17 @@ async def policy_engine(minimal_arbiter, arbiter_config, monkeypatch):
         create_mock_enforce_compliance().__get__(engine, PolicyEngine),
     )
 
+    # Mock audit_log to prevent retry-induced hangs in tests.
+    # The _audit_policy_decision method has @retry with exponential backoff;
+    # without this mock, the MagicMock audit_log can trigger retries that
+    # accumulate massive delays (especially in sequential loops like test_memory_usage).
+    # Tests that need to verify audit behavior (e.g., test_audit_integration)
+    # apply their own monkeypatch which overrides this one.
+    monkeypatch.setattr(
+        "self_fixing_engineer.arbiter.policy.core.audit_log",
+        AsyncMock(),
+    )
+
     # Disable trust_rules for most tests
     engine._policies["trust_rules"]["enabled"] = False
 
