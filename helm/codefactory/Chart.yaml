@@ -6,6 +6,11 @@ description: A Helm chart for The Code Factory - AI-powered code generation plat
 type: application
 version: 1.0.0
 appVersion: "1.0.0"
+# Minimum Kubernetes version — autoscaling/v2 HPA is stable from 1.23, but
+# RuntimeDefault seccompProfile (podSecurityContext.seccompProfile) requires
+# Kubernetes 1.25+ where PodSecurity graduated to stable and seccomp profiles
+# are enforced by default. 1.25 is therefore the binding minimum version.
+kubeVersion: ">=1.25.0-0"
 keywords:
   - codefactory
   - ai

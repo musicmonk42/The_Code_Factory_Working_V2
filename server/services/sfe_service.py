@@ -37,6 +37,9 @@ from server.services.sfe_utils import (
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of Python files to scan in deep_analyze_codebase() to avoid timeout
+MAX_DEEP_ANALYSIS_FILES = 200
+
 # Bug prioritization severity scores
 SEVERITY_SCORES = {
     "critical": 100,
@@ -964,6 +967,7 @@ class SFEService:
                     async with CodebaseAnalyzer(
                         root_dir=root_dir,
                         ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                        external_db_client=_NullDbClient(),
                     ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
 
@@ -1010,6 +1014,7 @@ class SFEService:
                     async with CodebaseAnalyzer(
                         root_dir=str(code_path_obj),
                         ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                        external_db_client=_NullDbClient(),
                     ) as analyzer:
                         summary = await analyzer.scan_codebase(str(code_path_obj))
 
@@ -1245,7 +1250,11 @@ class SFEService:
 
                 # Analyze files and collect issues
                 all_issues = []
-                async with CodebaseAnalyzer(root_dir=str(job_dir)) as analyzer:
+                async with CodebaseAnalyzer(
+                    root_dir=str(job_dir),
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                    external_db_client=_NullDbClient(),
+                ) as analyzer:
                     for py_file in python_files:
                         try:
                             issues = await analyzer.analyze_and_propose(str(py_file))
@@ -2976,7 +2985,11 @@ class SFEService:
                 # Use CodebaseAnalyzer to scan for bugs
                 if code_path_obj.is_file():
                     root_dir = str(code_path_obj.parent)
-                    async with CodebaseAnalyzer(root_dir=root_dir) as analyzer:
+                    async with CodebaseAnalyzer(
+                        root_dir=root_dir,
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                        external_db_client=_NullDbClient(),
+                    ) as analyzer:
                         issues = await analyzer.analyze_and_propose(str(code_path_obj))
                         
                         # Transform issues to bugs using utility function
@@ -2986,7 +2999,9 @@ class SFEService:
 
                 elif code_path_obj.is_dir():
                     async with CodebaseAnalyzer(
-                        root_dir=str(code_path_obj)
+                        root_dir=str(code_path_obj),
+                        ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info"],
+                        external_db_client=_NullDbClient(),
                     ) as analyzer:
                         # Discover Python files
                         py_files = await analyzer.discover_files_async()
@@ -3355,14 +3370,28 @@ class SFEService:
                         )
                     code_path_obj = fallback_path
 
+                # Enforce file-count cap before starting the (potentially slow) analysis
+                python_files = list(code_path_obj.rglob("*.py")) if code_path_obj.is_dir() else [code_path_obj]
+                if len(python_files) > MAX_DEEP_ANALYSIS_FILES:
+                    logger.warning(
+                        f"[SFE] Deep analysis: {len(python_files)} Python files found in "
+                        f"{code_path_obj}; capping at {MAX_DEEP_ANALYSIS_FILES} "
+                        f"(MAX_DEEP_ANALYSIS_FILES). Set SFE_FAST_MODE=true or reduce scope."
+                    )
+
                 # Use CodebaseAnalyzer to perform deep analysis
-                async with CodebaseAnalyzer(root_dir=str(code_path_obj)) as analyzer:
+                async with CodebaseAnalyzer(
+                    root_dir=str(code_path_obj),
+                    ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info", "venv", "node_modules", "dist", "build"],
+                    external_db_client=_NullDbClient(),
+                ) as analyzer:
                     if generate_report:
                         # Generate full report
                         tmp_dir = Path(tempfile.gettempdir())
+                        analysis_hash = _stable_hash(resolved_path)
                         report_path = (
                             tmp_dir
-                            / f"codebase_analysis_{abs(hash(resolved_path)) % 10000}.md"
+                            / f"codebase_analysis_{analysis_hash}.md"
                         )
                         report = await analyzer.generate_report(
                             output_format="markdown",
@@ -3370,15 +3399,33 @@ class SFEService:
                             use_baseline=False,
                         )
 
+                        # FileSummary keys: files, modules, defects, complexity, coverage, dependency_summary
+                        total_files = report.get("files", 0)
+                        defects = report.get("defects", [])
+                        complexity_list = report.get("complexity", [])
+                        avg_complexity = (
+                            sum(c.get("complexity", 0) for c in complexity_list) / len(complexity_list)
+                            if complexity_list else 0
+                        )
+
                         result = {
-                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
-                            "total_files": report.get("total_files", 0),
-                            "total_loc": report.get("total_loc", 0),
-                            "avg_complexity": report.get("avg_complexity", 0),
-                            "analysis_summary": report.get(
-                                "summary", "Analysis complete"
+                            "analysis_id": f"analysis_{analysis_hash}",
+                            "total_files": total_files,
+                            "total_loc": 0,
+                            "avg_complexity": avg_complexity,
+                            "analysis_summary": (
+                                f"Scanned {total_files} file(s), "
+                                f"found {len(defects)} issue(s)"
                             ),
-                            "issues": report.get("issues", []),
+                            "issues": [
+                                {
+                                    "file": d.get("file", ""),
+                                    "line": d.get("line", 0),
+                                    "message": d.get("message", ""),
+                                    "severity": d.get("severity", "info"),
+                                }
+                                for d in defects
+                            ],
                             "report_path": str(report_path),
                             "source": "direct_sfe",
                         }
@@ -3396,7 +3443,7 @@ class SFEService:
                         defects = summary.get("defects", [])
 
                         result = {
-                            "analysis_id": f"analysis_{abs(hash(resolved_path)) % 10000}",
+                            "analysis_id": f"analysis_{_stable_hash(resolved_path)}",
                             "total_files": total_files,
                             "total_loc": 0,
                             "avg_complexity": avg_complexity,
@@ -3449,7 +3496,7 @@ class SFEService:
                 "generate_report": generate_report,
             }
             result = await self.omnicore_service.route_job(
-                job_id=f"analysis_{abs(hash(resolved_path)) % 10000}",
+                job_id=f"analysis_{_stable_hash(resolved_path)}",
                 source_module="api",
                 target_module="sfe",
                 payload=payload,
@@ -3461,7 +3508,7 @@ class SFEService:
         # Fallback - return minimal data with note
         logger.warning("Neither direct SFE nor OmniCore available, deep codebase analysis unavailable")
         return {
-            "analysis_id": f"analysis_{abs(hash(code_path)) % 10000}",
+            "analysis_id": f"analysis_{_stable_hash(code_path)}",
             "total_files": 0,
             "total_loc": 0,
             "avg_complexity": 0,
@@ -3469,7 +3516,7 @@ class SFEService:
             "issues": [],
             "report_path": None,
             "source": "fallback",
-            "note": "Deep codebase analysis requires API keys. Configure them in Settings → API Keys.",
+            "note": "Deep codebase analysis is unavailable. The CodebaseAnalyzer module could not be loaded. Check server logs for details.",
         }
 
     async def query_knowledge_graph(
@@ -4318,6 +4365,7 @@ class SFEService:
                 async with CodebaseAnalyzer(
                     root_dir=str(code_path),
                     ignore_patterns=["__pycache__", ".git", "*.pyc", "*.egg-info", "venv", "node_modules"],
+                    external_db_client=_NullDbClient(),
                 ) as analyzer:
                     # Collect issues from all Python files
                     issues = []

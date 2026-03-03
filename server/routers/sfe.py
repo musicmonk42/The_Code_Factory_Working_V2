@@ -8,6 +8,7 @@ Handles code analysis, error detection, fix proposals, and automated fixing.
 
 import json
 import logging
+import asyncio
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -1142,12 +1143,25 @@ async def deep_analyze_codebase(
     **Returns:**
     - Analysis results
     """
-    result = await sfe_service.deep_analyze_codebase(
-        code_path=request.code_path,
-        analysis_types=request.analysis_type,
-        generate_report=request.generate_report,
-        job_id=request.job_id,
-    )
+    try:
+        # 5-minute server-side timeout to guard against extremely large codebases
+        async with asyncio.timeout(300):
+            result = await sfe_service.deep_analyze_codebase(
+                code_path=request.code_path,
+                analysis_types=request.analysis_type,
+                generate_report=request.generate_report,
+                job_id=request.job_id,
+            )
+    except TimeoutError:
+        logger.error(
+            f"Deep codebase analysis timed out after 300s for path={request.code_path} "
+            f"job_id={request.job_id}"
+        )
+        raise HTTPException(
+            status_code=504,
+            detail="Deep codebase analysis timed out after 5 minutes. "
+                   "Try a smaller scope or set SFE_FAST_MODE=true.",
+        )
 
     logger.info(
         f"Deep codebase analysis completed for {request.code_path} (job_id: {request.job_id})"

@@ -351,7 +351,7 @@ Support multiple users.
                 <h3>Code Analysis & Bug Detection</h3>
                 <div class="input-group">
                     <label for="analyze-job-id">Job ID:</label>
-                    <input type="text" id="analyze-job-id" placeholder="Enter job ID to analyze">
+                    <input type="text" id="analyze-job-id" placeholder="Enter job ID (or 'repo' for full analysis)">
                     <button id="analyze-btn" class="btn btn-primary">Analyze Code</button>
                 </div>
                 <div class="analysis-buttons">
@@ -946,6 +946,7 @@ Support multiple users.
         </div>
     </footer>
 
+    <div id="toast-container" aria-live="polite" aria-atomic="true"></div>
     <script src="/static/js/main.js"></script>
 </body>
 </html>

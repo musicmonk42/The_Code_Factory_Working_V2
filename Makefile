@@ -3,6 +3,9 @@
 # Code Factory Platform Makefile
 # This file provides convenient commands for development, testing, and deployment
 
+# Use bash with pipefail so any command in a pipeline that fails causes the recipe to fail
+SHELL := /bin/bash -o pipefail
+
 .PHONY: help install install-dev install-ai install-mutation-tools test lint format clean docker-build docker-build-ai docker-up docker-down deploy-staging deploy-production \
 	k8s-deploy-dev k8s-deploy-staging k8s-deploy-prod k8s-status k8s-logs k8s-validate \
 	helm-install helm-uninstall helm-template helm-lint helm-package helm-status \
@@ -560,16 +563,23 @@ helm-install-dev: ## Install with Helm (development environment)
 		--wait --atomic
 	@echo "$(GREEN)Dev Helm release installed!$(NC)"
 
-helm-install-prod: ## Install with Helm (production environment)
+helm-install-prod: ## Install with Helm (production environment) — usage: make helm-install-prod IMAGE_TAG=<git-sha-or-semver>
 	@echo "$(BLUE)Installing Code Factory with Helm (production)...$(NC)"
+	@# IMAGE_TAG must be passed as a Make variable: make helm-install-prod IMAGE_TAG=abc1234
+	@# It intentionally cannot be set as a shell environment variable to force explicit intent.
+	@if [ -z "$(IMAGE_TAG)" ]; then \
+		echo "$(RED)ERROR: IMAGE_TAG must be set for production deployments. Never use 'latest'.$(NC)"; \
+		echo "$(YELLOW)Usage: make helm-install-prod IMAGE_TAG=<git-sha-or-semver-tag>$(NC)"; \
+		exit 1; \
+	fi
 	helm upgrade --install codefactory-prod ./helm/codefactory \
 		--create-namespace \
 		--namespace codefactory-production \
-		--set image.tag=latest \
+		--set image.tag=$(IMAGE_TAG) \
 		--set replicaCount=3 \
 		--set autoscaling.enabled=true \
 		--wait --atomic --timeout 10m
-	@echo "$(GREEN)Production Helm release installed!$(NC)"
+	@echo "$(GREEN)Production Helm release installed with image tag: $(IMAGE_TAG)$(NC)"
 
 helm-uninstall: ## Uninstall Helm release
 	@echo "$(RED)Uninstalling Helm release...$(NC)"
