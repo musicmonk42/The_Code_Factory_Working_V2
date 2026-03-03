@@ -15,6 +15,8 @@ from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import tempfile
 import shutil
 
+from fastapi import HTTPException
+
 from server.services.omnicore_service import OmniCoreService
 from server.services.sfe_service import SFEService
 
@@ -433,6 +435,132 @@ class TestSFETabFixes:
 
         # Clean up
         del jobs_db[test_job_id]
+
+
+class TestProposeFix404OnCacheMiss:
+    """Tests that propose_fix() raises HTTP 404 when error is not in cache and
+    no persisted analysis report is available — rather than silently returning a
+    hollow fix with confidence 0.0 and empty proposed_changes."""
+
+    @pytest.mark.asyncio
+    async def test_propose_fix_raises_404_when_not_in_cache_and_no_report(self):
+        """propose_fix() must raise HTTPException(404) when cache misses and no
+        analysis report can be loaded for any known job."""
+        service = SFEService(omnicore_service=None)
+
+        # Ensure the cache is empty
+        service._errors_cache.clear()
+
+        # Make the fallback a no-op so the cache stays empty
+        with patch.object(service, "_repopulate_cache_from_all_reports"):
+            with pytest.raises(HTTPException) as exc_info:
+                await service.propose_fix("err-nonexistent-cache-miss")
+
+        assert exc_info.value.status_code == 404
+        assert "not found" in exc_info.value.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_propose_fix_raises_404_not_hollow_fix(self):
+        """propose_fix() must NOT return a fix dict with confidence 0.0 and empty
+        proposed_changes when the error_id is unknown — it must raise instead."""
+        service = SFEService(omnicore_service=None)
+        service._errors_cache.clear()
+
+        with patch.object(service, "_repopulate_cache_from_all_reports"):
+            try:
+                result = await service.propose_fix("err-hollow-check")
+                # If we reach here, it returned without raising — that's the old broken behaviour
+                pytest.fail(
+                    f"propose_fix() should have raised HTTPException(404) but returned: {result}"
+                )
+            except HTTPException as exc:
+                assert exc.status_code == 404
+            except Exception as exc:
+                pytest.fail(f"Expected HTTPException but got {type(exc).__name__}: {exc}")
+
+    @pytest.mark.asyncio
+    async def test_propose_fix_uses_report_fallback_on_cache_miss(self):
+        """When _errors_cache is empty but a persisted analysis report exists for
+        a known job, propose_fix() should repopulate the cache and succeed."""
+        import json
+        import hashlib
+
+        service = SFEService(omnicore_service=None)
+        service._errors_cache.clear()
+
+        test_job_id = "test-job-fallback"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Build a minimal analysis report on disk
+            reports_dir = Path(tmpdir) / "reports"
+            reports_dir.mkdir()
+            report_file = reports_dir / "sfe_analysis_report.json"
+
+            # One issue that will produce a deterministic error_id
+            issue = {
+                "type": "import_error",
+                "risk_level": "high",
+                "file": "app/main.py",
+                "details": {
+                    "line": 5,
+                    "message": "No module named 'missing_lib'",
+                },
+            }
+            id_components = (
+                f"{test_job_id}:app/main.py:5:import_error:No module named 'missing_lib'"
+            )
+            expected_error_id = "err-" + hashlib.sha256(
+                id_components.encode("utf-8")
+            ).hexdigest()[:16]
+
+            report_file.write_text(
+                json.dumps(
+                    {
+                        "job_id": test_job_id,
+                        "issues": [issue],
+                        "source": "test",
+                        "generated_at": "2026-01-01T00:00:00Z",
+                    }
+                )
+            )
+
+            # Mock _resolve_job_code_path so the service uses tmpdir for this job
+            mock_job = MagicMock()
+            mock_job.metadata = {"output_path": tmpdir}
+
+            mock_jobs_db = MagicMock()
+            mock_jobs_db.keys.return_value = [test_job_id]
+            mock_jobs_db.get.return_value = mock_job
+
+            with patch("server.storage.jobs_db", mock_jobs_db):
+                with patch.object(
+                    service,
+                    "_resolve_job_code_path",
+                    return_value=tmpdir,
+                ):
+                    # Patch fix-generation helpers to avoid real filesystem calls
+                    with patch.object(
+                        service,
+                        "_generate_import_fix",
+                        return_value={
+                            "success": True,
+                            "content": "import missing_lib",
+                            "action": "insert",
+                            "line": 1,
+                            "confidence": 0.8,
+                            "reasoning": "Added missing import",
+                        },
+                    ):
+                        with patch.object(
+                            service,
+                            "_read_source_context",
+                            return_value={"success": False},
+                        ):
+                            result = await service.propose_fix(expected_error_id)
+
+            # Should have produced a real fix with actual content
+            assert result["error_id"] == expected_error_id
+            assert result["confidence"] > 0.0
 
 
 class TestDeepAnalyzeHandler:

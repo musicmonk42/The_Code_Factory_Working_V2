@@ -440,6 +440,51 @@ class SFEService:
                     "line": issue.get("line", 0),
                 }
 
+    def _repopulate_cache_from_all_reports(self) -> None:
+        """
+        Attempt to repopulate _errors_cache from persisted sfe_analysis_report.json
+        files for all known jobs.  Called on cache miss in propose_fix() so that a
+        server restart between detect_errors/detect_bugs and propose_fix does not
+        produce hollow fixes.
+        """
+        from server.storage import jobs_db
+
+        for job_id in list(jobs_db.keys()):
+            try:
+                resolved_path = self._resolve_job_code_path(job_id, "")
+                if not resolved_path:
+                    continue
+                report_path = Path(resolved_path) / "reports" / "sfe_analysis_report.json"
+                cached_report = _load_sfe_analysis_report(report_path, job_id)
+                if not cached_report:
+                    continue
+                issues = transform_pipeline_issues_to_frontend_errors(
+                    cached_report["issues"], job_id
+                )
+                self._populate_errors_cache(issues, job_id)
+                # Also expose the same issues as bug IDs so /bugs/.../propose-fix works
+                bugs = transform_pipeline_issues_to_bugs(
+                    cached_report["issues"], job_id, "unknown"
+                )
+                for bug in bugs:
+                    if bug["bug_id"] not in self._errors_cache:
+                        self._errors_cache[bug["bug_id"]] = {
+                            "error_id": bug["bug_id"],
+                            "job_id": bug["job_id"],
+                            "type": bug["type"],
+                            "severity": bug["severity"],
+                            "message": bug["message"],
+                            "file": bug["file"],
+                            "line": bug["line"],
+                        }
+                logger.info(
+                    f"Repopulated errors cache from analysis report for job {job_id}"
+                )
+            except Exception as e:
+                logger.warning(
+                    f"Could not repopulate cache from report for job {job_id}: {e}"
+                )
+
     def _build_import_error_recommendations(
         self, module_name: Optional[str], file_path: str
     ) -> List[str]:
@@ -1747,18 +1792,26 @@ class SFEService:
 
         # Look up error from cache
         error_data = self._errors_cache.get(error_id)
-        
+
         if not error_data:
-            logger.warning(f"Error {error_id} not found in cache.")
-            fix = {
-                "fix_id": f"fix-{error_id}",
-                "error_id": error_id,
-                "job_id": None,
-                "description": "Unable to generate fix - error details not found.",
-                "proposed_changes": [],
-                "confidence": 0.0,
-                "reasoning": "Error not found in cache. Run 'Analyze Code' or 'Detect Errors' first.",
-            }
+            # Cache miss — try to repopulate from persisted analysis reports so that a
+            # server restart between detect_errors/detect_bugs and propose_fix does not
+            # silently produce hollow fixes.
+            logger.warning(
+                f"Error {error_id} not found in cache. "
+                "Attempting to repopulate from saved analysis reports."
+            )
+            self._repopulate_cache_from_all_reports()
+            error_data = self._errors_cache.get(error_id)
+
+        if not error_data:
+            raise HTTPException(
+                status_code=404,
+                detail=(
+                    f"Error {error_id} not found. "
+                    "Run 'Analyze Code' or 'Detect Errors' first to refresh the error cache."
+                ),
+            )
         else:
             # Extract error details
             error_type = error_data.get("type", "unknown")
