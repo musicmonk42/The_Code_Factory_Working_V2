@@ -43,9 +43,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 # Imports of the module under test are deferred to individual test methods
 # to prevent collection-time import errors when optional deps are absent.
 
-pytestmark = [
-    pytest.mark.asyncio,
-]
+pytestmark: list = []
 
 
 # ===========================================================================

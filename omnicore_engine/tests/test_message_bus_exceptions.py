@@ -11,6 +11,9 @@ Tests verify:
 - Backward compatibility aliases
 """
 
+import asyncio
+import threading
+
 import pytest
 
 from omnicore_engine.message_bus.exceptions import (
@@ -116,6 +119,17 @@ class TestRedisExceptions:
 
 class TestKafkaExceptions:
     """Test Kafka-specific exceptions."""
+
+    def teardown_method(self, method):
+        for t in threading.enumerate():
+            if t != threading.current_thread() and t.is_alive():
+                t.join(timeout=1)
+        try:
+            loop = asyncio.get_event_loop()
+            if not loop.is_closed():
+                loop.close()
+        except RuntimeError:
+            pass
 
     def test_kafka_connection_error_basic(self):
         """Test KafkaConnectionError with basic message."""
