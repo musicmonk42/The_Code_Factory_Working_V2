@@ -39,7 +39,7 @@ jobs:
   test-matrix:
     name: Tests - ${{ matrix.module }}
     runs-on: ubuntu-latest
-    timeout-minutes: 60  # Reduced from 180; legitimate runs complete in <60min, helps catch issues faster
+    timeout-minutes: 360  # 6 hours: self_fixing_engineer runs tests sequentially across 7 batches (~340min max); individual step timeouts guard each batch
     permissions:
       contents: read
     strategy:
