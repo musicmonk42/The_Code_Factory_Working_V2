@@ -286,6 +286,13 @@ LLM_CLIENT_FALLBACKS = get_or_create_metric(
     "LLM client fallbacks and recovery paths",
     ["reason"],
 )
+# PARSE_LATENCY: wall-clock time (in seconds) for each full parse() invocation.
+# Used at the end of IntentParser.parse() to observe end-to-end parse duration.
+PARSE_LATENCY = get_or_create_metric(
+    Histogram,
+    "intent_parser_parse_latency_seconds",
+    "Wall-clock latency for each IntentParser.parse() invocation",
+)
 # --- Config Schema ---
 class LLMConfig(BaseModel):
     provider: str
