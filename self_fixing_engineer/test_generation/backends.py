@@ -1019,7 +1019,7 @@ class DiffblueBackend:
         with open(dest_abs, "w", encoding="utf-8") as f:
             f.write(content)
 
-        return True, "", dest_rel
+        return True, "", dest_rel.replace(os.sep, "/")
 
 
 class CargoBackend:
