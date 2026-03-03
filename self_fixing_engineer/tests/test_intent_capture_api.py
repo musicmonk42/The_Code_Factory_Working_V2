@@ -8,8 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-# FIX: Import from intent_capture.agent_core to use absolute path
-from intent_capture.agent_core import AgentError, ConfigurationError
+# Import from the full module path so AgentError is the same class object that
+# api.py registers in its exception handler (both use self_fixing_engineer.intent_capture.agent_core).
+from self_fixing_engineer.intent_capture.agent_core import AgentError, ConfigurationError
 from fastapi import status
 from httpx import ASGITransport, AsyncClient
 
@@ -59,7 +60,12 @@ def app(test_secret_key):
 
         # Import here to ensure environment variables are set
         import self_fixing_engineer.intent_capture.api as api_module
-        
+
+        # Explicitly update the module-level config so that JWT tokens created
+        # with test_secret_key can be validated, regardless of when the module
+        # was first imported (and therefore when AppConfig() was constructed).
+        api_module.config.JWT_SECRET_KEY = test_secret_key
+
         # Apply patches after import using the actual module reference
         with patch.object(api_module, "aredis") as mock_aredis:
             mock_aredis.from_url = mock_from_url

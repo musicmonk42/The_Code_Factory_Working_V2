@@ -108,6 +108,9 @@ def mock_env_vars():
 @pytest.fixture
 def mock_redis_client():
     """Mock Redis client for state management"""
+    import redis.asyncio as _real_aredis
+    import intent_capture.agent_core as _agent_core_module
+
     # This is the mock client instance we want returned after the await
     mock_client_instance = AsyncMock()
     mock_client_instance.get = AsyncMock(return_value=None)
@@ -118,11 +121,21 @@ def mock_redis_client():
     mock_client_instance.sismember = AsyncMock(return_value=False)
     mock_client_instance.ping = AsyncMock(return_value=True)
     mock_client_instance.close = AsyncMock(return_value=None)
+    # aclose is the preferred close method in redis-py >= 5.x (close is deprecated)
+    mock_client_instance.aclose = AsyncMock(return_value=None)
 
-    # We patch 'aredis.from_url' with an AsyncMock that returns our instance when awaited
     mock_from_url = AsyncMock(return_value=mock_client_instance)
 
-    with patch("redis.asyncio.from_url", new=mock_from_url):
+    # Patch agent_core's 'aredis' reference directly so the mock cannot be
+    # overridden by the autouse mock_external_connections fixture regardless
+    # of fixture ordering across Python versions.
+    mock_aredis = MagicMock()
+    mock_aredis.from_url = mock_from_url
+    # Preserve the real exception class so that `except aredis.RedisError`
+    # clauses in agent_core work correctly during tests.
+    mock_aredis.RedisError = _real_aredis.RedisError
+
+    with patch.object(_agent_core_module, "aredis", mock_aredis):
         yield mock_client_instance
 
 
@@ -541,23 +554,26 @@ async def test_get_or_create_agent_with_token(
 # --- Test for Configuration Validation ---
 
 
-def test_validate_environment(mock_env_vars, monkeypatch):
+def test_validate_environment(mock_env_vars):
     """Test environment validation"""
     from intent_capture.agent_core import validate_environment
 
     # Should pass with all required vars
     validate_environment()
 
-    # Should fail with missing JWT_SECRET
-    monkeypatch.delenv("JWT_SECRET", raising=False)
-    with pytest.raises(ConfigurationError, match="JWT_SECRET"):
-        validate_environment()
+    # Should fail with missing JWT_SECRET.  Use clear=True to ensure only the
+    # explicitly provided variables are present, avoiding interference from
+    # ambient CI environment variables or monkeypatch/patch.dict interactions.
+    env_without_jwt = {k: v for k, v in mock_env_vars.items() if k != "JWT_SECRET"}
+    with patch.dict(os.environ, env_without_jwt, clear=True):
+        with pytest.raises(ConfigurationError, match="JWT_SECRET"):
+            validate_environment()
 
-    # Restore JWT_SECRET and test OPENAI_API_KEYS
-    monkeypatch.setenv("JWT_SECRET", mock_env_vars["JWT_SECRET"])
-    monkeypatch.delenv("OPENAI_API_KEYS", raising=False)
-    with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
-        validate_environment()
+    # Should fail with missing OPENAI_API_KEYS
+    env_without_openai = {k: v for k, v in mock_env_vars.items() if k != "OPENAI_API_KEYS"}
+    with patch.dict(os.environ, env_without_openai, clear=True):
+        with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
+            validate_environment()
 
 
 # --- Integration Test ---

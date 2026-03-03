@@ -123,6 +123,10 @@ os.environ["SIEM_WAL_HMAC_KEY"] = "test-wal-hmac-key"
 
 import aiohttp
 
+# Save the real aiohttp class reference at module level before any test
+# patches run (see test_plugins_pagerduty_plugin.py for rationale).
+_RealClientSession = aiohttp.ClientSession
+
 # Now import required libraries
 from pydantic import ValidationError
 
@@ -255,7 +259,7 @@ def restore_aiofiles_after_module():
 @pytest.fixture
 def mock_aiohttp_session():
     """Mock aiohttp.ClientSession with proper async context manager."""
-    mock_session = MagicMock(spec=aiohttp.ClientSession)
+    mock_session = MagicMock(spec=_RealClientSession)
     mock_session.closed = False
 
     class MockResponse:

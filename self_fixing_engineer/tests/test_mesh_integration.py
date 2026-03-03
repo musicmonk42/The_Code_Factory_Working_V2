@@ -113,9 +113,9 @@ async def policy_enforcer():
 async def checkpoint_manager_service():
     """Fixture for a configured CheckpointManager."""
     # Import here to avoid module-level side effects
-    from self_fixing_engineer.mesh import checkpoint_manager
-    
-    manager = checkpoint_manager.CheckpointManager(backend_type="local")
+    from self_fixing_engineer.mesh import CheckpointManager
+
+    manager = CheckpointManager(backend_type="local")
     await manager.initialize()
     yield manager
     await manager.close()
