@@ -187,19 +187,21 @@ class TestBuildVarToStem:
     def test_aliased_import(self):
         """from X import Y as Z → Z maps to stem of X."""
         content = "from app.routers.auth import router as auth_router\n"
-        result = _build_var_to_stem(content)
+        result, full_mod = _build_var_to_stem(content)
         assert result.get("auth_router") == "auth"
+        assert full_mod.get("auth_router") == "app.routers.auth"
 
     def test_direct_import_single_name(self):
         """from X import Y → Y maps to stem of X."""
         content = "from app.routes import auth_router\n"
-        result = _build_var_to_stem(content)
+        result, full_mod = _build_var_to_stem(content)
         assert result.get("auth_router") == "routes"
+        assert full_mod.get("auth_router") == "app.routes"
 
     def test_direct_import_multiple_names(self):
         """from X import Y, Z → both Y and Z map to stem of X."""
         content = "from app.routes import auth_router, patients_router\n"
-        result = _build_var_to_stem(content)
+        result, full_mod = _build_var_to_stem(content)
         assert result.get("auth_router") == "routes"
         assert result.get("patients_router") == "routes"
 
@@ -212,7 +214,7 @@ class TestBuildVarToStem:
             "    encounters_router,\n"
             ")\n"
         )
-        result = _build_var_to_stem(content)
+        result, _ = _build_var_to_stem(content)
         assert result.get("auth_router") == "routes"
         assert result.get("patients_router") == "routes"
         assert result.get("encounters_router") == "routes"
@@ -223,9 +225,10 @@ class TestBuildVarToStem:
             "from app.routers.auth import router as auth_router\n"
             "from app.routes import auth_router\n"  # should not overwrite
         )
-        result = _build_var_to_stem(content)
+        result, full_mod = _build_var_to_stem(content)
         # The aliased import (processed first) should win.
         assert result.get("auth_router") == "auth"
+        assert full_mod.get("auth_router") == "app.routers.auth"
 
     def test_mixed_import_styles(self):
         """Aliased and direct imports co-exist in the same file."""
@@ -233,15 +236,16 @@ class TestBuildVarToStem:
             "from app.routers.auth import router as auth_router\n"
             "from app.routes import patients_router\n"
         )
-        result = _build_var_to_stem(content)
+        result, _ = _build_var_to_stem(content)
         assert result.get("auth_router") == "auth"
         assert result.get("patients_router") == "routes"
 
     def test_deep_module_path(self):
         """Stems are derived from deeply nested module paths."""
         content = "from a.b.c.d.routers.auth import router as auth_router\n"
-        result = _build_var_to_stem(content)
+        result, full_mod = _build_var_to_stem(content)
         assert result.get("auth_router") == "auth"
+        assert full_mod.get("auth_router") == "a.b.c.d.routers.auth"
 
 
 # ---------------------------------------------------------------------------
@@ -428,6 +432,52 @@ class TestProjectEndpointAnalyzerMultiFile:
     def test_empty_files_mapping_returns_empty(self):
         """Empty ``generated_files`` dict returns an empty list without error."""
         assert ProjectEndpointAnalyzer({}).get_endpoints() == []
+
+    def test_nested_routers_directory_with_aliased_import(self):
+        """Routers in app/routers/*.py with aliased imports should resolve correctly.
+
+        This test specifically covers the case where multiple router files share
+        the same local variable name (``router``) but are imported under distinct
+        aliases in main.py.  The direct file→router mapping (via
+        ``_file_to_var``) must resolve each file to its correct prefix even
+        when the stem-based lookup would be ambiguous.
+        """
+        files = {
+            "app/main.py": (
+                "from fastapi import FastAPI\n"
+                "from app.routers.auth import router as auth_router\n"
+                "from app.routers.patients import router as patients_router\n"
+                "app = FastAPI()\n"
+                'app.include_router(auth_router, prefix="/api/v1/auth")\n'
+                'app.include_router(patients_router, prefix="/api/v1/patients")\n'
+            ),
+            "app/routers/auth.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.post('/login')\n"
+                "def login(): pass\n\n"
+                "@router.get('/me')\n"
+                "def me(): pass\n"
+            ),
+            "app/routers/patients.py": (
+                "from fastapi import APIRouter\n"
+                "router = APIRouter()\n\n"
+                "@router.get('/')\n"
+                "def list_patients(): pass\n\n"
+                "@router.get('/{id}')\n"
+                "def get_patient(id: int): pass\n"
+            ),
+        }
+        analyzer = ProjectEndpointAnalyzer(files)
+        eps = {(e["method"], e["path"]) for e in analyzer.get_endpoints()}
+
+        # Auth endpoints
+        assert ("POST", "/api/v1/auth/login") in eps
+        assert ("GET", "/api/v1/auth/me") in eps
+
+        # Patient endpoints
+        assert ("GET", "/api/v1/patients/") in eps
+        assert ("GET", "/api/v1/patients/{id}") in eps
 
 
 # ---------------------------------------------------------------------------

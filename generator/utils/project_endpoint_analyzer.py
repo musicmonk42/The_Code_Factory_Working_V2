@@ -117,7 +117,7 @@ import logging
 import re
 import time
 from collections import Counter
-from typing import Any, Dict, FrozenSet, List, Optional
+from typing import Any, Dict, FrozenSet, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Pydantic — required for structured result validation
@@ -297,6 +297,18 @@ def _module_stem(module_path: str) -> str:
     return normalised.split(".")[-1]
 
 
+def _module_to_file_path(module: str) -> str:
+    """Convert a dotted module path to a ``/``-separated ``.py`` file path.
+
+    Args:
+        module: Dotted module path, e.g. ``"app.routers.auth"``.
+
+    Returns:
+        Relative file path, e.g. ``"app/routers/auth.py"``.
+    """
+    return module.replace(".", "/") + ".py"
+
+
 def _extract_router_prefixes(main_content: str) -> Dict[str, str]:
     """Scan *main_content* for ``include_router`` calls and return a
     mapping from router variable name to its ``prefix=`` value.
@@ -320,9 +332,10 @@ def _extract_router_prefixes(main_content: str) -> Dict[str, str]:
     return {var: prefix for var, prefix in _INCLUDE_ROUTER_RE.findall(main_content)}
 
 
-def _build_var_to_stem(main_content: str) -> Dict[str, str]:
+def _build_var_to_stem(main_content: str) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Parse import statements in *main_content* and return a mapping from
-    each imported router variable name to its source module stem.
+    each imported router variable name to its source module stem, plus a
+    mapping from each variable name to its full dotted module path.
 
     Three import patterns are handled:
 
@@ -338,14 +351,20 @@ def _build_var_to_stem(main_content: str) -> Dict[str, str]:
         main_content: Source code of the application entry-point file.
 
     Returns:
-        ``{router_var_name: module_stem}`` — for example
-        ``{"auth_router": "routes", "patients_router": "routes"}``.
+        A tuple ``(var_to_stem, var_to_full_module)`` where:
+
+        * ``var_to_stem`` — ``{router_var_name: module_stem}`` e.g.
+          ``{"auth_router": "routes", "patients_router": "routes"}``.
+        * ``var_to_full_module`` — ``{router_var_name: full_module_path}``
+          e.g. ``{"auth_router": "app.routers.auth"}``.
     """
     var_to_stem: Dict[str, str] = {}
+    var_to_full_module: Dict[str, str] = {}
 
     # Pattern 1 — aliased: from app.routers.auth import router as auth_router
     for module, alias in _IMPORT_ALIAS_RE.findall(main_content):
         var_to_stem[alias] = _module_stem(module)
+        var_to_full_module[alias] = module
 
     # Pattern 2 & 3 — direct imports (parenthesised and flat)
     for m_paren, names_paren, m_direct, names_direct in _IMPORT_DIRECT_RE.findall(
@@ -365,8 +384,9 @@ def _build_var_to_stem(main_content: str) -> Dict[str, str]:
             # Only store simple identifiers; skip keywords and aliased parts
             if re.match(r'^\w+$', entry):
                 var_to_stem.setdefault(entry, stem)
+                var_to_full_module.setdefault(entry, module)
 
-    return var_to_stem
+    return var_to_stem, var_to_full_module
 
 
 def _endpoints_from_ast_single_file(
@@ -531,7 +551,33 @@ class ProjectEndpointAnalyzer:
         self._router_prefix_map: Dict[str, str] = _extract_router_prefixes(
             self._main_content
         )
-        self._var_to_stem: Dict[str, str] = _build_var_to_stem(self._main_content)
+        self._var_to_stem: Dict[str, str]
+        self._var_to_full_module: Dict[str, str]
+        self._var_to_stem, self._var_to_full_module = _build_var_to_stem(
+            self._main_content
+        )
+
+        # Build file_path → router_var map for direct lookup.
+        # Converts "app.routers.auth" → "app/routers/auth.py" so that
+        # _endpoints_for_file() can resolve the prefix without relying solely
+        # on the module stem (which is ambiguous when two modules share the
+        # same last component).
+        # Only include a direct mapping when exactly ONE router variable in the
+        # prefix map comes from that file; when multiple variables share the
+        # same file path (single-file pattern), direct mapping is skipped so
+        # the per-decorator AST branch handles it correctly.
+        _file_var_count: Counter[str] = Counter(
+            _module_to_file_path(self._var_to_full_module[var])
+            for var in self._var_to_full_module
+            if var in self._router_prefix_map
+        )
+        self._file_to_var: Dict[str, str] = {}
+        for var, module in self._var_to_full_module.items():
+            if var not in self._router_prefix_map:
+                continue
+            file_path = _module_to_file_path(module)
+            if _file_var_count[file_path] == 1:
+                self._file_to_var[file_path] = var
 
         # Build stem → prefix map for the multi-file pattern.
         # CRITICAL: only include stems with exactly ONE router variable mapped to
@@ -764,6 +810,11 @@ class ProjectEndpointAnalyzer:
 
         Dispatches to the correct resolution strategy:
 
+        * **Direct** — when the file path maps directly to a known router
+          variable via :attr:`_file_to_var`.  This takes priority over the
+          stem-based lookup and correctly handles cases where two modules
+          share the same stem (e.g. ``app/routers/auth.py`` and
+          ``app/extra/auth.py``).
         * **Multi-file** — when the file's module stem maps to exactly one
           prefix in :attr:`_stem_to_prefix`.  Applies that prefix to every
           endpoint extracted by *extract_fn* (the standard per-file
@@ -786,10 +837,25 @@ class ProjectEndpointAnalyzer:
             List of ``{"method": str, "path": str}`` dicts.
         """
         file_stem = _module_stem(filename)
-        file_prefix = self._stem_to_prefix.get(file_stem, "")
+        direct_var = self._file_to_var.get(filename)
 
-        if file_prefix:
-            # Multi-file pattern: one prefix for the whole file.
+        logger.debug(
+            "Processing file %s: stem=%s, direct_var=%s, stem_prefix=%s",
+            filename,
+            file_stem,
+            direct_var,
+            self._stem_to_prefix.get(file_stem),
+        )
+
+        # Priority 1: Direct file→router mapping (avoids stem ambiguity).
+        if direct_var and direct_var in self._router_prefix_map:
+            file_prefix = self._router_prefix_map[direct_var]
+            logger.debug(
+                "Direct file→router match: %s → %s → prefix=%s",
+                filename,
+                direct_var,
+                file_prefix,
+            )
             if (
                 self._max_source_size > 0
                 and len(content) > self._max_source_size
@@ -810,6 +876,37 @@ class ProjectEndpointAnalyzer:
                 validated = ResolvedEndpoint(method=ep["method"], path=full_path)
                 result.append(validated.model_dump())
             logger.debug(
+                "Direct file→router resolution of %s (prefix=%r): %d endpoint(s)",
+                filename,
+                file_prefix,
+                len(result),
+            )
+            return result
+
+        file_prefix = self._stem_to_prefix.get(file_stem, "")
+
+        if file_prefix:
+            # Multi-file pattern: one prefix for the whole file.
+            if (
+                self._max_source_size > 0
+                and len(content) > self._max_source_size
+            ):
+                logger.warning(
+                    "Skipping multi-file resolution of %s: source size "
+                    "%d bytes exceeds limit %d bytes",
+                    filename,
+                    len(content),
+                    self._max_source_size,
+                )
+                return []
+            raw = extract_fn(content, filename)
+            result = []
+            for ep in raw:
+                raw_path = ep.get("path", "")
+                full_path = file_prefix.rstrip("/") + "/" + raw_path.lstrip("/")
+                validated = ResolvedEndpoint(method=ep["method"], path=full_path)
+                result.append(validated.model_dump())
+            logger.debug(
                 "Multi-file resolution of %s (prefix=%r): %d endpoint(s)",
                 filename,
                 file_prefix,
@@ -824,6 +921,14 @@ class ProjectEndpointAnalyzer:
             for var, stem in self._var_to_stem.items()
             if stem == file_stem and var in self._var_to_prefix
         ]
+
+        logger.debug(
+            "Single-file pattern check for %s: stem=%s, local_routers=%s",
+            filename,
+            file_stem,
+            local_routers,
+        )
+
         if not local_routers:
             return []
 
