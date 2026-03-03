@@ -375,7 +375,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
  && update-ca-certificates \
  && apt-get install -y --no-install-recommends \
-    curl git libmagic1 graphviz libvirt-dev pkg-config libportaudio2 \
+    curl git libmagic1 graphviz libvirt-dev pkg-config libportaudio2 gnupg \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Trivy for security scanning (deployment validation)
