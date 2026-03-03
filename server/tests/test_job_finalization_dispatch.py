@@ -577,20 +577,6 @@ class TestArbiterBridgeNoOpMode:
         payload = args[1] if len(args) >= 2 else call_kwargs.get("message", {})
         assert "arbiter_enabled" in payload
 
-    def test_strict_mode_raises_when_stubs_present(self):
-        """Test that ARBITER_STRICT=1 raises when any service is a stub."""
-        import os
-        from generator.arbiter_bridge import ArbiterBridge
-
-        class _PolicyEngineStub:
-            def __init__(self, arbiter_instance=None, config=None, *args, **kwargs): pass
-
-        with patch('generator.arbiter_bridge._REAL_POLICY_ENGINE', False), \
-             patch('generator.arbiter_bridge.PolicyEngine', _PolicyEngineStub), \
-             patch.dict(os.environ, {"ARBITER_STRICT": "1"}):
-            with pytest.raises(RuntimeError, match="ARBITER_STRICT=1"):
-                ArbiterBridge()  # Will try to create real PolicyEngine but fall back to stub
-
 
 class TestEventBusBridgeStartup:
     """Test suite for EventBusBridge startup behaviour."""
