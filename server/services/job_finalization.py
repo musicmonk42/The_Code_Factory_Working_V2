@@ -761,6 +761,55 @@ async def _generate_output_manifest(
         return None
 
 
+async def apply_pending_fixes(job_id: str) -> Dict[str, Any]:
+    """
+    Retrieve and apply all pending SFE fixes for a job before packaging.
+
+    This function must be called BEFORE the output ZIP is created so that
+    fixed file content is included in the final archive.  It is intentionally
+    fail-safe: any error is logged and an empty result is returned so that
+    callers (e.g. omnicore_service._finalize_successful_job) can proceed with
+    ZIP creation even when fix application is unavailable.
+
+    Args:
+        job_id: Unique job identifier
+
+    Returns:
+        Summary dict from SFEService.apply_all_pending_fixes, or an empty
+        summary dict if SFE is not available or an error occurred.
+    """
+    try:
+        from server.services.sfe_service import SFEService
+        sfe = SFEService()
+        result = await sfe.apply_all_pending_fixes(job_id)
+        if result.get("applied"):
+            logger.info(
+                f"[FINALIZATION] Applied {len(result['applied'])} SFE fix(es) for job {job_id} "
+                f"before ZIP packaging: {result['applied']}",
+                extra={
+                    "job_id": job_id,
+                    "applied_fixes": result["applied"],
+                    "action": "apply_pending_fixes",
+                },
+            )
+        else:
+            logger.debug(
+                f"[FINALIZATION] No pending SFE fixes to apply for job {job_id}",
+                extra={"job_id": job_id, "action": "apply_pending_fixes"},
+            )
+        return result
+    except Exception as exc:
+        logger.warning(
+            f"[FINALIZATION] apply_pending_fixes failed for job {job_id} (non-fatal): {exc}",
+            extra={
+                "job_id": job_id,
+                "action": "apply_pending_fixes",
+                "error": str(exc),
+            },
+        )
+        return {"applied": [], "failed": [], "skipped": []}
+
+
 def reset_finalization_state():
     """
     Reset finalization state for testing purposes.

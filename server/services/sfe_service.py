@@ -2185,6 +2185,81 @@ class SFEService:
                 "files_modified": files_modified,
             }
 
+    async def apply_all_pending_fixes(self, job_id: str) -> Dict[str, Any]:
+        """
+        Apply all pending (PROPOSED) fixes for a given job.
+
+        Retrieves every fix in fixes_db whose job_id matches and whose status
+        is PROPOSED, applies each one in turn via apply_fix(), and returns a
+        summary of the results.  Must be called BEFORE the output ZIP is
+        packaged so that fixed content is included in the archive.
+
+        Args:
+            job_id: Unique job identifier
+
+        Returns:
+            Summary dict with keys:
+              - applied: list of fix_ids that were successfully applied
+              - failed:  list of fix_ids that failed to apply
+              - skipped: list of fix_ids that were not in PROPOSED state
+        """
+        from server.storage import fixes_db
+        from server.schemas import FixStatus
+
+        pending_fix_ids = [
+            fix_id
+            for fix_id, fix in fixes_db.items()
+            if getattr(fix, "job_id", None) == job_id
+            and getattr(fix, "status", None) == FixStatus.PROPOSED
+        ]
+
+        if not pending_fix_ids:
+            logger.info(f"No pending fixes found for job {job_id}")
+            return {"applied": [], "failed": [], "skipped": []}
+
+        logger.info(
+            f"Applying {len(pending_fix_ids)} pending fix(es) for job {job_id}: "
+            f"{pending_fix_ids}"
+        )
+
+        applied: List[str] = []
+        failed: List[str] = []
+        skipped: List[str] = []
+
+        for fix_id in pending_fix_ids:
+            fix = fixes_db.get(fix_id)
+            if fix is None or getattr(fix, "status", None) != FixStatus.PROPOSED:
+                skipped.append(fix_id)
+                continue
+            try:
+                result = await self.apply_fix(fix_id)
+                if result.get("applied"):
+                    # Update fix status to APPLIED
+                    from datetime import datetime, timezone
+                    fix.status = FixStatus.APPLIED
+                    fix.applied_at = datetime.now(timezone.utc)
+                    fix.updated_at = datetime.now(timezone.utc)
+                    applied.append(fix_id)
+                    logger.info(f"Applied fix {fix_id} for job {job_id}")
+                else:
+                    failed.append(fix_id)
+                    logger.warning(
+                        f"Fix {fix_id} for job {job_id} did not apply: "
+                        f"{result.get('error', 'unknown error')}"
+                    )
+            except Exception as exc:
+                failed.append(fix_id)
+                logger.error(
+                    f"Exception applying fix {fix_id} for job {job_id}: {exc}",
+                    exc_info=True,
+                )
+
+        logger.info(
+            f"apply_all_pending_fixes for job {job_id}: "
+            f"applied={len(applied)}, failed={len(failed)}, skipped={len(skipped)}"
+        )
+        return {"applied": applied, "failed": failed, "skipped": skipped}
+
     async def rollback_fix(self, fix_id: str) -> Dict[str, Any]:
         """
         Rollback an applied fix.

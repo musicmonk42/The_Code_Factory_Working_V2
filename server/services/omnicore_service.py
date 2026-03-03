@@ -9675,6 +9675,18 @@ class OmniCoreService:
                     # Generate artifact manifest
                     job.output_files = [f.name for f in artifact_files]
                     
+                    # Apply any pending SFE fixes to output files BEFORE packaging.
+                    # This ensures the ZIP contains the corrected content, not pre-fix content.
+                    try:
+                        from server.services.job_finalization import apply_pending_fixes
+                        await apply_pending_fixes(job_id)
+                        # Re-scan artifacts after fixes may have modified files
+                        artifacts = list(output_dir.rglob('*'))
+                        artifact_files = [f for f in artifacts if f.is_file() and not f.name.endswith('_output.zip')]
+                        job.output_files = [f.name for f in artifact_files]
+                    except Exception as _fix_err:
+                        logger.warning(f"⚠ Pre-ZIP fix application failed for job {job_id}: {_fix_err}")
+
                     # Create downloadable ZIP (in background)
                     zip_path = output_dir.parent / f"{job_id}_output.zip"
                     await self._create_artifact_zip(artifact_files, zip_path, output_dir)

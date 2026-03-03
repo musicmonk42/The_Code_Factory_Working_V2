@@ -166,6 +166,10 @@ _MULTIPASS_GROUPS = [
     {
         "name": "core",
         "focus": (
+            "CRITICAL: You MUST provide COMPLETE, WORKING implementations. "
+            "Do NOT use `pass`, `...`, `raise NotImplementedError`, or placeholder comments. "
+            "Every function MUST have real business logic that performs the described operation. "
+            "If you're unsure, implement a reasonable default behavior rather than a stub.\n"
             "Generate ONLY the core application files: "
             "main.py (MUST import and mount ALL routers from app/routers/ using app.include_router()), "
             "app factory setup, config.py, database.py with real SQLAlchemy engine setup, "
@@ -192,6 +196,10 @@ _MULTIPASS_GROUPS = [
     {
         "name": "routes_and_services",
         "focus": (
+            "CRITICAL: You MUST provide COMPLETE, WORKING implementations. "
+            "Do NOT use `pass`, `...`, `raise NotImplementedError`, or placeholder comments. "
+            "Every function MUST have real business logic that performs the described operation. "
+            "If you're unsure, implement a reasonable default behavior rather than a stub.\n"
             "Generate ONLY the router/controller, service layer, and middleware files: "
             "all route handlers (app/routers/*.py), service modules (app/services/*.py), "
             "ALL middleware files: app/middleware/auth.py for JWT authentication, "
@@ -223,6 +231,10 @@ _MULTIPASS_GROUPS = [
     {
         "name": "service_implementations",
         "focus": (
+            "CRITICAL: You MUST provide COMPLETE, WORKING implementations. "
+            "Do NOT use `pass`, `...`, `raise NotImplementedError`, or placeholder comments. "
+            "Every function MUST have real business logic that performs the described operation. "
+            "If you're unsure, implement a reasonable default behavior rather than a stub.\n"
             "Generate COMPLETE service layer implementations for ALL service modules in app/services/. "
             "This pass MUST replace every stub or placeholder service with fully working code. "
             "Every service function MUST include: real SQLAlchemy ORM queries (select/insert/update/delete), "
@@ -240,6 +252,9 @@ _MULTIPASS_GROUPS = [
     {
         "name": "infrastructure",
         "focus": (
+            "CRITICAL: You MUST provide COMPLETE, WORKING implementations. "
+            "Do NOT use `pass`, `...`, `raise NotImplementedError`, or placeholder comments. "
+            "Every configuration file must have real, functional content — no TODO placeholders.\n"
             "Generate ONLY infrastructure and deployment files: "
             "Dockerfile MUST use multi-stage build: FROM python:3.11-slim AS builder then "
             "FROM python:3.11-slim AS runtime. "
@@ -606,6 +621,30 @@ _STUB_RETRY_PLAIN_PROMPT_SUFFIX: str = (
     "  }\n"
     "}"
 )
+
+
+def _validate_pass_output_for_stubs(files: Dict[str, str]) -> List[str]:
+    """Return list of file paths that contain stub implementations.
+
+    Iterates over all generated files and uses :func:`_detect_stub_patterns`
+    to identify any that still contain placeholder/stub content.  Called after
+    each multi-pass generation to surface files that need targeted re-generation.
+
+    Args:
+        files: Dict mapping relative file paths to their content, as produced
+               by :func:`parse_llm_response` or the multi-pass merge loop.
+
+    Returns:
+        A list of file paths whose content was identified as stub-like.
+        Empty list when all files have real implementations.
+    """
+    stub_files: List[str] = []
+    for path, content in files.items():
+        is_stub, _ = _detect_stub_patterns(content, path)
+        if is_stub:
+            stub_files.append(path)
+    return stub_files
+
 
 def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     """Validate that generated files form a coherent, runnable application.
@@ -2304,6 +2343,44 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         logger.warning(
             "[CODEGEN] _reconcile_app_wiring: schema/model reconciliation failed (non-fatal): %s",
             _schema_err,
+        )
+
+    # ------------------------------------------------------------------ #
+    # 10. Ensure app/database.py exists when Alembic files are present    #
+    # ------------------------------------------------------------------ #
+    # alembic/env.py imports from app.database; if that module is missing
+    # the migration tooling raises an ImportError at runtime.  When we
+    # detect Alembic-related files but no app/database.py, inject a minimal
+    # one that defines the shared SQLAlchemy Base and async engine setup.
+    _has_alembic = any(k.startswith("alembic/") or k == "alembic.ini" for k in updated)
+    _has_database_py = "app/database.py" in updated
+    if _has_alembic and not _has_database_py:
+        # Check whether models already import a Base from somewhere so we can
+        # match the import style.
+        _engine_line = "DATABASE_URL = os.getenv('DATABASE_URL', 'sqlite+aiosqlite:///./app.db')"
+        updated["app/database.py"] = (
+            "# Auto-generated by Code Factory — ensures alembic/env.py can import Base.\n"
+            "import os\n"
+            "import re\n\n"
+            "from sqlalchemy import create_engine\n"
+            "from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker\n"
+            "from sqlalchemy.orm import declarative_base, sessionmaker\n\n"
+            f"{_engine_line}\n\n"
+            "engine = create_async_engine(DATABASE_URL, echo=False)\n"
+            "async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)\n\n"
+            "# Synchronous engine for Alembic migrations\n"
+            "# Strip async driver prefix (e.g. '+aiosqlite', '+asyncpg') to produce\n"
+            "# a synchronous-compatible URL for Alembic's env.py.\n"
+            "_sync_url = re.sub(r'\\+aiosqlite|\\+asyncpg', '', DATABASE_URL)\n"
+            "sync_engine = create_engine(_sync_url)\n"
+            "SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=sync_engine)\n\n"
+            "Base = declarative_base()\n\n\n"
+            "async def get_db() -> AsyncSession:  # type: ignore[override]\n"
+            "    async with async_session_factory() as session:\n"
+            "        yield session\n"
+        )
+        logger.info(
+            "[CODEGEN] _reconcile_app_wiring: injected app/database.py (required by alembic/env.py)"
         )
 
     return updated
@@ -4039,6 +4116,16 @@ if PLUGIN_AVAILABLE:
                                          f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
                                          f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
                                      )
+                                     # Post-pass stub validation: surface stub files early.
+                                     _pass_stub_files = _validate_pass_output_for_stubs(_pass_files)
+                                     if _pass_stub_files:
+                                         logger.warning(
+                                             "[CODEGEN] Multi-pass '%s': %d file(s) contain stub "
+                                             "implementations after this pass — will be retried: %s",
+                                             _group["name"],
+                                             len(_pass_stub_files),
+                                             sorted(_pass_stub_files),
+                                         )
                                 except Exception as _pass_err:
                                      _pass_duration = time.monotonic() - _pass_start
                                      logger.warning(
@@ -4811,6 +4898,16 @@ else:
                                          f"[CODEGEN] Multi-pass ensemble '{_group['name']}': "
                                          f"+{len(_pass_files)} files (total={len(_merged_files)}) in {_pass_duration:.1f}s"
                                      )
+                                     # Post-pass stub validation: surface stub files early.
+                                     _pass_stub_files = _validate_pass_output_for_stubs(_pass_files)
+                                     if _pass_stub_files:
+                                         logger.warning(
+                                             "[CODEGEN] Multi-pass '%s': %d file(s) contain stub "
+                                             "implementations after this pass — will be retried: %s",
+                                             _group["name"],
+                                             len(_pass_stub_files),
+                                             sorted(_pass_stub_files),
+                                         )
                                 except Exception as _pass_err:
                                      _pass_duration = time.monotonic() - _pass_start
                                      logger.warning(
