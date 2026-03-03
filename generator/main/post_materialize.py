@@ -318,6 +318,8 @@ class PostMaterializeResult:
         warnings: Non-fatal issues encountered (e.g. README patch skipped).
         duration_seconds: Wall-clock time the function took.
         output_dir: Absolute path that was processed.
+        llm_file_count: Number of files that existed *before* post_materialize
+            ran (i.e. files produced by the LLM during code generation).
     """
 
     success: bool = True
@@ -325,12 +327,19 @@ class PostMaterializeResult:
     warnings: List[str] = field(default_factory=list)
     duration_seconds: float = 0.0
     output_dir: str = ""
+    llm_file_count: int = 0
 
     def to_dict(self) -> Dict:
         return {
             "success": self.success,
             "files_created": self.files_created,
             "files_created_count": len(self.files_created),
+            "llm_file_count": self.llm_file_count,
+            "stub_ratio": (
+                round(len(self.files_created) / (self.llm_file_count + len(self.files_created)), 3)
+                if (self.llm_file_count + len(self.files_created)) > 0
+                else None
+            ),
             "warnings": self.warnings,
             "duration_seconds": round(self.duration_seconds, 4),
             "output_dir": self.output_dir,
@@ -581,10 +590,15 @@ def post_materialize(
                 POST_MATERIALIZE_RUNS.labels(status="skipped").inc()
                 return result
 
+            # Count files already present (LLM-generated) before we add stubs.
+            result.llm_file_count = sum(1 for _ in output_dir.rglob("*") if _.is_file())
+
             logger.info(
-                "%s Starting post-materialization fixups for %s",
+                "%s Starting post-materialization fixups for %s "
+                "(%d LLM-generated file(s) already present)",
                 _STAGE,
                 output_dir,
+                result.llm_file_count,
                 extra={"output_dir": str(output_dir)},
             )
 
@@ -680,7 +694,9 @@ def post_materialize(
             # ------------------------------------------------------------------
             result.duration_seconds = time.monotonic() - start_ts
 
-            span.set_attribute("files_created", len(result.files_created))
+            stub_count = len(result.files_created)
+            span.set_attribute("files_created", stub_count)
+            span.set_attribute("llm_file_count", result.llm_file_count)
             span.set_attribute("warnings", len(result.warnings))
             span.set_attribute("duration_seconds", result.duration_seconds)
             span.set_status(
@@ -689,20 +705,42 @@ def post_materialize(
                 else Status(StatusCode.ERROR, "warnings present")  # type: ignore[call-arg]
             )
 
+            # Warn when post_materialize stubs outnumber LLM-generated files —
+            # this is a strong signal that code generation was incomplete.
+            if stub_count > 0 and result.llm_file_count == 0:
+                _stub_warn = (
+                    f"post_materialize created {stub_count} stub file(s) but "
+                    "0 LLM-generated files were found beforehand — codegen may "
+                    "have produced no output."
+                )
+                result.warnings.append(_stub_warn)
+                logger.warning("%s %s", _STAGE, _stub_warn)
+            elif stub_count > result.llm_file_count and result.llm_file_count > 0:
+                logger.warning(
+                    "%s Stub files (%d) outnumber LLM-generated files (%d) — "
+                    "codegen output may be incomplete",
+                    _STAGE,
+                    stub_count,
+                    result.llm_file_count,
+                )
+
             POST_MATERIALIZE_RUNS.labels(
                 status="success" if result.success else "partial"
             ).inc()
             POST_MATERIALIZE_DURATION.observe(result.duration_seconds)
 
             logger.info(
-                "%s Completed: %d files created, %d warnings, %.3fs",
+                "%s Completed: %d stub file(s) created, %d LLM file(s) pre-existing, "
+                "%d warnings, %.3fs",
                 _STAGE,
-                len(result.files_created),
+                stub_count,
+                result.llm_file_count,
                 len(result.warnings),
                 result.duration_seconds,
                 extra={
                     "output_dir": str(output_dir),
                     "files_created": result.files_created,
+                    "llm_file_count": result.llm_file_count,
                     "warnings": result.warnings,
                 },
             )

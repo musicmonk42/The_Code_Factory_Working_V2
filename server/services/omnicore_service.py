@@ -306,7 +306,10 @@ MIN_README_LENGTH = 500  # Minimum length for a complete README (characters)
 # Minimum fraction of spec-required endpoints that must be present before the
 # pipeline continues past the codegen step.  If the fraction *missing* exceeds
 # this threshold a codegen retry is triggered (subject to max_codegen_retries).
-SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD = 0.50
+# Configurable via SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD env var (0.0–1.0).
+SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD: float = float(
+    os.environ.get("SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD", "0.50")
+)
 
 # Language detection and file extension mappings
 LANGUAGE_FILE_EXTENSIONS = {

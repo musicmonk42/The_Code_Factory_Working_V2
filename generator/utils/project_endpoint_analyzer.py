@@ -223,8 +223,10 @@ _HTTP_METHODS: FrozenSet[str] = frozenset(
 
 # Regex: include_router(var_name, ..., prefix="/some/path", ...)
 # Uses DOTALL so the call may span multiple lines.
+# The pattern allows optional keyword arguments (e.g. tags=["auth"]) before prefix=
+# regardless of whether there is whitespace between the comma and the next argument.
 _INCLUDE_ROUTER_RE = re.compile(
-    r'include_router\s*\(\s*(\w+)\s*,\s*(?:[^)]*?\s)?prefix\s*=\s*["\']([^"\']+)["\']',
+    r'include_router\s*\(\s*(\w+)\s*,(?:[^)]*?)\bprefix\s*=\s*["\']([^"\']+)["\']',
     re.DOTALL,
 )
 
@@ -672,20 +674,43 @@ class ProjectEndpointAnalyzer:
     # ------------------------------------------------------------------
 
     def _find_main_content(self) -> str:
-        """Return the source code of main.py / app/main.py, or empty string.
+        """Return the source code of the application entry-point, or empty string.
 
-        Prefers ``app/main.py`` over ``main.py`` to match the standard
-        FastAPI project layout.
+        Checks common FastAPI project layouts in order of preference, then
+        falls back to scanning all Python files for ``include_router`` calls.
 
         Returns:
-            Source code string, or ``""`` when neither candidate is present.
+            Source code string, or ``""`` when no suitable entry-point is found.
         """
-        for candidate in ("app/main.py", "main.py"):
+        # Ordered candidates: standard layouts first, then common alternatives.
+        candidates = (
+            "app/main.py",
+            "main.py",
+            "src/main.py",
+            "src/app/main.py",
+        )
+        for candidate in candidates:
             if candidate in self._files:
                 logger.debug("ProjectEndpointAnalyzer: using %s as entry-point", candidate)
                 return self._files[candidate]
+
+        # Fallback: scan all Python files for include_router calls.
+        # Concatenate matching files so multi-file app structures are handled.
+        combined = "\n".join(
+            content
+            for path, content in self._files.items()
+            if path.endswith(".py") and "include_router" in content
+        )
+        if combined:
+            logger.debug(
+                "ProjectEndpointAnalyzer: no dedicated main.py found; "
+                "using combined include_router scan across %d file(s)",
+                len(self._files),
+            )
+            return combined
+
         logger.debug(
-            "ProjectEndpointAnalyzer: no main.py / app/main.py found in %d file(s)",
+            "ProjectEndpointAnalyzer: no entry-point found in %d file(s)",
             len(self._files),
         )
         return ""
@@ -700,9 +725,17 @@ class ProjectEndpointAnalyzer:
         if not self._router_prefix_map:
             logger.debug(
                 "ProjectEndpointAnalyzer: no include_router() calls with "
-                "prefix= found — skipping resolution"
+                "prefix= found — skipping resolution (files scanned: %d)",
+                len(self._files),
             )
             return []
+
+        logger.debug(
+            "ProjectEndpointAnalyzer: resolving endpoints with prefix map %r, "
+            "stem-to-prefix %r",
+            self._router_prefix_map,
+            self._stem_to_prefix,
+        )
 
         # Lazy import to avoid a circular top-level dependency; provenance
         # imports ast_endpoint_extractor and this module is a sibling utility.

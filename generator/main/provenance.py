@@ -1281,7 +1281,14 @@ def validate_spec_fidelity(
             from generator.utils.project_endpoint_analyzer import (  # noqa: PLC0415
                 ProjectEndpointAnalyzer as _ProjectEndpointAnalyzer,
             )
-            _reconciled = _ProjectEndpointAnalyzer(generated_files).get_endpoints()
+            _analyzer = _ProjectEndpointAnalyzer(generated_files)
+            _router_prefix_map = _analyzer.get_router_prefix_map()
+            if _router_prefix_map:
+                logger.debug(
+                    "[SPEC_VALIDATE] ProjectEndpointAnalyzer found router prefixes: %s",
+                    _router_prefix_map,
+                )
+            _reconciled = _analyzer.get_endpoints()
             _added = 0
             for _ep in _reconciled:
                 _key = (_ep["method"], _ep.get("path", ""))
@@ -1295,12 +1302,45 @@ def validate_spec_fidelity(
                     "unique fully-qualified endpoint(s) via include_router prefix resolution",
                     _added,
                 )
+            elif _router_prefix_map:
+                logger.debug(
+                    "[SPEC_VALIDATE] ProjectEndpointAnalyzer found %d prefix(es) "
+                    "but resolved 0 new endpoints — check router file structure",
+                    len(_router_prefix_map),
+                )
         except Exception as _pea_err:
             logger.warning(
                 "[SPEC_VALIDATE] ProjectEndpointAnalyzer unavailable or raised "
-                "(%s) — include_router prefix reconciliation skipped",
+                "(%s: %s) — include_router prefix reconciliation skipped",
+                type(_pea_err).__name__,
                 _pea_err,
             )
+            # Regex-based fallback: extract include_router prefixes directly from
+            # any Python file in the project and prepend them to unqualified paths.
+            _ir_re = re.compile(
+                r'include_router\s*\(\s*(\w+)\s*,(?:[^)]*?)\bprefix\s*=\s*["\']([^"\']+)["\']',
+                re.DOTALL,
+            )
+            _fallback_added = 0
+            for _fn, _fc in generated_files.items():
+                if not _fn.endswith(".py"):
+                    continue
+                for _rvar, _rprefix in _ir_re.findall(_fc):
+                    # Apply this prefix to all sub-path endpoints not yet qualified.
+                    for _ep in list(all_found_endpoints):
+                        _path = _ep.get("path", "")
+                        if _path.startswith("/") and not _path.startswith(_rprefix):
+                            _full = _rprefix.rstrip("/") + "/" + _path.lstrip("/")
+                            _key = (_ep["method"], _full)
+                            if _key not in _seen_ep_keys:
+                                all_found_endpoints.append({"method": _ep["method"], "path": _full})
+                                _seen_ep_keys.add(_key)
+                                _fallback_added += 1
+            if _fallback_added:
+                logger.debug(
+                    "[SPEC_VALIDATE] Regex fallback reconciliation contributed %d endpoint(s)",
+                    _fallback_added,
+                )
 
         result["found_endpoints"] = all_found_endpoints
 
