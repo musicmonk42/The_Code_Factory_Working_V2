@@ -7,9 +7,36 @@ Request and response models for SFE control endpoints.
 """
 
 from enum import Enum
+import re
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Shared validation constants
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
+def _validate_safe_code_path(v: str) -> str:
+    """Reject path traversal and absolute paths in code_path fields."""
+    if ".." in v.split("/") or ".." in v.split("\\"):
+        raise ValueError("Path traversal via '..' is not allowed in code_path")
+    if v.startswith("/") or (len(v) > 1 and v[1] == ":"):
+        raise ValueError("Absolute paths are not allowed in code_path")
+    return v
+
+
+def _validate_optional_job_id(v: Optional[str]) -> Optional[str]:
+    """Reject values that don't match the expected UUID format."""
+    if v is None:
+        return v
+    if not _UUID_PATTERN.fullmatch(v):
+        raise ValueError(
+            "job_id must be a valid UUID (lowercase hex, "
+            "e.g. xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)"
+        )
+    return v
 
 
 class ArbiterCommand(str, Enum):
@@ -60,6 +87,16 @@ class BugDetectionRequest(BaseModel):
         None, description="Job ID to resolve code path from job metadata"
     )
 
+    @field_validator("code_path")
+    @classmethod
+    def validate_code_path(cls, v: str) -> str:
+        return _validate_safe_code_path(v)
+
+    @field_validator("job_id")
+    @classmethod
+    def validate_job_id(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_optional_job_id(v)
+
 
 class BugAnalysisRequest(BaseModel):
     """Request for bug analysis."""
@@ -90,6 +127,16 @@ class CodebaseAnalysisRequest(BaseModel):
     job_id: Optional[str] = Field(
         None, description="Job ID to resolve code path from job metadata"
     )
+
+    @field_validator("code_path")
+    @classmethod
+    def validate_code_path(cls, v: str) -> str:
+        return _validate_safe_code_path(v)
+
+    @field_validator("job_id")
+    @classmethod
+    def validate_job_id(cls, v: Optional[str]) -> Optional[str]:
+        return _validate_optional_job_id(v)
 
 
 class KnowledgeGraphQuery(BaseModel):

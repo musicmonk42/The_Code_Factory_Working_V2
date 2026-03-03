@@ -1649,3 +1649,47 @@ h3 {
     color: #155724;
     border-radius: 0 4px 4px 0;
 }
+
+/* Toast notification styles */
+#toast-container {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.toast {
+    min-width: 260px;
+    max-width: 420px;
+    padding: 12px 18px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    pointer-events: auto;
+    word-break: break-word;
+}
+
+.toast.toast-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.toast-success {
+    background: #1a4a1a;
+    border-left: 4px solid #28a745;
+    color: #c3e6cb;
+}
+
+.toast-error {
+    background: #4a1a1a;
+    border-left: 4px solid #dc3545;
+    color: #f5c6cb;
+}

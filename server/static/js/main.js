@@ -62,7 +62,13 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
             if (!response.ok) {
                 // Check if it's a client error (4xx) - don't retry these
                 const isClientError = response.status >= 400 && response.status < 500;
-                const error = new Error(`HTTP ${response.status}: ${response.statusText}`);
+                let errorDetail = response.statusText;
+                try {
+                    const errBody = await response.json();
+                    if (errBody.detail) errorDetail = errBody.detail;
+                    else if (errBody.error) errorDetail = errBody.error;
+                } catch (_) { /* ignore JSON parse errors */ }
+                const error = new Error(`HTTP ${response.status}: ${errorDetail}`);
                 error.isClientError = isClientError;
                 throw error;
             }
@@ -2125,11 +2131,25 @@ function formatFileSize(bytes) {
 }
 
 function showSuccess(message) {
-    alert('✓ ' + message);
+    const container = document.getElementById('toast-container');
+    if (!container) { alert('✓ ' + message); return; }
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-success';
+    toast.textContent = '✓ ' + message;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('toast-visible'), 10);
+    setTimeout(() => { toast.classList.remove('toast-visible'); setTimeout(() => toast.remove(), 400); }, 4000);
 }
 
 function showError(message) {
-    alert('✗ ' + message);
+    const container = document.getElementById('toast-container');
+    if (!container) { alert('✗ ' + message); return; }
+    const toast = document.createElement('div');
+    toast.className = 'toast toast-error';
+    toast.textContent = '✗ ' + message;
+    container.appendChild(toast);
+    setTimeout(() => toast.classList.add('toast-visible'), 10);
+    setTimeout(() => { toast.classList.remove('toast-visible'); setTimeout(() => toast.remove(), 400); }, 5000);
 }
 
 /**
@@ -2450,6 +2470,9 @@ async function deleteJob(jobId) {
 
 // Track in-progress pipeline calls per job_id to prevent duplicate API requests
 const _pipelineInProgress = new Set();
+
+// Prevent duplicate concurrent deep codebase analysis requests
+let _deepAnalysisInProgress = false;
 
 async function runAgentPipeline() {
     let jobIdInput = document.getElementById('agent-job-id').value;
@@ -3129,17 +3152,24 @@ async function analyzeCodebase(btn) {
     const jobIdInput = document.getElementById('analyze-job-id').value;
     if (!jobIdInput) return showError('Please enter a job ID or "repo" for repository-level analysis');
     
+    // Prevent concurrent duplicate requests
+    if (_deepAnalysisInProgress) {
+        showError('Deep codebase analysis is already in progress. Please wait.');
+        return;
+    }
+
     // Allow "repo" as a special keyword for repository-level analysis
     const jobId = jobIdInput.toLowerCase() === 'repo' ? null : sanitizeJobId(jobIdInput);
     if (jobIdInput.toLowerCase() !== 'repo' && !jobId) {
         return; // Error already shown by sanitizeJobId
     }
 
+    _deepAnalysisInProgress = true;
     const originalText = btn ? btn.textContent : null;
     if (btn) { btn.innerHTML = '<span class="loading-spinner"></span> Analyzing...'; btn.classList.add('btn-loading'); }
     
     try {
-        showSuccess('Performing deep codebase analysis... This may take a minute.');
+        showSuccess('Performing deep codebase analysis... This may take a few minutes.');
         const response = await fetchWithRetry(`${API_BASE}/sfe/codebase/analyze`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -3148,12 +3178,13 @@ async function analyzeCodebase(btn) {
                 analysis_type: ['structure', 'dependencies', 'complexity', 'quality'],
                 generate_report: true,
                 job_id: jobId
-            })
-        });
+            }),
+            timeout: 180000
+        }, 1);
         const data = await response.json();
         
-        // Check if analysis is unavailable
-        if (data.error || data.note) {
+        // Check if analysis is unavailable (only bail if there are no results alongside the note)
+        if ((data.error || data.note) && !data.total_files && (!data.issues || data.issues.length === 0)) {
             showError(`Codebase analysis unavailable: ${data.error || data.note}`);
             return;
         }
@@ -3169,6 +3200,10 @@ async function analyzeCodebase(btn) {
         
         showSuccess('Codebase analysis complete');
         alert(resultMessage);
+
+        // Reset propose-all button visibility
+        const proposeAllBtn = document.getElementById('propose-all-btn');
+        if (proposeAllBtn) proposeAllBtn.style.display = '';
         
         // If there are issues/bugs found, populate the errors list
         if (data.issues && data.issues.length > 0) {
@@ -3196,6 +3231,7 @@ async function analyzeCodebase(btn) {
     } catch (error) {
         showError('Analysis failed: ' + error.message);
     } finally {
+        _deepAnalysisInProgress = false;
         if (btn) { btn.textContent = originalText; btn.classList.remove('btn-loading'); }
     }
 }
