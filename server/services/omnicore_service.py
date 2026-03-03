@@ -1456,6 +1456,36 @@ def _fix_double_nesting(output_dir: Path) -> None:
             pass
 
 
+def _build_delta_prompt(missing_endpoints: list, base_requirements: str) -> str:
+    """Build a focused prompt for delta (incremental) code generation.
+
+    Constructs a prompt that includes the original spec as context but directs
+    the LLM to generate ONLY the files needed for the missing endpoints.  This
+    reduces wasted regeneration of already-working routes and focuses the LLM
+    on the specific gap identified by the spec fidelity check.
+
+    Note: ``base_requirements`` is the full original spec text.  The prompt is
+    therefore not smaller than the full spec, but it is more directive: the LLM
+    receives an explicit list of what is missing and is instructed not to
+    regenerate anything else.
+
+    Args:
+        missing_endpoints: List of endpoint labels (e.g. ``["GET /api/users"]``).
+        base_requirements: Original spec text, used as context.
+
+    Returns:
+        A prompt string focused on implementing the missing endpoints.
+    """
+    ep_list = "\n".join(f"  - {ep}" for ep in missing_endpoints)
+    return (
+        f"{base_requirements}\n\n"
+        f"## Delta Generation – Implement ONLY the following missing endpoints:\n"
+        f"{ep_list}\n\n"
+        f"Generate ONLY the router/handler files required for the endpoints listed above. "
+        f"Do NOT regenerate already-existing files."
+    )
+
+
 def _is_third_party_import_error(error_str: str) -> bool:
     """Return True if *error_str* describes a missing third-party package.
 
@@ -3319,6 +3349,21 @@ class OmniCoreService:
                             f"[CODEGEN] Propagating {len(_already_gen)} already-generated files "
                             f"to codegen agent for additive retry (job {job_id})"
                         )
+                    # Delta generation: when retrying a SpecFidelityFailure, inject
+                    # missing_endpoints and delta_mode so the codegen agent focuses only
+                    # on the missing routes rather than regenerating the entire spec.
+                    if previous_error_from_payload.get("error_type") == "SpecFidelityFailure":
+                        _missing_eps = previous_error_from_payload.get("missing_endpoints", [])
+                        if _missing_eps:
+                            requirements_dict["delta_mode"] = True
+                            requirements_dict["missing_endpoints"] = _missing_eps
+                            requirements_dict["md_content"] = _build_delta_prompt(
+                                _missing_eps, requirements
+                            )
+                            logger.info(
+                                f"[CODEGEN] Delta mode enabled for SpecFidelityFailure retry "
+                                f"({len(_missing_eps)} missing endpoints, job {job_id})"
+                            )
                 
                 # Parse requirements to extract structured features for the prompt builder
                 fallback_features = [requirements] if requirements else ["No specific features provided"]
@@ -7747,6 +7792,7 @@ class OmniCoreService:
                                                     )
                                                     + _pre_wire_extra
                                                 ),
+                                                "missing_endpoints": _pre_wire_missing_labels,
                                             }
                                             if "codegen" in stages_completed:
                                                 stages_completed.remove("codegen")
@@ -7841,6 +7887,7 @@ class OmniCoreService:
                                                 "Please generate ONLY the files needed to implement the missing endpoints."
                                             ),
                                             "already_generated_files": sf_already_generated,
+                                            "missing_endpoints": missing_ep_labels,
                                         }
                                         # Additive retry: keep existing files on disk so the retry
                                         # only needs to generate implementations for missing endpoints.

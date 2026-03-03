@@ -106,12 +106,12 @@ class TestMultipassConstants:
 
     def test_endpoint_threshold_value(self):
         src = self._src()
-        # Value is now read from os.environ with default "15"
+        # Value is now read from os.environ with default "10"
         match = re.search(
             r'os\.environ\.get\("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD",\s*"(\d+)"\)', src
         )
         assert match, "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default not found"
-        assert int(match.group(1)) == 15, "MULTIPASS_ENDPOINT_THRESHOLD default should be 15"
+        assert int(match.group(1)) == 10, "MULTIPASS_ENDPOINT_THRESHOLD default should be 10"
 
     def test_multipass_groups_defined(self):
         src = self._src()
@@ -366,15 +366,15 @@ class TestEnvVarConfigurability:
         )
 
     def test_env_var_default_values_are_correct(self):
-        """Default values for both thresholds must be 15 and 20 respectively."""
+        """Default values for both thresholds must be 10 and 20 respectively."""
         src = self._src()
-        # CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default = "15"
+        # CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default = "10"
         ep_match = re.search(
             r'os\.environ\.get\("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD",\s*"(\d+)"\)', src
         )
         assert ep_match, "CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD default value not found"
-        assert ep_match.group(1) == "15", (
-            f"Default endpoint threshold should be 15, got {ep_match.group(1)}"
+        assert ep_match.group(1) == "10", (
+            f"Default endpoint threshold should be 10, got {ep_match.group(1)}"
         )
         # CODEGEN_MULTIPASS_FILE_THRESHOLD default = "20"
         fi_match = re.search(
@@ -466,5 +466,61 @@ class TestHpaScaleDownWindow:
         )
 
 
+# ---------------------------------------------------------------------------
+# Fix 1 – Table-format endpoint counting
+# ---------------------------------------------------------------------------
+
+class TestCountSpecEndpointsTableFormat:
+    """_count_spec_endpoints must also count table-formatted endpoints."""
+
+    def _count(self, reqs):
+        md = reqs.get("md_content", "") or reqs.get("description", "")
+        if not md:
+            return 0
+        # Plain format
+        plain = set(re.findall(
+            r'\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b\s+/\S+',
+            md, re.IGNORECASE
+        ))
+        # Table format
+        table = set(re.findall(
+            r'\|\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*\|\s*(/[^\|\s]+)',
+            md, re.IGNORECASE
+        ))
+        return len(plain | {f"{m.upper()} {p}" for m, p in table})
+
+    def test_table_format_only(self):
+        """Table-formatted endpoints must be counted correctly."""
+        table_spec = """
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | /api/users | List users |
+| POST | /api/users | Create user |
+| GET | /api/orders | List orders |
+"""
+        assert self._count({"md_content": table_spec}) == 3
+
+    def test_mixed_plain_and_table_format(self):
+        """Mixed plain-text and table-format specs must be counted correctly."""
+        mixed_spec = """
+GET /api/health
+| POST | /api/items | Create item |
+DELETE /api/items/{id}
+"""
+        assert self._count({"md_content": mixed_spec}) == 3
+
+    def test_empty_spec(self):
+        """Empty requirements must return zero."""
+        assert self._count({}) == 0
+
+    def test_codegen_agent_source_has_table_pattern(self):
+        """codegen_agent.py must contain the table-format regex pattern."""
+        src = _get_codegen_module()
+        assert r'\|\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*\|\s*(/[^\|\s]+)' in src, (
+            "Table-format endpoint regex not found in _count_spec_endpoints"
+        )
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+

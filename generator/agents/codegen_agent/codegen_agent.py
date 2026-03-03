@@ -137,9 +137,9 @@ AVG_CHARS_PER_TOKEN = 3.5
 # --- Multi-Pass Code Generation Constants ---
 # ==============================================================================
 # Threshold: use multi-pass generation when the spec has at least this many API endpoints.
-# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 15).
+# Configurable at runtime via CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD (default: 10).
 MULTIPASS_ENDPOINT_THRESHOLD: int = int(
-    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "15")
+    os.environ.get("CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD", "10")
 )
 # Timeout for the entire pipeline codegen step (seconds).
 # Configurable at runtime via PIPELINE_CODEGEN_TIMEOUT_SECONDS (default: 900s / 15 minutes).
@@ -152,11 +152,11 @@ MULTIPASS_FILE_THRESHOLD: int = int(
     os.environ.get("CODEGEN_MULTIPASS_FILE_THRESHOLD", "20")
 )
 # Threshold: use multi-pass generation when the spec content exceeds this many characters.
-# A ~30,000-char spec produces an ~87,000-char prompt that saturates the 16K output
+# A ~20,000-char spec produces a very large prompt that saturates the 16K output
 # token limit in a single pass, causing truncated responses.
-# Configurable at runtime via CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD (default: 30000).
+# Configurable at runtime via CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD (default: 20000).
 MULTIPASS_MD_SIZE_THRESHOLD: int = int(
-    os.environ.get("CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD", "30000")
+    os.environ.get("CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD", "20000")
 )
 
 # File generation groups for multi-pass mode (processed in order).
@@ -321,10 +321,17 @@ def _count_spec_endpoints(requirements: Dict[str, Any]) -> int:
     md = requirements.get("md_content", "") or requirements.get("description", "")
     if not md:
         return 0
-    matches = set(
+    # Pattern 1: Plain text format "GET /api/users"
+    plain_matches = set(
         re.findall(r'\b(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\b\s+/\S+', md, re.IGNORECASE)
     )
-    return len(matches)
+    # Pattern 2: Markdown table format "| GET | /api/users |"
+    table_matches = set(
+        re.findall(r'\|\s*(GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s*\|\s*(/[^\|\s]+)', md, re.IGNORECASE)
+    )
+    # Normalize table matches to "METHOD /path" format
+    table_endpoints = {f"{m.upper()} {p}" for m, p in table_matches}
+    return len(plain_matches | table_endpoints)
 
 
 def _should_use_multipass(requirements: Dict[str, Any]) -> bool:
@@ -3910,7 +3917,8 @@ if PLUGIN_AVAILABLE:
                 with tracer.start_as_current_span("call_llm"):
                     # --- LLM Execution Change: Multi-Pass Ensemble / Single Call Logic ---
                     # Auto-enable ensemble for large specs so every chunk gets majority-voted output.
-                    _use_multipass = _should_use_multipass(requirements)
+                    _delta_mode = bool(requirements.get("delta_mode"))
+                    _use_multipass = _delta_mode or _should_use_multipass(requirements)
                     _effective_ensemble = config.ensemble_enabled
                     if not _effective_ensemble and _use_multipass:
                         _ep_count = _count_spec_endpoints(requirements)
@@ -4009,13 +4017,15 @@ if PLUGIN_AVAILABLE:
                                          k: v for k, v in _pass_files.items()
                                          if k != "alembic/env.py"
                                      }
+                                     # Non-Python files: newer-wins via dict.update() semantics.
+                                     _non_py = {k: v for k, v in _pass_files.items() if not k.endswith(".py")}
+                                     _merged_files.update(_non_py)
                                      # AST-aware merge: preserve symbols from earlier passes when
                                      # the new pass overwrites an existing Python file.
                                      for _pf_key, _pf_val in _pass_files.items():
-                                         if (
-                                             _pf_key in _merged_files
-                                             and _pf_key.endswith(".py")
-                                         ):
+                                         if not _pf_key.endswith(".py"):
+                                             continue
+                                         if _pf_key in _merged_files:
                                              _merged_files[_pf_key] = _ast_merge_python_files(
                                                  _merged_files[_pf_key], _pf_val
                                              )
@@ -4679,7 +4689,8 @@ else:
                 with tracer.start_as_current_span("call_llm"):
                     # --- LLM Execution Change: Multi-Pass Ensemble / Single Call Logic ---
                     # Auto-enable ensemble for large specs so every chunk gets majority-voted output.
-                    _use_multipass = _should_use_multipass(requirements)
+                    _delta_mode = bool(requirements.get("delta_mode"))
+                    _use_multipass = _delta_mode or _should_use_multipass(requirements)
                     _effective_ensemble = config.ensemble_enabled
                     if not _effective_ensemble and _use_multipass:
                         _ep_count = _count_spec_endpoints(requirements)
@@ -4778,13 +4789,15 @@ else:
                                          k: v for k, v in _pass_files.items()
                                          if k != "alembic/env.py"
                                      }
+                                     # Non-Python files: newer-wins via dict.update() semantics.
+                                     _non_py = {k: v for k, v in _pass_files.items() if not k.endswith(".py")}
+                                     _merged_files.update(_non_py)
                                      # AST-aware merge: preserve symbols from earlier passes when
                                      # the new pass overwrites an existing Python file.
                                      for _pf_key, _pf_val in _pass_files.items():
-                                         if (
-                                             _pf_key in _merged_files
-                                             and _pf_key.endswith(".py")
-                                         ):
+                                         if not _pf_key.endswith(".py"):
+                                             continue
+                                         if _pf_key in _merged_files:
                                              _merged_files[_pf_key] = _ast_merge_python_files(
                                                  _merged_files[_pf_key], _pf_val
                                              )
