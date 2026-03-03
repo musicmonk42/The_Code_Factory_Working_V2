@@ -1461,7 +1461,7 @@ async function proposeAllFixes(proposeAllBtn) {
         if (ok) succeeded++;
     }
     if (succeeded === 0) {
-        showError(`Failed to propose any fixes (${buttons.length} attempted)`);
+        showError(`Failed to propose any fixes (${buttons.length} attempted). Re-run 'Analyze Code' or 'Detect Bugs' first to refresh the error cache, then try again.`);
     } else {
         showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
     }

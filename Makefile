@@ -481,11 +481,20 @@ k8s-deploy-staging: ## Deploy to Kubernetes (staging)
 	kubectl apply -k k8s/overlays/staging
 	@echo "$(GREEN)Deployed to staging!$(NC)"
 
-k8s-deploy-prod: ## Deploy to Kubernetes (production)
-	@echo "$(RED)Deploying to Kubernetes production environment...$(NC)"
+k8s-deploy-prod: ## Deploy to Kubernetes (production) — usage: make k8s-deploy-prod IMAGE_TAG=<git-sha-or-semver>
+	@# IMAGE_TAG must be passed as a Make variable: make k8s-deploy-prod IMAGE_TAG=abc1234
+	@# It intentionally cannot be set as a shell environment variable to force explicit intent.
+	@if [ -z "$(IMAGE_TAG)" ]; then \
+		echo "$(RED)ERROR: IMAGE_TAG must be set for production deployments. Never use 'latest'.$(NC)"; \
+		echo "$(YELLOW)Usage: make k8s-deploy-prod IMAGE_TAG=<git-sha-or-semver-tag>$(NC)"; \
+		exit 1; \
+	fi
+	@echo "$(RED)Deploying to Kubernetes production environment with image tag: $(IMAGE_TAG)$(NC)"
 	@read -p "Are you sure you want to deploy to PRODUCTION? Type 'yes' to confirm: " confirm && [ "$$confirm" = "yes" ] || (echo "Aborted" && exit 1)
-	kubectl apply -k k8s/overlays/production
-	@echo "$(GREEN)Deployed to production!$(NC)"
+	kubectl kustomize k8s/overlays/production \
+		| sed "s|ghcr.io/musicmonk42/codefactory:[a-zA-Z0-9._-]*|ghcr.io/musicmonk42/codefactory:$(IMAGE_TAG)|g" \
+		| kubectl apply -f -
+	@echo "$(GREEN)Deployed to production with image tag: $(IMAGE_TAG)$(NC)"
 
 k8s-status: ## Show Kubernetes deployment status
 	@echo "$(BLUE)Kubernetes Deployment Status:$(NC)"
