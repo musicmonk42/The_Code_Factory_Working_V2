@@ -25,6 +25,12 @@ async def test_e2e_pipeline_full_success():
     """
 
     with tempfile.TemporaryDirectory() as temp_project_root:
+        # Redirect ML/HF caches to temp dir to avoid disk pressure in CI
+        cache_dir = os.path.join(temp_project_root, ".cache")
+        os.makedirs(cache_dir, exist_ok=True)
+        os.environ.setdefault("HF_HOME", cache_dir)
+        os.environ.setdefault("TRANSFORMERS_CACHE", cache_dir)
+        os.environ.setdefault("TORCH_HOME", cache_dir)
         # ----- Test fixtures -----
         uncovered_targets = [
             {"identifier": "my_module", "language": "python", "priority": 10}
