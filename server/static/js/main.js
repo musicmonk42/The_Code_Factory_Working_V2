@@ -1303,7 +1303,7 @@ async function loadErrors(jobId) {
         header.style.marginTop = '20px';
         container.appendChild(header);
         
-        const hasProposable = data.errors.some(e => e.error_id);
+        const hasProposable = data.errors.some(e => e.error_id || e.bug_id);
         const proposeAllBtn = document.getElementById('propose-all-btn');
         if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? '' : 'none';
         
@@ -1325,14 +1325,15 @@ async function loadErrors(jobId) {
                 <p>Severity: <span class="severity-${errorSeverity}">${errorSeverity}</span></p>
             `;
             
-            // Add button using safe method if error_id exists
-            if (error.error_id) {
+            // Add button using safe method if error_id or bug_id exists
+            const idForFix = error.error_id || error.bug_id;
+            if (idForFix) {
                 const button = document.createElement('button');
                 button.className = 'btn btn-primary';
                 button.textContent = 'Propose Fix';
-                button.dataset.fixId = error.error_id;
+                button.dataset.fixId = idForFix;
                 button.dataset.state = 'pending';
-                button.addEventListener('click', () => proposeFix(error.error_id, button));
+                button.addEventListener('click', () => proposeFix(idForFix, button));
                 card.appendChild(button);
             }
             
@@ -1370,27 +1371,15 @@ async function proposeFix(errorId, btn, silent = false) {
         if (!silent) loadFixes();
         return true;
     } catch (error) {
-        // If the error endpoint doesn't work, try the bug analysis endpoint as fallback
+        // If the error endpoint doesn't work, try the bug propose-fix endpoint as fallback
         // (for bugs from detect_bugs which use bug_id instead of error_id)
         try {
-            const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/${errorId}/analyze`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({
-                    include_root_cause: true,
-                    suggest_fixes: true
-                })
+            const response = await fetchWithRetry(`${API_BASE}/sfe/bugs/${errorId}/propose-fix`, {
+                method: 'POST'
             });
             const data = await response.json();
-            
-            if (!silent) {
-                if (data.fix_suggestions && data.fix_suggestions.length > 0) {
-                    showSuccess(`Fix suggested: ${data.fix_suggestions[0]}`);
-                } else {
-                    showSuccess('Bug analysis complete - check console for details');
-                    console.log('Bug analysis result:', data);
-                }
-            }
+
+            if (!silent) showSuccess(`Fix proposed: ${data.description}`);
             if (btn) {
                 btn.textContent = '✅ Fix Proposed';
                 btn.className = 'btn btn-proposed';
@@ -1399,7 +1388,7 @@ async function proposeFix(errorId, btn, silent = false) {
             if (!silent) loadFixes();
             return true;
         } catch (bugError) {
-            if (!silent) showError('Failed to propose fix: ' + error.message);
+            if (!silent) showError('Failed to propose fix: ' + bugError.message);
             if (btn) {
                 btn.disabled = false;
                 btn.textContent = 'Propose Fix';
@@ -1503,6 +1492,10 @@ function initFixes() {
     document.getElementById('approve-all-btn').addEventListener('click', () => approveAllFixes());
     document.getElementById('apply-all-btn').addEventListener('click', () => applyAllFixes());
     document.getElementById('reject-all-btn').addEventListener('click', () => rejectAllFixes());
+    const fixFilter = document.getElementById('fix-status-filter');
+    if (fixFilter) {
+        fixFilter.addEventListener('change', () => loadFixes());
+    }
     loadFixes();
 }
 
@@ -1582,13 +1575,10 @@ async function reviewFix(fixId, approved, silent = false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({approved: approved})
         });
-        
-        if (response.ok) {
-            if (!silent) showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
-            if (!silent) loadFixes();
-            return true;
-        }
-        return false;
+        // fetchWithRetry throws on non-OK; reaching here means success
+        if (!silent) showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
+        if (!silent) loadFixes();
+        return true;
     } catch (error) {
         if (!silent) showError('Failed to review fix: ' + error.message);
         return false;
@@ -1602,13 +1592,10 @@ async function applyFix(fixId, silent = false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({force: false, dry_run: false})
         });
-        
-        if (response.ok) {
-            if (!silent) showSuccess('Fix applied successfully');
-            if (!silent) loadFixes();
-            return true;
-        }
-        return false;
+        // fetchWithRetry throws on non-OK; reaching here means success
+        if (!silent) showSuccess('Fix applied successfully');
+        if (!silent) loadFixes();
+        return true;
     } catch (error) {
         if (!silent) showError('Failed to apply fix: ' + error.message);
         return false;
@@ -1642,7 +1629,11 @@ async function approveAllFixes() {
         const ok = await reviewFix(fix.fix_id, true, true);
         if (ok) count++;
     }
-    showSuccess(`Approved ${count} of ${proposed.length} fixes`);
+    if (count === 0) {
+        showError('Failed to approve any fixes. Check that fixes exist and are in "proposed" status.');
+    } else {
+        showSuccess(`Approved ${count} of ${proposed.length} fixes`);
+    }
     loadFixes();
 }
 
@@ -1656,7 +1647,11 @@ async function applyAllFixes() {
         const ok = await applyFix(fix.fix_id, true);
         if (ok) count++;
     }
-    showSuccess(`Applied ${count} of ${approved.length} fixes`);
+    if (count === 0) {
+        showError('Failed to apply any fixes. Check that fixes exist and are in "approved" status.');
+    } else {
+        showSuccess(`Applied ${count} of ${approved.length} fixes`);
+    }
     loadFixes();
 }
 
@@ -1670,7 +1665,11 @@ async function rejectAllFixes() {
         const ok = await reviewFix(fix.fix_id, false, true);
         if (ok) count++;
     }
-    showSuccess(`Rejected ${count} of ${proposed.length} fixes`);
+    if (count === 0) {
+        showError('Failed to reject any fixes. Check that fixes exist and are in "proposed" status.');
+    } else {
+        showSuccess(`Rejected ${count} of ${proposed.length} fixes`);
+    }
     loadFixes();
 }
 
