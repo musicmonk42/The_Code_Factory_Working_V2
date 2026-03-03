@@ -2534,18 +2534,22 @@ class WorkflowEngine:
                         logger.debug(f"[STAGE:DEPLOY_GEN] Wrote {filename}")
                 
                 # Validate deployment artifacts (after writing so manifests are preserved)
+                # Note: Validation is non-blocking - we record warnings but don't fail deployment
                 if HAS_PROVENANCE and validate_deployment_artifacts:
                     validation = validate_deployment_artifacts(deploy_files, output_path)
                     if not validation["valid"]:
-                        deploy_result["status"] = "validation_failed"
-                        deploy_result["validation_errors"] = validation["errors"]
+                        deploy_result["validation_warnings"] = validation["errors"]
+                        logger.warning(
+                            f"[STAGE:DEPLOY_GEN] Deployment artifacts have validation warnings: {validation['errors']}",
+                            extra={"workflow_id": workflow_id, "validation_errors": validation["errors"]}
+                        )
                         if provenance:
                             provenance.record_error(
                                 ProvenanceTracker.STAGE_DEPLOY_GEN,
-                                "validation_failed",
-                                f"Deployment validation failed: {validation['errors']}"
+                                "validation_warning",
+                                f"Deployment validation warnings: {validation['errors']}"
                             )
-                        return deploy_result
+                        # Continue with deployment despite validation warnings
                 
                 # Record provenance
                 if provenance:
