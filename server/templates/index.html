@@ -200,6 +200,22 @@ Support multiple users.
 
                     <!-- Answer Input (Hidden initially) -->
                     <div class="answer-section" id="answer-section" style="display: none;">
+                        <div class="input-mode-toggle">
+                            <span class="toggle-label">Input Mode:</span>
+                            <label class="toggle-option">
+                                <input type="radio" name="clarifier-input-mode" value="text" checked> 
+                                <span>⌨️ Text</span>
+                            </label>
+                            <label class="toggle-option">
+                                <input type="radio" name="clarifier-input-mode" value="voice"> 
+                                <span>🎤 Voice</span>
+                            </label>
+                        </div>
+                        <div class="voice-status" id="voice-status" style="display: none;">
+                            <span class="recording-indicator">●</span>
+                            <span class="voice-status-text">Listening...</span>
+                            <button class="btn btn-sm btn-danger" onclick="stopVoiceInput()">Stop</button>
+                        </div>
                         <div class="form-group">
                             <label for="clarifier-answer">Your Answer:</label>
                             <textarea 
@@ -213,6 +229,9 @@ Support multiple users.
                             </button>
                             <button class="btn btn-secondary" onclick="skipQuestion()">
                                 ⏭️ Skip Question
+                            </button>
+                            <button class="btn btn-voice" id="voice-input-btn" onclick="startVoiceInput()">
+                                🎤 Speak Answer
                             </button>
                         </div>
                     </div>

@@ -6,6 +6,10 @@
 const API_BASE = '/api';
 let websocket = null;
 
+// Voice input state
+let voiceRecognition = null;
+let isRecording = false;
+
 // WebSocket connection state management
 const ConnectionState = {
     DISCONNECTED: 'disconnected',
@@ -131,6 +135,154 @@ async function limitConcurrency(tasks, limit) {
     return results;
 }
 
+/**
+ * Initialize voice recognition if supported
+ */
+function initVoiceRecognition() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        console.warn('Web Speech API not supported in this browser');
+        const voiceBtn = document.getElementById('voice-input-btn');
+        if (voiceBtn) {
+            voiceBtn.disabled = true;
+            voiceBtn.title = 'Voice input not supported in this browser';
+        }
+        return false;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    voiceRecognition = new SpeechRecognition();
+    voiceRecognition.continuous = false;
+    voiceRecognition.interimResults = true;
+    voiceRecognition.lang = 'en-US';
+
+    voiceRecognition.onstart = () => {
+        isRecording = true;
+        updateVoiceStatus(true, 'Listening...');
+        const voiceBtn = document.getElementById('voice-input-btn');
+        if (voiceBtn) {
+            voiceBtn.classList.add('recording');
+            voiceBtn.innerHTML = '🔴 Recording...';
+        }
+    };
+
+    voiceRecognition.onresult = (event) => {
+        let finalTranscript = '';
+        let interimTranscript = '';
+
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+                finalTranscript += transcript;
+            } else {
+                interimTranscript += transcript;
+            }
+        }
+
+        const answerField = document.getElementById('clarifier-answer');
+        if (answerField) {
+            if (finalTranscript) {
+                answerField.value = finalTranscript;
+                answerField.classList.remove('interim');
+            } else if (interimTranscript) {
+                answerField.value = interimTranscript;
+                answerField.classList.add('interim');
+            }
+        }
+    };
+
+    voiceRecognition.onend = () => {
+        isRecording = false;
+        updateVoiceStatus(false);
+        const voiceBtn = document.getElementById('voice-input-btn');
+        if (voiceBtn) {
+            voiceBtn.classList.remove('recording');
+            voiceBtn.innerHTML = '🎤 Speak Answer';
+        }
+        const answerField = document.getElementById('clarifier-answer');
+        if (answerField) {
+            answerField.classList.remove('interim');
+        }
+    };
+
+    voiceRecognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        isRecording = false;
+        updateVoiceStatus(false);
+
+        let errorMessage = 'Voice input error';
+        switch (event.error) {
+            case 'not-allowed':
+                errorMessage = 'Microphone access denied. Please allow microphone access in your browser settings.';
+                break;
+            case 'no-speech':
+                errorMessage = 'No speech detected. Please try again.';
+                break;
+            case 'audio-capture':
+                errorMessage = 'No microphone found. Please connect a microphone.';
+                break;
+            case 'network':
+                errorMessage = 'Network error during speech recognition.';
+                break;
+        }
+        showError(errorMessage);
+
+        const voiceBtn = document.getElementById('voice-input-btn');
+        if (voiceBtn) {
+            voiceBtn.classList.remove('recording');
+            voiceBtn.innerHTML = '🎤 Speak Answer';
+        }
+    };
+
+    return true;
+}
+
+/**
+ * Start voice input
+ */
+function startVoiceInput() {
+    if (!voiceRecognition) {
+        if (!initVoiceRecognition()) {
+            showError('Voice input is not supported in this browser. Please use Chrome, Edge, or Safari.');
+            return;
+        }
+    }
+
+    if (isRecording) {
+        stopVoiceInput();
+        return;
+    }
+
+    try {
+        voiceRecognition.start();
+    } catch (error) {
+        console.error('Failed to start voice recognition:', error);
+        showError('Failed to start voice input. Please try again.');
+    }
+}
+
+/**
+ * Stop voice input
+ */
+function stopVoiceInput() {
+    if (voiceRecognition && isRecording) {
+        voiceRecognition.stop();
+    }
+}
+
+/**
+ * Update voice status indicator
+ */
+function updateVoiceStatus(active, message = '') {
+    const statusEl = document.getElementById('voice-status');
+    if (statusEl) {
+        statusEl.style.display = active ? 'flex' : 'none';
+        const textEl = statusEl.querySelector('.voice-status-text');
+        if (textEl && message) {
+            textEl.textContent = message;
+        }
+    }
+}
+
 // Initialize application
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
@@ -143,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initAPIKeys();
     initAuditLogs();
     initModals();
+    initVoiceRecognition();
     
     // Load initial data
     loadHealthCheck();
@@ -4484,11 +4637,13 @@ async function startClarification() {
         }
         
         // Call clarifier API
+        const inputMode = document.querySelector('input[name="clarifier-input-mode"]:checked')?.value || 'text';
         const response = await fetchWithRetry(`${API_BASE}/generator/${currentClarifierJobId}/clarify`, {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                readme_content: requirements
+                readme_content: requirements,
+                channel: inputMode === 'voice' ? 'voice' : 'web'
             })
         });
         
