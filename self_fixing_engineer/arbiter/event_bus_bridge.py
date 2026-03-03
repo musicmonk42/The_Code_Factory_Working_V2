@@ -236,7 +236,7 @@ class EventBusBridge:
                 MessageQueueService,
             )
 
-            self.arbiter_mqs = MessageQueueService()
+            self.arbiter_mqs = MessageQueueService(redis_url=None)
             logger.info("EventBusBridge: Arbiter MessageQueueService available")
         except ImportError as exc:
             logger.warning("EventBusBridge: Arbiter MQS not available — %s", exc)
