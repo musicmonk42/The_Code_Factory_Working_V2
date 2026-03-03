@@ -166,6 +166,11 @@ MODULAR_SUBDIRS: List[str] = [
     "app/models",
 ]
 
+# Top-level scaffold directories that are allowed to import from external packages
+# and not-yet-created application modules.  These are excluded from
+# _validate_generated_imports() to prevent false-positive failures.
+_IMPORT_VALIDATION_SKIP_DIRS: frozenset[str] = frozenset({"alembic"})
+
 # Alembic stub file contents keyed by relative path
 ALEMBIC_STUB_FILES: Dict[str, str] = {
     "alembic.ini": (
@@ -1233,6 +1238,14 @@ def _validate_generated_imports(
     missing: List[str] = []
 
     for py_file in output_dir.rglob("*.py"):
+        # Skip scaffold directories that are known to reference external packages.
+        try:
+            rel_path = py_file.relative_to(output_dir)
+        except ValueError:
+            rel_path = py_file
+        if rel_path.parts and rel_path.parts[0] in _IMPORT_VALIDATION_SKIP_DIRS:
+            continue
+
         try:
             source = py_file.read_text(encoding="utf-8")
             tree = _ast.parse(source, filename=str(py_file))

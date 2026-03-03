@@ -3261,12 +3261,15 @@ _NON_CODE_EXTENSIONS: frozenset = frozenset(
 # ORM/framework base class names whose body is legitimately just ``pass``.
 # Used by _detect_stub_patterns() and _is_stub_content() to exempt these
 # classes from false-positive stub detection.
+# NOTE: "BaseModel" is intentionally NOT listed here — a domain model class
+# like ``class Product(BaseModel): pass`` with no fields IS a stub and must
+# be detected.  Only true infrastructure base classes that are genuinely
+# intended to have empty bodies are exempted.
 _ORM_BASE_NAMES: frozenset = frozenset({
     "DeclarativeBase",   # SQLAlchemy 2.x mapped base
     "Base",              # Conventional SQLAlchemy base class name
     "AbstractBase",      # Generic abstract base pattern
     "Model",             # Django ORM / Flask-SQLAlchemy base
-    "BaseModel",         # Pydantic base model
     "BaseSettings",      # Pydantic settings base
 })
 
