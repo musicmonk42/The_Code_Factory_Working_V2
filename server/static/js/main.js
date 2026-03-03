@@ -1287,6 +1287,20 @@ function displayAnalysisResults(data, jobId, source, ts) {
 }
 
 
+function markFixProposed(btn) {
+    if (!btn) return;
+    btn.textContent = '✅ Fix Proposed';
+    btn.className = 'btn btn-proposed';
+    btn.dataset.state = 'proposed';
+    const card = btn.closest('.error-card');
+    if (card && !card.querySelector('.fix-proposed-badge')) {
+        const badge = document.createElement('span');
+        badge.className = 'fix-proposed-badge';
+        badge.textContent = '🔧 Fix Proposed';
+        btn.insertAdjacentElement('beforebegin', badge);
+    }
+}
+
 async function loadErrors(jobId) {
     const container = document.getElementById('errors-list');
     
@@ -1294,7 +1308,7 @@ async function loadErrors(jobId) {
         const response = await fetchWithRetry(`${API_BASE}/sfe/${jobId}/errors`);
         const data = await response.json();
         
-        if (data.errors.length === 0) {
+        if (!data.errors?.length) {
             // Hide the propose-all button — no proposable errors in this result.
             const proposeAllBtnEmpty = document.getElementById('propose-all-btn');
             if (proposeAllBtnEmpty) proposeAllBtnEmpty.style.display = 'none';
@@ -1348,6 +1362,26 @@ async function loadErrors(jobId) {
             
             container.appendChild(card);
         });
+
+        // Cross-reference with existing fixes to mark already-proposed errors
+        try {
+            const fixesResp = await fetchWithRetry(`${API_BASE}/fixes/`);
+            const existingFixes = await fixesResp.json();
+            if (Array.isArray(existingFixes)) {
+                const fixedErrorIds = new Set(
+                    existingFixes
+                        .filter(f => f.error_id && ['proposed', 'approved', 'applied'].includes(f.status))
+                        .map(f => f.error_id)
+                );
+                container.querySelectorAll('button[data-fix-id]').forEach(btn => {
+                    if (fixedErrorIds.has(btn.dataset.fixId)) {
+                        markFixProposed(btn);
+                    }
+                });
+            }
+        } catch (e) {
+            // Non-critical: silently ignore if fixes can't be fetched
+        }
     } catch (error) {
         console.error('Failed to load errors:', error);
         // Show user-visible error message
@@ -1372,11 +1406,7 @@ async function proposeFix(errorId, btn, silent = false) {
         const data = await response.json();
         
         if (!silent) showSuccess(`Fix proposed: ${data.description}`);
-        if (btn) {
-            btn.textContent = '✅ Fix Proposed';
-            btn.className = 'btn btn-proposed';
-            btn.dataset.state = 'proposed';
-        }
+        if (btn) markFixProposed(btn);
         if (!silent) loadFixes();
         return true;
     } catch (error) {
@@ -1389,11 +1419,7 @@ async function proposeFix(errorId, btn, silent = false) {
             const data = await response.json();
 
             if (!silent) showSuccess(`Fix proposed: ${data.description}`);
-            if (btn) {
-                btn.textContent = '✅ Fix Proposed';
-                btn.className = 'btn btn-proposed';
-                btn.dataset.state = 'proposed';
-            }
+            if (btn) markFixProposed(btn);
             if (!silent) loadFixes();
             return true;
         } catch (bugError) {
@@ -1423,7 +1449,11 @@ async function proposeAllFixes(proposeAllBtn) {
         const ok = await proposeFix(btn.dataset.fixId, btn, true);
         if (ok) succeeded++;
     }
-    showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
+    if (succeeded === 0) {
+        showError(`Failed to propose any fixes (${buttons.length} attempted)`);
+    } else {
+        showSuccess(`Proposed fixes for ${succeeded} of ${buttons.length} issues`);
+    }
     loadFixes();
     if (proposeAllBtn) {
         if (succeeded > 0) {
@@ -1642,17 +1672,17 @@ async function reviewFix(fixId, approved, silent = false) {
                 showError(`Fix ${fixId.substring(0, 8)} was rejected by sandbox validation`);
                 loadFixes();
             }
-            return false;
+            return {ok: false, sandboxRejected: true, message: 'Rejected by sandbox validation'};
         }
 
         if (!silent) {
             showSuccess(approved ? 'Fix approved successfully' : 'Fix rejected');
             loadFixes();
         }
-        return true;
+        return {ok: true, sandboxRejected: false, message: ''};
     } catch (error) {
         if (!silent) showError('Failed to review fix: ' + error.message);
-        return false;
+        return {ok: false, sandboxRejected: false, message: error.message};
     }
 }
 
@@ -1667,10 +1697,10 @@ async function applyFix(fixId, silent = false) {
             showSuccess('Fix applied successfully');
             loadFixes();
         }
-        return true;
+        return {ok: true, message: ''};
     } catch (error) {
         if (!silent) showError('Failed to apply fix: ' + error.message);
-        return false;
+        return {ok: false, message: error.message};
     }
 }
 
@@ -1700,16 +1730,36 @@ async function approveAllFixes() {
     const btn = document.getElementById('approve-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Approving...'; }
     let count = 0;
-    for (const fix of proposed) {
-        const ok = await reviewFix(fix.fix_id, true, true);
-        if (ok) count++;
+    let sandboxRejected = 0;
+    let failed = 0;
+    try {
+        for (const fix of proposed) {
+            const result = await reviewFix(fix.fix_id, true, true);
+            if (result.ok) {
+                count++;
+            } else if (result.sandboxRejected) {
+                sandboxRejected++;
+            } else {
+                failed++;
+            }
+        }
+        const parts = [];
+        if (count > 0) parts.push(`Approved ${count}`);
+        if (sandboxRejected > 0) parts.push(`${sandboxRejected} rejected by sandbox`);
+        if (failed > 0) parts.push(`${failed} failed`);
+        if (count === 0) {
+            const failParts = [];
+            if (sandboxRejected > 0) failParts.push(`${sandboxRejected} rejected by sandbox`);
+            if (failed > 0) failParts.push(`${failed} failed`);
+            showError(`Failed to approve any fixes — ${failParts.join(', ') || 'unknown error'}`);
+        } else if (sandboxRejected > 0 || failed > 0) {
+            showSuccess(parts.join(', ') + ` of ${proposed.length} fixes`);
+        } else {
+            showSuccess(`Approved all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+        }
+    } finally {
+        loadFixes();
     }
-    if (count === 0) {
-        showError('Failed to approve any fixes. Check that fixes exist and are in "proposed" status.');
-    } else {
-        showSuccess(`Approved ${count} of ${proposed.length} fixes`);
-    }
-    loadFixes();
 }
 
 async function applyAllFixes() {
@@ -1721,16 +1771,29 @@ async function applyAllFixes() {
     const btn = document.getElementById('apply-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Applying...'; }
     let count = 0;
-    for (const fix of approved) {
-        const ok = await applyFix(fix.fix_id, true);
-        if (ok) count++;
+    const errors = [];
+    try {
+        for (const fix of approved) {
+            const result = await applyFix(fix.fix_id, true);
+            if (result.ok) {
+                count++;
+            } else {
+                errors.push(result.message || 'unknown error');
+            }
+        }
+        if (count === 0) {
+            const detail = errors.length > 1
+                ? `${errors.length} errors — first: ${errors[0]}`
+                : (errors[0] || 'Check that fixes are in "approved" status.');
+            showError(`Failed to apply any fixes. ${detail}`);
+        } else if (errors.length > 0) {
+            showSuccess(`Applied ${count} of ${approved.length} fixes (${errors.length} failed)`);
+        } else {
+            showSuccess(`Applied all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+        }
+    } finally {
+        loadFixes();
     }
-    if (count === 0) {
-        showError('Failed to apply any fixes. Check that fixes exist and are in "approved" status.');
-    } else {
-        showSuccess(`Applied ${count} of ${approved.length} fixes`);
-    }
-    loadFixes();
 }
 
 async function rejectAllFixes() {
@@ -1742,16 +1805,29 @@ async function rejectAllFixes() {
     const btn = document.getElementById('reject-all-btn');
     if (btn) { btn.disabled = true; btn.innerHTML = '<span class="loading-spinner"></span> Rejecting...'; }
     let count = 0;
-    for (const fix of proposed) {
-        const ok = await reviewFix(fix.fix_id, false, true);
-        if (ok) count++;
+    const errors = [];
+    try {
+        for (const fix of proposed) {
+            const result = await reviewFix(fix.fix_id, false, true);
+            if (result.ok) {
+                count++;
+            } else {
+                errors.push(result.message || 'unknown error');
+            }
+        }
+        if (count === 0) {
+            const detail = errors.length > 1
+                ? `${errors.length} errors — first: ${errors[0]}`
+                : (errors[0] || 'Check that fixes are in "proposed" status.');
+            showError(`Failed to reject any fixes. ${detail}`);
+        } else if (errors.length > 0) {
+            showSuccess(`Rejected ${count} of ${proposed.length} fixes (${errors.length} failed)`);
+        } else {
+            showSuccess(`Rejected all ${count} fix${count !== 1 ? 'es' : ''} successfully`);
+        }
+    } finally {
+        loadFixes();
     }
-    if (count === 0) {
-        showError('Failed to reject any fixes. Check that fixes exist and are in "proposed" status.');
-    } else {
-        showSuccess(`Rejected ${count} of ${proposed.length} fixes`);
-    }
-    loadFixes();
 }
 
 // System Status

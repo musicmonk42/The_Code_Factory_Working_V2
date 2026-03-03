@@ -720,6 +720,18 @@ h3 {
     pointer-events: none;
 }
 
+.fix-proposed-badge {
+    display: inline-block;
+    background: #6c757d;
+    color: #fff;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    margin-top: 0.5rem;
+    margin-right: 0.5rem;
+    vertical-align: middle;
+}
+
 .bulk-actions {
     display: flex;
     gap: 0.5rem;
