@@ -1301,6 +1301,34 @@ function markFixProposed(btn) {
     }
 }
 
+async function markAlreadyProposedFixes() {
+    try {
+        const fixesResp = await fetchWithRetry(`${API_BASE}/fixes/`);
+        const existingFixes = await fixesResp.json();
+        if (!Array.isArray(existingFixes)) return;
+        const fixedErrorIds = new Set(
+            existingFixes
+                .filter(f => f.error_id && ['proposed', 'approved', 'applied'].includes(f.status))
+                .map(f => f.error_id)
+        );
+        document.querySelectorAll('#errors-list [data-fix-id]').forEach(btn => {
+            if (fixedErrorIds.has(btn.dataset.fixId)) {
+                markFixProposed(btn);
+                btn.disabled = true;
+            }
+        });
+        // Update propose-all button state if all remaining fixes are already proposed
+        const pending = document.querySelectorAll('#errors-list [data-state="pending"][data-fix-id]');
+        const proposeAllBtn = document.getElementById('propose-all-btn');
+        if (proposeAllBtn && proposeAllBtn.style.display !== 'none' && pending.length === 0) {
+            proposeAllBtn.textContent = '✅ All Fixes Proposed';
+            proposeAllBtn.disabled = true;
+        }
+    } catch (e) {
+        // Non-critical: silently ignore if fixes can't be fetched
+    }
+}
+
 async function loadErrors(jobId) {
     const container = document.getElementById('errors-list');
     
@@ -1364,24 +1392,7 @@ async function loadErrors(jobId) {
         });
 
         // Cross-reference with existing fixes to mark already-proposed errors
-        try {
-            const fixesResp = await fetchWithRetry(`${API_BASE}/fixes/`);
-            const existingFixes = await fixesResp.json();
-            if (Array.isArray(existingFixes)) {
-                const fixedErrorIds = new Set(
-                    existingFixes
-                        .filter(f => f.error_id && ['proposed', 'approved', 'applied'].includes(f.status))
-                        .map(f => f.error_id)
-                );
-                container.querySelectorAll('button[data-fix-id]').forEach(btn => {
-                    if (fixedErrorIds.has(btn.dataset.fixId)) {
-                        markFixProposed(btn);
-                    }
-                });
-            }
-        } catch (e) {
-            // Non-critical: silently ignore if fixes can't be fetched
-        }
+        await markAlreadyProposedFixes();
     } catch (error) {
         console.error('Failed to load errors:', error);
         // Show user-visible error message
@@ -3218,6 +3229,7 @@ async function analyzeServerModule(btn) {
             const hasProposable = data.issues.some(i => i.error_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
             if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
+            await markAlreadyProposedFixes();
         } else {
             const container = document.getElementById('errors-list');
             container.innerHTML = `<p class="no-data">✅ No issues found in ${targetLower} module</p>`;
@@ -3303,6 +3315,7 @@ async function detectBugs(btn) {
             const hasProposable = data.bugs.some(b => b.bug_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
             if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
+            await markAlreadyProposedFixes();
         } else {
             // No bugs detected — ensure the propose-all button is hidden.
             const proposeAllBtnNone = document.getElementById('propose-all-btn');
@@ -3410,6 +3423,7 @@ async function analyzeCodebase(btn) {
             const hasProposable = data.issues.some(i => i.error_id || i.bug_id);
             const proposeAllBtn = document.getElementById('propose-all-btn');
             if (proposeAllBtn) proposeAllBtn.style.display = hasProposable ? 'inline-block' : 'none';
+            await markAlreadyProposedFixes();
         } else {
             // No issues — ensure the propose-all button is hidden.
             const proposeAllBtn = document.getElementById('propose-all-btn');
