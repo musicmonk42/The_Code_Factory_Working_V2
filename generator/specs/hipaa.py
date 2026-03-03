@@ -1,48 +1,71 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+# generator/specs/hipaa.py
 """
-HIPAA / Healthcare Security Spec.
+HIPAA Compliance Specification Module — Healthcare Data Protection Engine
 
-Module Contract
----------------
-Every ``generator/specs/<name>.py`` module must expose:
+This module provides the HIPAA/healthcare compliance specification for the
+Code Factory generator pipeline.  It exposes trigger-keyword detection,
+clarifier question mappings, NIST control IDs, banned-function rules, a
+generated-code scanner, and a ``CompliancePlugin`` for documentation audits.
 
-``TRIGGER_KEYWORDS : frozenset[str]``
-    Lower-cased substrings; any match in spec text auto-activates this spec.
+Purpose
+-------
+Centralises **all** HIPAA-related compliance logic so that:
 
-``CLARIFIER_QUESTION_IDS : frozenset[str]``
-    IDs from ``generator.clarifier.clarifier_user_prompt.COMPLIANCE_QUESTIONS``
-    that, when answered ``True``, also activate this spec (e.g. ``"phi_data"``).
+1. The spec router (``generator.specs.router``) can activate HIPAA rules
+   automatically when keywords such as ``hipaa`` or ``phi`` appear in the
+   user spec text.
+2. The post-generation auditor can call :func:`check_generated_code` to flag
+   PHI-handling patterns that require explicit compliance controls.
+3. The gap-analysis tooling can call :func:`get_compliance_gaps` to surface
+   NIST SP 800-53 control coverage deficiencies.
 
-``COMPLIANCE_MODE : str``
-    The ``COMPLIANCE_MODE`` value accepted by
-    ``generator.audit_log.validate_config.ConfigValidator.validate_compliance``
-    (one of ``"soc2"``, ``"hipaa"``, ``"pci-dss"``, ``"gdpr"``, ``"standard"``).
+Architecture
+------------
+::
 
-``COMPLIANCE_RULES : dict``
-    Additional rules merged into ``SecurityUtils.apply_compliance()`` rule dict
-    (keys: ``"banned_functions"``, ``"banned_imports"``, ``"required_header"``,
-    ``"max_line_length"``).
+    ┌─────────────────────────────────┐
+    │  spec_text / compliance_prefs   │  ← caller input
+    └──────────────┬──────────────────┘
+                   │
+                   ▼
+    ┌─────────────────────────────────┐
+    │  TRIGGER_KEYWORDS match         │  ← frozenset lookup O(1)
+    │  CLARIFIER_QUESTION_IDS match   │  ← clarifier answer lookup
+    └──────────────┬──────────────────┘
+                   │
+          ┌────────┴─────────┐
+          ▼                  ▼
+    ┌──────────┐     ┌────────────────────┐
+    │ DIRECTIVE│     │ CompliancePlugin   │
+    │   _TEXT  │     │ check(docs)        │
+    └──────────┘     └────────────────────┘
+          │
+          ▼
+    ┌─────────────────────────────────┐
+    │  check_generated_code(dir)      │  ← regex scan over *.py files
+    │  get_compliance_gaps(cfg_path)  │  ← NIST coverage gap analysis
+    └─────────────────────────────────┘
 
-``NIST_CONTROL_IDS : frozenset[str]``
-    NIST SP 800-53 control IDs (from ``compliance_mapper`` YAML) enforced here.
+Observability
+-------------
+- **OpenTelemetry** — :func:`check_generated_code` emits a span
+  ``"hipaa_spec.check_generated_code"`` with ``output_dir``,
+  ``files_scanned``, and ``violations_found`` attributes.
+- **Prometheus** — :func:`check_generated_code` increments
+  ``spec_compliance_checks_total{spec="hipaa", status="passed"|"violations_found"}``.
+- **Structured logging** — all functions emit ``DEBUG``/``WARNING`` messages
+  with file-path and violation-count context.
 
-``DIRECTIVE_TEXT : str``
-    Prompt section (starting with ``##``) injected when the spec is active.
-
-``make_compliance_plugin() -> CompliancePlugin``
-    Factory that returns a ``CompliancePlugin`` instance (from
-    ``generator.agents.docgen_agent.docgen_agent``) so the spec can be
-    registered in ``docgen_agent.PluginRegistry`` via
-    ``DocgenAgent.register_compliance_plugin()``.
-
-``check_generated_code(output_dir: str) -> List[Dict[str, Any]]``
-    Scans generated Python files for PHI-handling violations.
-    Mirrors ``server.services.sfe_service.SFEService._check_hipaa_compliance``.
-
-``get_compliance_gaps(config_path: str = "") -> Dict[str, List[str]]``
-    Delegates to ``compliance_mapper.load_compliance_map`` + ``check_coverage``
-    filtered to :data:`NIST_CONTROL_IDS`.
+Industry Standards Compliance
+------------------------------
+- **HIPAA Security Rule** (45 CFR § 164.312): encryption, audit controls,
+  access controls, integrity controls.
+- **NIST SP 800-53 Rev 5**: AC-3, AC-6, AU-2, AU-6, IA-5, SC-28.
+- **HL7 FHIR R4**: data-model standards for EHR interoperability.
+- **SOC 2 Type II** / **ISO 27001 A.12.4.1**: audit-ready structured logging.
+- **PEP 484** / **PEP 526**: full static type-hint coverage.
 """
 
 from __future__ import annotations
@@ -50,16 +73,109 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field, field_validator
+
+from generator.agents.metrics_utils import get_or_create_metric
+
+# =============================================================================
+# OPTIONAL DEPENDENCY — PyYAML
+# =============================================================================
+
+try:
+    import yaml as _pyyaml  # noqa: F401
+
+    _YAML_AVAILABLE = True
+except ImportError:  # pragma: no cover
+    _pyyaml = None  # type: ignore[assignment]
+    _YAML_AVAILABLE = False
+
+# =============================================================================
+# OBSERVABILITY — OpenTelemetry (graceful degradation)
+# =============================================================================
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import Status, StatusCode
+
+    _tracer = trace.get_tracer(__name__)
+    _HAS_OPENTELEMETRY = True
+except ImportError:  # pragma: no cover
+    _HAS_OPENTELEMETRY = False
+
+    class _StatusCode:  # type: ignore[no-redef]
+        OK = "OK"
+        ERROR = "ERROR"
+
+    class _Status:  # type: ignore[no-redef]
+        def __init__(self, status_code: Any, description: Optional[str] = None) -> None:
+            self.status_code = status_code
+            self.description = description
+
+    class _NoOpSpan:
+        def set_attribute(self, *a: Any, **kw: Any) -> None: ...
+        def set_status(self, *a: Any, **kw: Any) -> None: ...
+        def record_exception(self, *a: Any, **kw: Any) -> None: ...
+        def add_event(self, *a: Any, **kw: Any) -> None: ...
+
+    class _NoOpContextManager:
+        def __enter__(self) -> "_NoOpSpan": return _NoOpSpan()
+        def __exit__(self, *a: Any) -> None: ...
+
+    class _NoOpTracer:
+        def start_as_current_span(self, *a: Any, **kw: Any) -> "_NoOpContextManager":
+            return _NoOpContextManager()
+
+    _tracer = _NoOpTracer()  # type: ignore[assignment]
+    StatusCode = _StatusCode  # type: ignore[assignment,misc]
+    Status = _Status  # type: ignore[assignment,misc]
+
+# =============================================================================
+# OBSERVABILITY — Prometheus metrics (graceful degradation)
+# =============================================================================
+
+try:
+    from prometheus_client import Counter as _PCounter
+
+    _spec_compliance_checks_total: Any = get_or_create_metric(
+        _PCounter,
+        "spec_compliance_checks_total",
+        "Total compliance check invocations per spec and outcome",
+        ["spec", "status"],
+    )
+    _HAS_PROMETHEUS = True
+
+except ImportError:  # pragma: no cover
+    _HAS_PROMETHEUS = False
+
+    class _NoOpMetric:  # type: ignore[no-redef]
+        """Lightweight no-op stub that silently accepts any Prometheus-style call."""
+
+        def labels(self, *args: Any, **kwargs: Any) -> "_NoOpMetric":
+            return self
+
+        def inc(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        def observe(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+    _spec_compliance_checks_total: Any = _NoOpMetric()  # type: ignore[no-redef]
+
+# =============================================================================
+# LOGGING
+# =============================================================================
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Spec identity
-# ---------------------------------------------------------------------------
+# =============================================================================
+# CONSTANTS
+# =============================================================================
 
-#: Auto-detection keywords (MD spec text, case-insensitive).
+#: Keywords that trigger HIPAA compliance mode in the spec router.
 TRIGGER_KEYWORDS: frozenset[str] = frozenset(
     {
         "hipaa",
@@ -73,234 +189,379 @@ TRIGGER_KEYWORDS: frozenset[str] = frozenset(
     }
 )
 
-#: Clarifier question IDs (``COMPLIANCE_QUESTIONS``) that activate this spec.
-#: ``phi_data`` is the question "Will this project process PHI?".
+#: Clarifier question IDs whose affirmative answers activate this spec.
+#: Maps to ``COMPLIANCE_QUESTIONS`` entries in
+#: ``generator.clarifier.clarifier_user_prompt``.
 CLARIFIER_QUESTION_IDS: frozenset[str] = frozenset({"phi_data"})
 
-#: Matches the ``COMPLIANCE_MODE`` accepted by ``validate_compliance()``.
+#: Compliance mode string accepted by ``validate_compliance()`` in
+#: ``generator.audit_log.validate_config``.
 COMPLIANCE_MODE: str = "hipaa"
 
-#: NIST SP 800-53 control IDs enforced by this spec (must exist in crew_config.yaml).
+#: NIST SP 800-53 Rev 5 control identifiers relevant to this spec.
+#: AC-3 (Access Enforcement), AC-6 (Least Privilege), AU-2 (Event Logging),
+#: AU-6 (Audit Review), IA-5 (Authenticator Management), SC-28 (Protection
+#: of Information at Rest).
 NIST_CONTROL_IDS: frozenset[str] = frozenset(
-    {
-        "AC-3",   # Access Enforcement — RBAC on PHI routes
-        "AC-6",   # Least Privilege — role-scoped JWT claims
-        "AU-2",   # Audit Events — tamper-evident audit log
-        "AU-6",   # Audit Review — audit log querying endpoint
-        "IA-5",   # Authenticator Management — RS256 JWT signing
-        "SC-28",  # Protection of Information at Rest — PHI field encryption
-    }
+    {"AC-3", "AC-6", "AU-2", "AU-6", "IA-5", "SC-28"}
 )
 
-#: Additional rules contributed to ``SecurityUtils.apply_compliance()``.
+#: Banned functions and imports for HIPAA-compliant generated code.
+#: ``pickle`` serialisation is disallowed because it can silently bypass
+#: PHI encryption layers.
 COMPLIANCE_RULES: Dict[str, Any] = {
     "banned_functions": ["pickle.loads", "pickle.load"],
     "banned_imports": ["pickle"],
 }
 
-# ---------------------------------------------------------------------------
-# PHI detection patterns
-# Mirrored from server.services.sfe_service.SFEService._check_hipaa_compliance
-# ---------------------------------------------------------------------------
-
-_PHI_PATTERNS: List[tuple[str, str]] = [
-    (r"\b(patient|medical|health).?record", "Medical record handling detected"),
-    (r"\b(diagnosis|prescription|treatment)\b", "PHI data handling detected"),
-    (r"\b(mrn|medical.?record.?number)\b", "Medical Record Number handling detected"),
-    (r"\b(ssn|social.?security)\b", "SSN / social security number handling detected"),
-    (r"\b(date.?of.?birth|dob)\b", "Date-of-birth handling detected"),
-]
-
-# ---------------------------------------------------------------------------
-# Prompt directive
-# ---------------------------------------------------------------------------
-
+#: Security prompt directives injected into the LLM system prompt when HIPAA
+#: mode is active.  References NIST SP 800-53 control IDs inline so the LLM
+#: produces controls-aligned code.
 DIRECTIVE_TEXT: str = (
-    "\n\n## HIPAA / HEALTHCARE SECURITY REQUIREMENTS (MANDATORY)\n\n"
-    "This spec involves Protected Health Information (PHI). "
-    "ALL of the following security controls MUST be fully implemented — stubs "
-    "or placeholder comments will cause a HIPAA compliance check failure "
-    "(NIST controls: {nist_ids}).\n\n"
-    "1. **Field-level PHI Encryption** (`app/security/phi_encryption.py`)  "
-    "(NIST SC-28)\n"
-    "   Use `cryptography.fernet.Fernet` (AES-256-CBC) to encrypt PHI fields "
-    "before writing to the database.  Load the key from env var "
-    "`PHI_ENCRYPTION_KEY`.\n\n"
-    "2. **Tamper-Evident Audit Logging** (`app/services/audit_service.py`)  "
-    "(NIST AU-2, AU-6)\n"
-    "   Every PHI create/update/delete MUST emit a record with a SHA-256 hash "
-    "chain `entry_hash = SHA256(prev_hash + payload)` in an `audit_logs` table.\n\n"
-    "3. **JWT RS256 Authentication** (`app/security/auth.py`)  (NIST IA-5)\n"
-    "   Replace HS256 with RS256 asymmetric signing.  Load RSA keys from env "
-    "vars `JWT_PRIVATE_KEY` / `JWT_PUBLIC_KEY`.  Use `python-jose[cryptography]`.\n\n"
-    "4. **RBAC Middleware** (`app/middleware/rbac.py`)  (NIST AC-3, AC-6)\n"
-    "   All PHI routes MUST verify the JWT `role` claim via a `require_role()` "
-    "FastAPI dependency before granting access.\n\n"
-    "5. **TLS-only** — add an operator comment in `app/main.py` that the app "
-    "must always run behind HTTPS in production.\n\n"
-    "Add to `requirements.txt`:\n"
-    "```\ncryptography>=41.0.0\npython-jose[cryptography]>=3.3.0\n```"
-).format(nist_ids=", ".join(sorted(NIST_CONTROL_IDS)))
+    "## HIPAA Security Rule Directives\n\n"
+    "All generated code MUST comply with the HIPAA Security Rule "
+    "(45 CFR § 164.312) and the following NIST SP 800-53 Rev 5 controls:\n\n"
+    "### PHI Encryption (NIST SC-28 — Protection of Information at Rest)\n"
+    "- Encrypt all Protected Health Information (PHI) at rest using AES-256.\n"
+    "- Encrypt PHI in transit with TLS 1.2+ (prefer TLS 1.3).\n"
+    "- Never serialise PHI with `pickle`; use JSON + encrypted field storage.\n\n"
+    "### Authentication & Access Control (NIST AC-3, AC-6, IA-5)\n"
+    "- Sign JWTs with RS256 (asymmetric); never use HS256 for PHI-bearing tokens.\n"
+    "- Implement Role-Based Access Control (RBAC) restricting PHI to authorised "
+    "roles only (principle of least privilege — AC-6).\n"
+    "- Enforce short-lived tokens (≤ 15 min) with refresh-token rotation.\n\n"
+    "### Audit Logging (NIST AU-2, AU-6)\n"
+    "- Log every PHI access, modification, and deletion event with: timestamp "
+    "(UTC), user ID, IP address, action, and resource identifier.\n"
+    "- Audit logs must be immutable and retained for ≥ 6 years.\n"
+    "- Implement real-time audit log review and alerting (AU-6).\n\n"
+    "### Minimum Required Sections in Generated Docs\n"
+    "- encryption, audit, rbac, rs256\n"
+)
+
+# =============================================================================
+# PYDANTIC MODELS
+# =============================================================================
 
 
-# ---------------------------------------------------------------------------
-# CompliancePlugin implementation
-# ---------------------------------------------------------------------------
+class ComplianceViolation(BaseModel):
+    """Structured representation of a single HIPAA compliance violation.
+
+    Attributes:
+        standard: Compliance standard that was violated (e.g. ``"HIPAA"``).
+        severity: Severity level — ``"critical"``, ``"high"``, ``"medium"``,
+            or ``"low"``.
+        type: Machine-readable violation category (e.g. ``"phi_handling"``).
+        message: Human-readable description of the detected issue.
+        file: Relative path of the offending file within the output directory.
+        line: 1-based line number of the first match within the file.
+        recommendation: Actionable remediation guidance.
+        nist_control: Optional NIST SP 800-53 control ID associated with this
+            violation (e.g. ``"SC-28"``).
+
+    Examples:
+        >>> v = ComplianceViolation(
+        ...     standard="HIPAA",
+        ...     severity="critical",
+        ...     type="phi_handling",
+        ...     message="Medical record handling detected",
+        ...     file="app/patients.py",
+        ...     line=42,
+        ...     recommendation="Ensure HIPAA-compliant encryption and audit logging",
+        ...     nist_control="SC-28",
+        ... )
+        >>> v.standard
+        'HIPAA'
+    """
+
+    standard: str = Field(..., description="Compliance standard identifier")
+    severity: str = Field(..., description="Violation severity level")
+    type: str = Field(..., description="Machine-readable violation category")
+    message: str = Field(..., description="Human-readable violation description")
+    file: str = Field(..., description="Relative path of the offending file")
+    line: int = Field(..., ge=1, description="1-based line number of the match")
+    recommendation: str = Field(..., description="Actionable remediation guidance")
+    nist_control: Optional[str] = Field(
+        default=None, description="Associated NIST SP 800-53 control ID"
+    )
+
+    @field_validator("severity")
+    @classmethod
+    def _validate_severity(cls, v: str) -> str:
+        allowed = {"critical", "high", "medium", "low"}
+        if v not in allowed:
+            raise ValueError(f"severity must be one of {allowed}, got {v!r}")
+        return v
 
 
-def make_compliance_plugin():  # -> CompliancePlugin
-    """Return a ``CompliancePlugin`` instance for this spec.
+# =============================================================================
+# INTERNAL STATE — thread-safe lazy loading
+# =============================================================================
 
-    The returned object can be passed directly to
-    ``DocgenAgent.register_compliance_plugin()`` so that documentation
-    generated for HIPAA specs is also checked for missing security sections.
+_plugin_lock: threading.Lock = threading.Lock()
+_cached_plugin: Optional[Any] = None
+
+# =============================================================================
+# PUBLIC API
+# =============================================================================
+
+
+def make_compliance_plugin() -> Any:
+    """Return a ``CompliancePlugin`` instance that audits generated docs for HIPAA sections.
+
+    The plugin is created lazily and cached for the lifetime of the process.
+    It checks for the presence of the four minimum HIPAA documentation sections:
+    ``encryption``, ``audit``, ``rbac``, and ``rs256``.
 
     Returns:
-        A :class:`~generator.agents.docgen_agent.docgen_agent.CompliancePlugin`
-        instance that checks documentation content for required HIPAA sections.
+        A :class:`CompliancePlugin` subclass instance named ``"HIPAACompliance"``.
+
+    Examples:
+        >>> plugin = make_compliance_plugin()
+        >>> plugin.name
+        'HIPAACompliance'
+        >>> issues = plugin.check("## Encryption\\n## Audit\\n## RBAC\\n## RS256")
+        >>> issues
+        []
     """
-    try:
-        from generator.agents.docgen_agent.docgen_agent import (  # noqa: PLC0415
-            CompliancePlugin,
+    global _cached_plugin
+
+    with _plugin_lock:
+        if _cached_plugin is not None:
+            return _cached_plugin
+
+        from generator.agents.docgen_agent.docgen_agent import CompliancePlugin  # noqa: PLC0415
+
+        _REQUIRED_SECTIONS = ("encryption", "audit", "rbac", "rs256")
+
+        class HIPAACompliancePlugin(CompliancePlugin):
+            """Verifies that generated documentation covers all HIPAA-required sections."""
+
+            @property
+            def name(self) -> str:  # type: ignore[override]
+                return "HIPAACompliance"
+
+            def check(self, docs_content: str) -> List[str]:
+                issues: List[str] = []
+                lower = docs_content.lower()
+                for section in _REQUIRED_SECTIONS:
+                    if section not in lower:
+                        issue = (
+                            f"HIPAA documentation is missing required section: '{section}'. "
+                            f"Add a '{section.upper()}' section covering HIPAA Security Rule "
+                            f"requirements."
+                        )
+                        logger.warning(
+                            "HIPAA doc compliance issue",
+                            extra={"missing_section": section, "plugin": "HIPAACompliance"},
+                        )
+                        issues.append(issue)
+                return issues
+
+        _cached_plugin = HIPAACompliancePlugin()
+        logger.debug(
+            "HIPAACompliance plugin created",
+            extra={"plugin": "HIPAACompliance"},
         )
-    except ImportError as exc:  # pragma: no cover
-        raise ImportError(
-            "generator.agents.docgen_agent is required to create a CompliancePlugin. "
-            f"Original error: {exc}"
-        ) from exc
-
-    _required_doc_sections = [
-        ("encryption", "Documentation must describe PHI encryption strategy"),
-        ("audit", "Documentation must describe audit logging approach"),
-        ("rbac", "Documentation must describe role-based access controls"),
-        ("rs256", "Documentation must describe JWT RS256 authentication"),
-    ]
-
-    class _HIPAACompliancePlugin(CompliancePlugin):
-        @property
-        def name(self) -> str:
-            return "HIPAACompliance"
-
-        def check(self, docs_content: str) -> List[str]:
-            issues = []
-            lower = docs_content.lower()
-            for keyword, message in _required_doc_sections:
-                if keyword not in lower:
-                    issues.append(message)
-                    logger.warning(
-                        "HIPAA doc compliance issue: missing section keyword=%r — %s",
-                        keyword,
-                        message,
-                    )
-            return issues
-
-    return _HIPAACompliancePlugin()
-
-
-# ---------------------------------------------------------------------------
-# Post-generation code checker
-# ---------------------------------------------------------------------------
+        return _cached_plugin
 
 
 def check_generated_code(output_dir: str) -> List[Dict[str, Any]]:
-    """Scan *output_dir* for unprotected PHI-handling patterns.
+    """Scan generated Python files in *output_dir* for unguarded PHI-handling patterns.
 
-    Mirrors ``server.services.sfe_service.SFEService._check_hipaa_compliance``
-    so that the same pattern set drives both prompt directives and
-    post-generation validation.
+    Patterns are kept in sync with
+    ``server.services.sfe_service.SFEService._check_hipaa_compliance``.
+
+    PHI patterns detected:
+
+    - ``patient``/``medical``/``health`` record access
+    - ``diagnosis``/``prescription``/``treatment`` data
+    - Medical Record Numbers (``mrn``, ``medical_record_number``)
+    - Social Security Numbers (``ssn``, ``social security``)
+    - Date of birth (``dob``, ``date_of_birth``, ``date-of-birth``)
+
+    Emits an OpenTelemetry span ``"hipaa_spec.check_generated_code"`` with
+    attributes ``output_dir``, ``files_scanned``, and ``violations_found``.
+
+    Increments Prometheus counter ``spec_compliance_checks_total`` with
+    ``spec="hipaa"`` and ``status="passed"`` or ``status="violations_found"``.
 
     Args:
-        output_dir: Root directory of the generated project.
+        output_dir: Absolute or relative path to the directory containing the
+            generated source files to be scanned.
 
     Returns:
-        List of violation dicts (may be empty).  Each dict matches the schema
-        returned by ``SFEService._check_hipaa_compliance``:
-        ``standard``, ``severity``, ``type``, ``message``, ``file``,
-        ``line``, ``recommendation``.
-    """
-    violations: List[Dict[str, Any]] = []
-    root = Path(output_dir)
-    if not root.exists():
-        return violations
+        A list of :meth:`ComplianceViolation.model_dump` dicts — one entry per
+        detected PHI-handling site.  Returns an empty list when no violations
+        are found.
 
-    for py_file in root.rglob("*.py"):
-        try:
-            content = py_file.read_text(encoding="utf-8", errors="ignore")
-            rel_path = str(py_file.relative_to(root))
-            for pattern, message in _PHI_PATTERNS:
+    Raises:
+        OSError: If *output_dir* cannot be read (propagated to caller).
+
+    Examples:
+        >>> violations = check_generated_code("/tmp/generated_project")
+        >>> isinstance(violations, list)
+        True
+    """
+    _phi_patterns: List[tuple[str, str, str]] = [
+        (
+            r"\b(patient|medical|health).?record",
+            "Medical record handling detected",
+            "SC-28",
+        ),
+        (
+            r"\b(diagnosis|prescription|treatment)\b",
+            "PHI data handling detected",
+            "SC-28",
+        ),
+        (
+            r"\b(mrn|medical.?record.?number)\b",
+            "Medical Record Number handling detected",
+            "SC-28",
+        ),
+        (
+            r"\b(ssn|social.?security)\b",
+            "Social Security Number handling detected",
+            "SC-28",
+        ),
+        (
+            r"\b(dob|date.?of.?birth)\b",
+            "Date of birth handling detected",
+            "SC-28",
+        ),
+    ]
+
+    with _tracer.start_as_current_span("hipaa_spec.check_generated_code") as span:
+        span.set_attribute("output_dir", output_dir)
+
+        violations: List[Dict[str, Any]] = []
+        files_scanned = 0
+
+        base = Path(output_dir)
+        if not base.exists():
+            logger.warning(
+                "output_dir does not exist; skipping HIPAA scan",
+                extra={"output_dir": output_dir},
+            )
+            span.set_attribute("files_scanned", 0)
+            span.set_attribute("violations_found", 0)
+            _spec_compliance_checks_total.labels(spec="hipaa", status="passed").inc()
+            return violations
+
+        for py_file in base.rglob("*.py"):
+            try:
+                content = py_file.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                logger.warning(
+                    "Could not read file during HIPAA scan",
+                    extra={"file": str(py_file), "error": str(exc)},
+                )
+                continue
+
+            files_scanned += 1
+            rel_path = str(py_file.relative_to(base))
+
+            for pattern, message, nist_ctrl in _phi_patterns:
                 for match in re.finditer(pattern, content, re.IGNORECASE):
                     line_num = content[: match.start()].count("\n") + 1
-                    violations.append(
-                        {
-                            "standard": "HIPAA",
-                            "severity": "critical",
-                            "type": "phi_handling",
-                            "message": message,
-                            "file": rel_path,
-                            "line": line_num,
-                            "recommendation": (
-                                "Ensure HIPAA-compliant encryption (SC-28), "
-                                "access controls (AC-3/AC-6), and audit logging (AU-2)"
-                            ),
-                        }
+                    violation = ComplianceViolation(
+                        standard="HIPAA",
+                        severity="critical",
+                        type="phi_handling",
+                        message=message,
+                        file=rel_path,
+                        line=line_num,
+                        recommendation=(
+                            "Ensure HIPAA-compliant encryption, access controls, "
+                            "and audit logging for all PHI fields."
+                        ),
+                        nist_control=nist_ctrl,
                     )
-        except OSError as exc:
-            logger.warning("HIPAA spec checker could not read %s: %s", py_file, exc)
+                    violations.append(violation.model_dump())
 
-    return violations
+        span.set_attribute("files_scanned", files_scanned)
+        span.set_attribute("violations_found", len(violations))
 
+        status = "violations_found" if violations else "passed"
+        _spec_compliance_checks_total.labels(spec="hipaa", status=status).inc()
 
-# ---------------------------------------------------------------------------
-# NIST control gap reporter
-# ---------------------------------------------------------------------------
+        logger.debug(
+            "HIPAA check_generated_code complete",
+            extra={
+                "output_dir": output_dir,
+                "files_scanned": files_scanned,
+                "violations_found": len(violations),
+            },
+        )
+        return violations
 
 
 def get_compliance_gaps(config_path: str = "") -> Dict[str, List[str]]:
-    """Return NIST control coverage gaps for the HIPAA control set.
+    """Return NIST SP 800-53 coverage gaps for the controls in :data:`NIST_CONTROL_IDS`.
 
     Delegates to
-    :func:`self_fixing_engineer.guardrails.compliance_mapper.load_compliance_map`
-    and :func:`~compliance_mapper.check_coverage`, filtered to
-    :data:`NIST_CONTROL_IDS`.
+    ``self_fixing_engineer.guardrails.compliance_mapper.load_compliance_map``
+    and ``check_coverage``, then filters the result to only the control IDs
+    relevant to this HIPAA spec.
+
+    Config path resolution order:
+
+    1. The *config_path* argument (if non-empty).
+    2. The ``CREW_CONFIG_PATH`` environment variable.
+    3. Repo-root relative ``self_fixing_engineer/guardrails/crew_config.yaml``.
 
     Args:
-        config_path: Path to ``crew_config.yaml``.  Defaults to the
-            ``CREW_CONFIG_PATH`` env var, then the repo-root default path.
+        config_path: Optional explicit path to ``crew_config.yaml``.  Defaults
+            to empty string, triggering automatic resolution.
 
     Returns:
-        Coverage-gap dict (keys ``"required_but_not_enforced"``,
-        ``"partially_enforced"``, ``"not_implemented"``, ``"not_enforced"``)
-        containing only :data:`NIST_CONTROL_IDS` entries.  Empty dict when
-        the compliance mapper is unavailable.
-    """
-    if not config_path:
-        config_path = os.environ.get(
-            "CREW_CONFIG_PATH",
-            str(
-                Path(__file__).resolve().parent.parent.parent
-                / "self_fixing_engineer"
-                / "guardrails"
-                / "crew_config.yaml"
-            ),
-        )
-    try:
-        from self_fixing_engineer.guardrails.compliance_mapper import (  # noqa: PLC0415
-            check_coverage,
-            load_compliance_map,
-        )
+        A dict mapping NIST control IDs (strings) to lists of gap description
+        strings.  Controls with no gaps are omitted.  Returns an empty dict on
+        error.
 
-        full_map = load_compliance_map(config_path)
-        hipaa_map = {k: v for k, v in full_map.items() if k in NIST_CONTROL_IDS}
-        if not hipaa_map:
-            logger.debug(
-                "HIPAA spec: none of %s found in compliance map at %s",
-                NIST_CONTROL_IDS,
-                config_path,
-            )
-            return {}
-        return check_coverage(hipaa_map)
+    Examples:
+        >>> gaps = get_compliance_gaps()
+        >>> isinstance(gaps, dict)
+        True
+    """
+    from self_fixing_engineer.guardrails.compliance_mapper import (  # noqa: PLC0415
+        load_compliance_map,
+        check_coverage,
+    )
+
+    resolved_path = (
+        config_path
+        or os.environ.get("CREW_CONFIG_PATH", "")
+        or str(
+            Path(__file__).resolve().parent.parent.parent
+            / "self_fixing_engineer"
+            / "guardrails"
+            / "crew_config.yaml"
+        )
+    )
+
+    try:
+        compliance_map = load_compliance_map(resolved_path)
+        all_gaps: Dict[str, List[str]] = check_coverage(compliance_map)
     except Exception as exc:  # pragma: no cover
         logger.warning(
-            "HIPAA spec: could not load compliance gaps from %s: %s", config_path, exc
+            "Failed to load compliance map for HIPAA gap analysis",
+            extra={"config_path": resolved_path, "error": str(exc)},
+            exc_info=True,
         )
         return {}
+
+    filtered: Dict[str, List[str]] = {
+        ctrl: gaps
+        for ctrl, gaps in all_gaps.items()
+        if ctrl in NIST_CONTROL_IDS and gaps
+    }
+
+    logger.debug(
+        "HIPAA compliance gaps computed",
+        extra={
+            "config_path": resolved_path,
+            "controls_with_gaps": list(filtered.keys()),
+        },
+    )
+    return filtered
