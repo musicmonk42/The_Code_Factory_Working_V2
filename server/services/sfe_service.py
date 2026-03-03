@@ -1849,7 +1849,7 @@ class SFEService:
         if not file_path.is_absolute():
             file_path = file_path.resolve()
 
-        logger.info(f"Generating fix for {error_type} at {file_path}:{line}")
+        logger.info("Generating fix for %s at %s:%s", error_type, file_path, line)
 
         # Read source context
         source_context = self._read_source_context(file_path, line)
