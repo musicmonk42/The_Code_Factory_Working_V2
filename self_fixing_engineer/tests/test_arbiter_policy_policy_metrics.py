@@ -198,9 +198,12 @@ def test_metrics_thread_safety():
 
 
 def test_prometheus_scrape_for_all_metrics(mock_config):
-    # First, ensure the metrics are actually created
+    # First, ensure the metrics are actually created and registered
+    # by using them and checking if they exist in the registry
+    from prometheus_client import REGISTRY
 
-    # Force registration by using the metrics
+    # Force metrics to be registered if they aren't already
+    # by accessing them from the metrics module
     policy_decision_total.labels(
         allowed="true", domain="test", user_type="user", reason_code="test"
     ).inc()
@@ -228,10 +231,15 @@ def test_prometheus_scrape_for_all_metrics(mock_config):
     print(f"Found metrics: {sorted(names)}")
 
     # Check for core metrics - using actual names from metrics.py
-    assert "policy_decisions_total" in names or "policy_decisions" in names
-    assert "policy_file_reloads_total" in names or "policy_file_reloads" in names
-    assert "policy_last_reload_timestamp_seconds" in names
-    assert "llm_policy_call_latency_seconds" in names
+    # The metric might be registered without _total suffix or with it
+    assert "policy_decisions_total" in names or "policy_decisions" in names, \
+        f"policy_decisions metric not found. Available metrics: {sorted(names)}"
+    assert "policy_file_reloads_total" in names or "policy_file_reloads" in names, \
+        f"policy_file_reloads metric not found. Available metrics: {sorted(names)}"
+    assert "policy_last_reload_timestamp_seconds" in names, \
+        f"policy_last_reload_timestamp_seconds not found. Available metrics: {sorted(names)}"
+    assert "llm_policy_call_latency_seconds" in names, \
+        f"llm_policy_call_latency_seconds not found. Available metrics: {sorted(names)}"
 
 
 ########## Edge Cases: Duplicate Registration, Bad Buckets ##########

@@ -213,6 +213,12 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
 
         # Test 6: Check metrics were updated (using prometheus_client)
         from prometheus_client import REGISTRY
+        from self_fixing_engineer.arbiter.policy import metrics as policy_metrics
+
+        # Ensure metrics are registered by accessing them
+        # This forces module initialization if not already done
+        _ = policy_metrics.policy_decision_total
+        _ = policy_metrics.policy_file_reload_count
 
         # Check that expected metrics exist
         metric_names = REGISTRY._names_to_collectors
@@ -221,7 +227,7 @@ async def test_end_to_end_policy_lifecycle(monkeypatch, tmp_path, mock_config):
         for metric_name in expected_metrics:
             assert (
                 metric_name in metric_names
-            ), f"Expected metric '{metric_name}' not found in registry"
+            ), f"Expected metric '{metric_name}' not found in registry. Found: {list(metric_names.keys())}"
 
     # Cleanup
     await reset_policy_engine()
