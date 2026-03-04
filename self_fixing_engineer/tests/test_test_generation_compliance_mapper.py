@@ -1,5 +1,6 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+import builtins as _builtins
 import json
 import os
 import tempfile
@@ -12,6 +13,7 @@ from test_generation.orchestrator.orchestrator import (  # Fix: Import from the 
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(60)
 async def test_e2e_pipeline_full_success():
     """
     Full end-to-end pipeline success test for the orchestrator.
@@ -66,6 +68,23 @@ async def test_e2e_pipeline_full_success():
                 )
 
             # ----- Patch external dependencies -----
+            _real_open = _builtins.open
+            _real_exists = os.path.exists
+
+            def _selective_open(path, *args, **kwargs):
+                """Only mock reads of generated test files; pass through for config/real files."""
+                path_str = str(path)
+                if "_test.py" in path_str or "my_module_test" in path_str:
+                    return mock_open(read_data=test_code)()
+                return _real_open(path, *args, **kwargs)
+
+            def _selective_exists(path):
+                """Only mock existence of generated test paths; pass through for real paths."""
+                path_str = str(path)
+                if "my_module_test" in path_str or "output/" in path_str:
+                    return True
+                return _real_exists(path)
+
             with (
                 patch(
                     "self_fixing_engineer.test_generation.utils.monitor_and_prioritize_uncovered_code",
@@ -112,8 +131,8 @@ async def test_e2e_pipeline_full_success():
                 patch(
                     "self_fixing_engineer.test_generation.orchestrator.audit.AuditLogger"  # Fix: Corrected mock path
                 ) as mock_audit_logger_class,
-                patch("builtins.open", mock_open(read_data=test_code)) as mock_file,
-                patch("os.path.exists", return_value=True) as mock_exists,
+                patch("builtins.open", side_effect=_selective_open) as mock_file,
+                patch("os.path.exists", side_effect=_selective_exists) as mock_exists,
             ):
 
                 # Mock backend behavior
