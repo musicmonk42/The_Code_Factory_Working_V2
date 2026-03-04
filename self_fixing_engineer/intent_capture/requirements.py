@@ -25,6 +25,7 @@ __version__ = "1.2.0"
 import asyncio  # For async DB ops and ML model loading
 import atexit  # For resource cleanup on shutdown
 import datetime
+import inspect
 import io
 import json
 import logging
@@ -1291,21 +1292,24 @@ def shutdown_cleanup():
             logger.info("Closing Redis connections.")
             redis_url = os.environ.get("REDIS_URL", "redis://localhost:6379/0")
             r = redis.Redis.from_url(redis_url)
-            
-            # FIX: Safe async cleanup with fallbacks
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(r.close())
-            except RuntimeError:
-                # No running loop - try to create one
+
+            # Prefer aclose() (async, non-deprecated); fall back to close().
+            # Only use asyncio machinery when the result is actually awaitable.
+            _close_fn = getattr(r, "aclose", None) or getattr(r, "close", None)
+            if _close_fn is not None:
                 try:
-                    asyncio.run(r.close())
-                except RuntimeError:
-                    # Event loop creation failed - use sync fallback
-                    try:
-                        r.close(close_connection_pool=True)
-                    except Exception:
-                        pass  # Best effort at exit
+                    _result = _close_fn()
+                    if inspect.isawaitable(_result):
+                        try:
+                            loop = asyncio.get_running_loop()
+                            loop.create_task(_result)
+                        except RuntimeError:
+                            try:
+                                asyncio.run(_result)
+                            except Exception:
+                                pass
+                except Exception:
+                    pass
         except Exception as e:
             try:
                 logger.error(f"Error while closing Redis connections: {e}", exc_info=True)

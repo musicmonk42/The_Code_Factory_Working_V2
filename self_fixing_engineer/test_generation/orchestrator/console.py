@@ -311,6 +311,10 @@ def fallback_to_basic_logging() -> None:
     root = logging.getLogger()
     if not root.handlers:
         logging.basicConfig(level=logging.INFO, stream=sys.stderr)
+    else:
+        # Ensure the root logger passes INFO records even when handlers already exist
+        if root.level == logging.NOTSET or root.level > logging.INFO:
+            root.setLevel(logging.INFO)
 
     # Set up a custom LogRecordFactory for consistent message formatting
     orig_factory = logging.getLogRecordFactory()
@@ -406,7 +410,7 @@ def log_progress_bars(title: str, tasks: List[Tuple[str, int]]):
             with p as real_progress:
                 task_map = {}
                 for name, total in tasks:
-                    task_id = real_progress.add_task(description=name, total=total)
+                    task_id = real_progress.add_task(name, total=total, description=title)
                     task_map[name] = _ProgressTask(real_progress, task_id)
                 yield task_map
                 return
