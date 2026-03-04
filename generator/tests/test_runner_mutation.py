@@ -412,16 +412,10 @@ async def test_run_subprocess_safe_timeout(
         return FakeProcess()
 
     async def fake_wait_for(coro, timeout):
-        # Simulate timeout by starting the coroutine then cancelling it
-        # This mimics the real wait_for behavior more accurately
-        task = asyncio.create_task(coro)
-        try:
-            # Immediately cancel the task to simulate timeout
-            task.cancel()
-            await task
-        except asyncio.CancelledError:
-            # Convert to TimeoutError as real wait_for does
-            raise asyncio.TimeoutError()
+        # Properly close the coroutine to avoid "coroutine was never awaited" warning
+        if hasattr(coro, 'close'):
+            coro.close()
+        raise asyncio.TimeoutError()
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
