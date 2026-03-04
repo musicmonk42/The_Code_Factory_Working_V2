@@ -1171,8 +1171,23 @@ class CodeChangeHandler(FileSystemEventHandler):
 async def batch_process(semaphore: asyncio.Semaphore) -> None:
     """Process all files in watch folder."""
     if lock_file.exists():
-        logger.info("Batch processing skipped: lock file exists.")
-        return
+        lock_timeout_minutes = int(os.environ.get("BATCH_LOCK_TIMEOUT_MINUTES", "30"))
+        try:
+            lock_age = datetime.now(timezone.utc) - datetime.fromtimestamp(
+                lock_file.stat().st_mtime, tz=timezone.utc
+            )
+            if lock_age > timedelta(minutes=lock_timeout_minutes):
+                logger.warning(
+                    f"Stale lock file detected (age: {lock_age}, timeout: {lock_timeout_minutes}m). "
+                    "Removing stale lock and continuing."
+                )
+                lock_file.unlink(missing_ok=True)
+            else:
+                logger.info("Batch processing skipped: lock file exists.")
+                return
+        except Exception as e:
+            logger.warning(f"Could not check lock file age: {e}. Skipping batch.")
+            return
 
     try:
         async with aiofiles.open(lock_file, "w") as f:
@@ -1326,9 +1341,33 @@ async def start_watch(config_path: Optional[str] = None) -> None:
         scheduler.start()
         logger.info(f"Scheduled batch processing: {config.watch.batch_schedule}")
 
+    batch_task = None
+    _batch_shutdown = asyncio.Event()
+
     if config.watch.batch_mode:
-        semaphore = asyncio.Semaphore(10)
-        await batch_process(semaphore)
+        batch_semaphore = asyncio.Semaphore(10)
+        batch_interval = int(os.environ.get("BATCH_INTERVAL_SECONDS", "60"))
+
+        async def _batch_loop() -> None:
+            while not _batch_shutdown.is_set():
+                has_files = any(
+                    is_valid_file(os.path.join(root, file))
+                    for root, _, files in os.walk(config.watch.folder)
+                    for file in files
+                )
+                if not has_files:
+                    logger.info("Batch loop: no valid files found, stopping loop.")
+                    break
+                await batch_process(batch_semaphore)
+                logger.info(
+                    f"Batch loop: sleeping {batch_interval}s before next iteration."
+                )
+                try:
+                    await asyncio.wait_for(_batch_shutdown.wait(), timeout=batch_interval)
+                except asyncio.TimeoutError:
+                    pass
+
+        batch_task = asyncio.create_task(_batch_loop())
 
     semaphore = asyncio.Semaphore(10)
     event_handler = CodeChangeHandler(semaphore)
@@ -1344,7 +1383,14 @@ async def start_watch(config_path: Optional[str] = None) -> None:
             await asyncio.sleep(1)
     except KeyboardInterrupt:
         logger.info("Stopping observer...")
+        _batch_shutdown.set()
     finally:
+        if batch_task:
+            batch_task.cancel()
+            try:
+                await batch_task
+            except asyncio.CancelledError:
+                pass
         observer.stop()
         if scheduler:
             scheduler.shutdown()
