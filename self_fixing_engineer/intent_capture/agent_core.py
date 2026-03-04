@@ -144,10 +144,14 @@ except ImportError:
 # --- Redis for State Management ---
 try:
     import redis.asyncio as aredis
+    import redis.exceptions as _redis_exceptions
 
+    _REDIS_ERROR = _redis_exceptions.RedisError
     REDIS_AVAILABLE = True
 except ImportError:
     aredis = None
+    _redis_exceptions = None
+    _REDIS_ERROR = Exception
     REDIS_AVAILABLE = False
 
 # --- Observability Setup ---
@@ -327,7 +331,7 @@ class LLMProviderFactory:
                 bad_keys = await redis_client.smembers(f"bad_keys:{provider}")
                 await redis_client.close()
                 return [k for k in keys if k and k not in bad_keys]
-            except aredis.RedisError as e:
+            except _REDIS_ERROR as e:
                 logger.warning(f"Redis fetch for bad keys failed: {e}")
         return keys
 
@@ -419,7 +423,7 @@ class RedisStateBackend(StateBackend):
             )
             await client.ping()
             return cls(client)
-        except (aredis.RedisError, ConnectionRefusedError) as e:
+        except (_REDIS_ERROR, ConnectionRefusedError) as e:
             raise StateManagementError(f"Failed to connect to Redis: {e}")
 
     async def load_state(self, session_id: str) -> Optional[Dict[str, Any]]:
@@ -755,7 +759,7 @@ async def validate_session_token(token: str) -> Dict[str, Any]:
             if await redis_client.sismember("jwt_blocklist", token):
                 raise InvalidSessionError("Token has been revoked.")
             await redis_client.close()
-        except aredis.RedisError as e:
+        except _REDIS_ERROR as e:
             logger.error(f"Redis error during token revocation check: {e}")
             raise StateManagementError("Cannot verify token status.")
 

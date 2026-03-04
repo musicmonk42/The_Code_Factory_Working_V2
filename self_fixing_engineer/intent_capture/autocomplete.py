@@ -597,7 +597,11 @@ def setup_autocomplete(llm: Optional[BaseLanguageModel] = None):
         if os.getenv("USE_VAULT", "false").lower() == "true":
             asyncio.create_task(refresh_key_loop())
 
-    asyncio.run(_async_setup())
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_async_setup())
+    except RuntimeError:
+        asyncio.run(_async_setup())
 
 
 def prune_history():

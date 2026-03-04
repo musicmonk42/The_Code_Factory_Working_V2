@@ -154,7 +154,11 @@ class FileManager:
     def __init__(self, workspace: str = WORKSPACE_DIR):
         self.workspace = os.path.abspath(workspace)
         if not os.path.isdir(self.workspace):
-            os.makedirs(self.workspace, exist_ok=True)
+            try:
+                os.makedirs(self.workspace, exist_ok=True)
+            except PermissionError:
+                import tempfile
+                self.workspace = tempfile.mkdtemp()
 
     def validate_path(self, path: str) -> str:
         """Validates a path is within the workspace and resolves symlinks to prevent traversal."""
@@ -610,7 +614,13 @@ def startup_validation():
         missing.append("PROVENANCE_SALT")
     if REDIS_AVAILABLE and not os.getenv("REDIS_URL"):
         missing.append("REDIS_URL")
-    if OTEL_AVAILABLE and not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    telemetry_disabled = (
+        os.getenv("OTEL_SDK_DISABLED", "").lower() in ("1", "true")
+        or os.getenv("DISABLE_TELEMETRY", "").lower() in ("1", "true")
+        or os.getenv("NO_MONITORING", "").lower() in ("1", "true")
+        or os.getenv("OTEL_TRACES_EXPORTER", "") == "none"
+    )
+    if OTEL_AVAILABLE and not telemetry_disabled and not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
         missing.append("OTEL_EXPORTER_OTLP_ENDPOINT")
     if missing:
         raise RuntimeError(f"Missing required configuration: {', '.join(missing)}")
