@@ -543,6 +543,10 @@ if "opentelemetry" in sys.modules:
             def add_event(self, name, attributes=None):
                 self.events.append({"name": name, "attributes": attributes or {}})
                 
+            def is_recording(self):
+                """Simulates a non-recording span for testing purposes (returns False)."""
+                return False
+
             def set_status(self, status):
                 self.status = status
                 

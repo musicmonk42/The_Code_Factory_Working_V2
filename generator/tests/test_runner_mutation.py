@@ -337,7 +337,7 @@ async def test_property_based_test_success_no_fuzz_functions(
 
     # Add patch for importlib.reload to prevent ModuleNotFoundError
     with (
-        patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
+        patch("generator.runner.runner_mutation.HAS_HYPOTHESIS", True),
         patch.object(runner_mutation.importlib, "import_module", return_value=module),
         patch.object(runner_mutation.importlib, "reload", return_value=module),
     ):
@@ -480,7 +480,7 @@ async def test_full_pipeline(
 
     # Add patch for importlib.reload
     with (
-        patch("runner.runner_mutation.HAS_HYPOTHESIS", True),
+        patch("generator.runner.runner_mutation.HAS_HYPOTHESIS", True),
         patch.object(runner_mutation.importlib, "import_module", return_value=pb_module),
         patch.object(runner_mutation.importlib, "reload", return_value=pb_module),
     ):
