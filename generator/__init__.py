@@ -55,6 +55,11 @@ try:
 except ImportError:
     pass
 
+try:
+    from . import deterministic  # noqa: F401
+except ImportError:
+    pass
+
 # Expose commonly accessed submodules as attributes
-__all__ = ['runner', 'intent_parser', 'clarifier', 'agents', 'audit_log', 'main']
+__all__ = ['agents', 'audit_log', 'clarifier', 'deterministic', 'intent_parser', 'main', 'runner']
 

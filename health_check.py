@@ -104,8 +104,42 @@ def main():
         print_status("SFE main", False, str(e))
         all_passed = False
 
-    # Check 6: Optional dependencies
-    print_header("6. Optional Dependencies (Info Only)")
+    # Check 6: Deterministic Build Module
+    print_header("6. Deterministic Build Module")
+    try:
+        import generator.deterministic as _det_mod
+
+        _required_apis = (
+            "is_deterministic",
+            "get_deterministic_llm_params",
+            "normalize_content",
+            "deterministic_json_dumps",
+            "compute_content_hash",
+            "compute_plan_hash",
+            "sorted_rglob",
+            "deterministic_zip_create",
+            "write_build_plan",
+            "enforce_build_plan",
+            "BuildPlanMismatchError",
+            "DeterministicBuildError",
+        )
+        missing = [api for api in _required_apis if not hasattr(_det_mod, api)]
+        if missing:
+            raise AttributeError(f"Missing public APIs: {', '.join(missing)}")
+
+        det_active = _det_mod.is_deterministic()
+        print_status(
+            "generator.deterministic",
+            True,
+            f"{len(_required_apis)} public APIs verified — "
+            f"DETERMINISTIC={'1 (active)' if det_active else '0 (inactive)'}",
+        )
+    except Exception as e:
+        print_status("generator.deterministic", False, str(e))
+        all_passed = False
+
+    # Check 7: Optional dependencies
+    print_header("7. Optional Dependencies (Info Only)")
     optional_deps = {
         "fastapi_csrf_protect": "Web API CSRF protection",
         "httpx": "HTTP client for testing",

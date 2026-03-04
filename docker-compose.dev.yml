@@ -31,5 +31,7 @@ services:
       - LOG_LEVEL=DEBUG
       # Enable experimental evolution engine in development (safe — PRODUCTION_MODE is not set).
       - ENABLE_EXPERIMENTAL_EVOLUTION=true
+      # Deterministic build mode — set to 1 to verify reproducible build output locally.
+      - DETERMINISTIC=${DETERMINISTIC:-0}
 
 volumes: {}

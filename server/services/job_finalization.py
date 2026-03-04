@@ -641,8 +641,8 @@ async def _generate_output_manifest(
         file_count = 0
         max_files = 10000  # Safety limit to prevent memory exhaustion
         
-        # Recursively scan for all files with security validation
-        for file_path in job_dir.rglob('*'):
+        # Recursively scan for all files with security validation (sorted for stable ordering)
+        for file_path in sorted(job_dir.rglob('*'), key=lambda p: p.as_posix()):
             if file_count >= max_files:
                 logger.warning(
                     f"File limit reached for job {job_id}, stopping scan at {max_files} files",
@@ -723,15 +723,24 @@ async def _generate_output_manifest(
         # Sort files by path for consistent ordering
         files.sort(key=lambda f: f["path"])
         
-        manifest = {
+        manifest: Dict[str, Any] = {
             "job_id": job_id,
             "files": files,
             "total_files": len(files),
             "total_size": total_size,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "correlation_id": correlation_id,
             "directory": str(job_dir),
         }
+
+        # Omit dynamic fields in deterministic mode to ensure byte-identical manifests
+        try:
+            from generator.deterministic import is_deterministic as _is_det
+            _deterministic = _is_det()
+        except ImportError:
+            _deterministic = False
+
+        if not _deterministic:
+            manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
+            manifest["correlation_id"] = correlation_id
         
         logger.info(
             f"Generated manifest for job {job_id}: "

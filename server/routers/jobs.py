@@ -643,12 +643,16 @@ async def download_job_files(job_id: str):
     with tempfile.NamedTemporaryFile(mode='w+b', suffix='.zip', delete=False) as tmp_file:
         zip_path = tmp_file.name
 
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            # Add all files from job directory, excluding existing output zips to avoid nesting
-            for file_path in job_dir.rglob('*'):
-                if file_path.is_file() and not file_path.name.endswith('_output.zip'):
-                    arcname = file_path.relative_to(job_dir)
-                    zipf.write(file_path, arcname=arcname)
+        from generator.deterministic import deterministic_zip_create, is_deterministic, sorted_rglob
+        if is_deterministic():
+            deterministic_zip_create(zip_path, job_dir)
+        else:
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                # Add all files from job directory in sorted order, excluding existing output zips
+                for file_path in sorted_rglob(job_dir):
+                    if file_path.is_file() and not file_path.name.endswith('_output.zip'):
+                        arcname = file_path.relative_to(job_dir).as_posix()
+                        zipf.write(file_path, arcname=arcname)
 
         logger.info(f"Created ZIP archive for job {job_id}")
 
@@ -744,11 +748,15 @@ async def download_partial_results(
     with tempfile.NamedTemporaryFile(mode='w+b', suffix='.zip', delete=False) as tmp_file:
         zip_path = tmp_file.name
 
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
-            for file_path in job_dir.rglob('*'):
-                if file_path.is_file() and not file_path.name.endswith('_output.zip'):
-                    arcname = file_path.relative_to(job_dir)
-                    zipf.write(file_path, arcname=arcname)
+        from generator.deterministic import deterministic_zip_create, is_deterministic, sorted_rglob
+        if is_deterministic():
+            deterministic_zip_create(zip_path, job_dir)
+        else:
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file_path in sorted_rglob(job_dir):
+                    if file_path.is_file() and not file_path.name.endswith('_output.zip'):
+                        arcname = file_path.relative_to(job_dir).as_posix()
+                        zipf.write(file_path, arcname=arcname)
 
         logger.info(f"Created partial ZIP archive for job {job_id}")
 

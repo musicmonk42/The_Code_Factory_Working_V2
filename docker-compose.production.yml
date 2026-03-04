@@ -38,6 +38,10 @@ services:
       - APP_ENV=production
       - DEV_MODE=0
       - PRODUCTION_MODE=1
+      # Deterministic build mode — set to 1 to enforce byte-identical reproducible builds.
+      # Activates sorted ZIP entries, fixed timestamps, temperature=0 LLM calls, and
+      # build_plan.json enforcement.  Recommended when CI validates supply-chain integrity.
+      - DETERMINISTIC=${DETERMINISTIC:-0}
 
       # ============================================
       # CRITICAL: Security Configuration

@@ -37,6 +37,44 @@ from server.services.sfe_utils import (
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Stable JSON serialisation helper — wraps deterministic_json_dumps with a
+# fallback so this service degrades gracefully when the generator package is
+# unavailable.  Using sort_keys=True everywhere ensures report files are
+# byte-identical across runs irrespective of dict insertion order.
+# ---------------------------------------------------------------------------
+try:
+    from generator.deterministic import deterministic_json_dumps as _deterministic_json_dumps
+    _HAS_DET_JSON: bool = True
+except ImportError:
+    _HAS_DET_JSON = False
+    logger.debug(
+        "generator.deterministic not available — falling back to stdlib json.dumps "
+        "with sort_keys=True for SFE report serialisation",
+        extra={"module": __name__, "feature": "deterministic_json"},
+    )
+
+
+def _stable_json_dumps(obj: Any, indent: int = 2) -> str:
+    """Serialize *obj* to stable JSON for SFE report files.
+
+    Uses :func:`generator.deterministic.deterministic_json_dumps` when available,
+    otherwise falls back to ``json.dumps(..., sort_keys=True, ensure_ascii=False)``
+    so that report files have consistent, auditable key ordering in all
+    environments.
+
+    Args:
+        obj:    Any JSON-serialisable object.
+        indent: Indentation level (default: 2).
+
+    Returns:
+        Stable, sorted-key JSON string.
+    """
+    if _HAS_DET_JSON:
+        return _deterministic_json_dumps(obj, indent=indent)
+    return json.dumps(obj, indent=indent, sort_keys=True, ensure_ascii=False)
+
+
 # Maximum number of Python files to scan in deep_analyze_codebase() to avoid timeout
 MAX_DEEP_ANALYSIS_FILES = 200
 
@@ -735,9 +773,7 @@ class SFEService:
                 "source": "pytest_artifacts",
                 "generated_at": datetime.now(timezone.utc).isoformat(),
             }
-            report_path.write_text(
-                json.dumps(report_data, indent=2), encoding="utf-8"
-            )
+            report_path.write_text(_stable_json_dumps(report_data), encoding="utf-8")
             logger.info(
                 f"[SFE] Wrote analysis report with {len(issues)} issue(s) to {report_path}"
             )
@@ -1094,7 +1130,7 @@ class SFEService:
                         resolved_code_path = self._resolve_job_code_path(job_id, ".")
                         report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
                         report_path.parent.mkdir(parents=True, exist_ok=True)
-                        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                        report_path.write_text(_stable_json_dumps(result), encoding="utf-8")
                     except Exception as write_err:
                         logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                     return result
@@ -1174,7 +1210,7 @@ class SFEService:
                         resolved_code_path = self._resolve_job_code_path(job_id, ".")
                         report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
                         report_path.parent.mkdir(parents=True, exist_ok=True)
-                        report_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+                        report_path.write_text(_stable_json_dumps(result), encoding="utf-8")
                     except Exception as write_err:
                         logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                     return result
@@ -1210,7 +1246,7 @@ class SFEService:
                     resolved_code_path = self._resolve_job_code_path(job_id, ".")
                     report_path = Path(resolved_code_path) / "reports" / "sfe_analysis_report.json"
                     report_path.parent.mkdir(parents=True, exist_ok=True)
-                    report_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+                    report_path.write_text(_stable_json_dumps(data), encoding="utf-8")
                 except Exception as write_err:
                     logger.warning(f"[SFE] Could not write analysis report for job {job_id}: {write_err}")
                 return data
@@ -4017,7 +4053,7 @@ Example response:
                         )
                         sfe_report_path.parent.mkdir(parents=True, exist_ok=True)
                         sfe_report_path.write_text(
-                            json.dumps(result, indent=2), encoding="utf-8"
+                            _stable_json_dumps(result), encoding="utf-8"
                         )
                         logger.info(f"[SFE] Deep analysis report saved to {sfe_report_path}")
                     except Exception as write_err:
@@ -4791,7 +4827,7 @@ Example response:
         
         try:
             # Store configuration (without actual API key for security)
-            siem_config_path.write_text(json.dumps(config, indent=2))
+            siem_config_path.write_text(_stable_json_dumps(config))
             
             # Initialize SIEM monitoring (if applicable)
             if config.get("enabled"):

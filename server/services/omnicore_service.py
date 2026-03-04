@@ -25,7 +25,6 @@ import shutil
 import threading
 import time
 import yaml
-import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -9758,7 +9757,7 @@ class OmniCoreService:
                         # Don't fail job finalization if layout enforcement fails
                         logger.warning(f"[FINALIZE] Layout enforcement error for job {job_id}: {layout_err}")
                     
-                    artifacts = list(output_dir.rglob('*'))
+                    artifacts = list(sorted(output_dir.rglob('*'), key=lambda p: p.as_posix()))
                     # Exclude existing _output.zip files to avoid nested zips
                     artifact_files = [f for f in artifacts if f.is_file() and not f.name.endswith('_output.zip')]
                     
@@ -9771,7 +9770,7 @@ class OmniCoreService:
                         from server.services.job_finalization import apply_pending_fixes
                         await apply_pending_fixes(job_id)
                         # Re-scan artifacts after fixes may have modified files
-                        artifacts = list(output_dir.rglob('*'))
+                        artifacts = list(sorted(output_dir.rglob('*'), key=lambda p: p.as_posix()))
                         artifact_files = [f for f in artifacts if f.is_file() and not f.name.endswith('_output.zip')]
                         job.output_files = [f.name for f in artifact_files]
                     except Exception as _fix_err:
@@ -9840,29 +9839,28 @@ class OmniCoreService:
     ) -> None:
         """
         Bundle all outputs into single downloadable archive.
-        
+
+        Delegates to :func:`generator.deterministic.deterministic_zip_create` so
+        that the archive is always byte-stable (sorted entries, fixed timestamps,
+        POSIX arcnames) regardless of whether ``DETERMINISTIC=1`` is active.
+        The ``files`` argument is accepted for API compatibility but the actual
+        file enumeration is performed by ``deterministic_zip_create`` directly
+        from ``base_dir`` so that files written after the scan (e.g. by SFE fix
+        application) are automatically included.
+
         Args:
-            files: List of file paths to include in archive
-            zip_path: Path where ZIP file should be created
-            base_dir: Base directory for computing relative paths
+            files:    Pre-scanned file list (used for count logging only).
+            zip_path: Path where ZIP file should be created.
+            base_dir: Root directory for archive — all files under this
+                      directory are included (``_output.zip`` suffix excluded).
         """
         try:
-            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for file_path in files:
-                    try:
-                        # [FIX] Add error handling for path resolution in zip archive
-                        # Use relative path within archive
-                        try:
-                            arcname = file_path.resolve().relative_to(base_dir.resolve())
-                        except ValueError as e:
-                            logger.warning(f"[DOWNLOAD] File {file_path} is outside base_dir {base_dir}, using filename only. Error: {e}")
-                            arcname = file_path.name
-                        zf.write(file_path, arcname=arcname)
-                    except Exception as file_error:
-                        logger.warning(f"⚠ Failed to add {file_path} to archive: {file_error}")
-            
-            logger.info(f"✓ Created artifact archive at {zip_path} with {len(files)} files")
-            
+            from generator.deterministic import deterministic_zip_create
+            result = deterministic_zip_create(zip_path, base_dir)
+            logger.info(
+                f"✓ Created artifact archive at {zip_path} "
+                f"with {result.files_archived} file(s) in {result.elapsed_ms:.1f} ms"
+            )
         except Exception as e:
             logger.error(f"✗ Failed to create artifact ZIP: {e}", exc_info=True)
             # Don't raise - ZIP creation failure shouldn't fail the job

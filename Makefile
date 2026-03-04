@@ -13,7 +13,7 @@ SHELL := /bin/bash -o pipefail
 	docs docs-serve docs-clean \
 	validate-few-shot mutation-test codegen-multipass-status \
 	test-arbiter-policy test-arbiter-integration test-codegen-stubs test-pipeline-fixes \
-	test-evolution test-rl-integration \
+	test-evolution test-rl-integration test-deterministic test-deterministic-mode \
 	chaincode-build chaincode-test chaincode-vet chaincode-lint chaincode-coverage chaincode-clean
 
 # Default target
@@ -169,6 +169,18 @@ test-dlt: ## Run DLT backend tests (RB-5 EVM support, IB-1 checkpoint bridge, SE
 		FABRIC_NETWORK_PROFILE="/tmp/fabric-connection-profile.json" && \
 		pytest -k "dlt or checkpoint_manager or hmac or dlt_backend" -v --tb=short
 	@echo "$(GREEN)DLT backend tests complete!$(NC)"
+
+test-deterministic: ## Run deterministic build mode tests (byte-identical ZIP, build-plan enforcement, sorted rglob)
+	@echo "$(BLUE)Running deterministic build mode tests...$(NC)"
+	@export TESTING=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \
+		pytest tests/test_deterministic_build.py -v --tb=short
+	@echo "$(GREEN)Deterministic build mode tests complete!$(NC)"
+
+test-deterministic-mode: ## Run the full test suite with DETERMINISTIC=1 to validate reproducible-build gate
+	@echo "$(BLUE)Running full test suite under DETERMINISTIC=1...$(NC)"
+	@export TESTING=1 DETERMINISTIC=1 AWS_REGION="" FALLBACK_ENCRYPTION_KEY="dGVzdC1rZXktZm9yLXB5dGVzdC0zMi1ieXRlczEyMzQ=" && \
+		pytest -v --tb=short
+	@echo "$(GREEN)Deterministic mode full test run complete!$(NC)"
 
 test-coverage: ## Run tests with coverage report
 	@echo "$(BLUE)Running tests with coverage...$(NC)"

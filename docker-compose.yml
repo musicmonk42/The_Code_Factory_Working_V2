@@ -16,6 +16,10 @@ services:
       - APP_ENV=development
       - DEV_MODE=1
       - PRODUCTION_MODE=0
+      # Deterministic build mode — forces sorted ZIP entries, fixed timestamps,
+      # temperature=0 LLM calls, and build_plan.json enforcement.
+      # Set to 1 in CI pipelines that verify reproducible build output (SLSA L2).
+      - DETERMINISTIC=${DETERMINISTIC:-0}
 
       # Enterprise-grade startup optimization
       - APP_STARTUP=1
