@@ -405,12 +405,19 @@ class TestProjectEndpointAnalyzerMultiFile:
         assert ("POST", "/api/v1/patients/") in eps
 
     def test_no_include_router_returns_empty(self):
-        """Returns empty list when main.py has no include_router() calls."""
+        """When main.py has no include_router() calls, falls back to per-file local extraction.
+
+        The fallback scans router files and returns endpoints without prefix resolution
+        so that gap-fill passes are not fooled into thinking zero endpoints exist.
+        """
         files = {
             "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
             "app/routers/auth.py": "@router.post('/login')\ndef login(): pass\n",
         }
-        assert ProjectEndpointAnalyzer(files).get_endpoints() == []
+        endpoints = ProjectEndpointAnalyzer(files).get_endpoints()
+        # The fallback returns the local path without a prefix.
+        local_paths = {(e["method"], e["path"]) for e in endpoints}
+        assert ("POST", "/login") in local_paths
 
     def test_non_python_files_are_skipped(self):
         """Non-.py files do not contribute endpoints and do not raise."""
@@ -634,13 +641,16 @@ class TestProjectEndpointAnalyzerEdgeCases:
         assert eps == []
 
     def test_no_main_file_returns_empty(self):
-        """No main.py / app/main.py → no router prefixes → empty result."""
+        """No main.py / app/main.py → no router prefixes → falls back to per-file local extraction."""
         files = {
             "app/routers/auth.py": (
                 "@router.post('/login')\ndef login(): pass\n"
             )
         }
-        assert ProjectEndpointAnalyzer(files).get_endpoints() == []
+        endpoints = ProjectEndpointAnalyzer(files).get_endpoints()
+        # The fallback returns the local path without a prefix.
+        local_paths = {(e["method"], e["path"]) for e in endpoints}
+        assert ("POST", "/login") in local_paths
 
     def test_all_http_methods_resolved(self):
         """All HTTP methods are recognised as route decorators."""

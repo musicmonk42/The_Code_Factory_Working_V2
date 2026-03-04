@@ -1744,6 +1744,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 # Production-ready validation: reject files with raw SQL injections,
                 # stub pass-bodies, etc.  Mirrors the check in the JSON parsing path.
                 is_production_ready, prod_error = validate_production_ready(code_files)
+                _prod_stub_files: List[str] = []
                 if not is_production_ready:
                     logger.warning(
                         "Production-ready validation failed for dict-response path: %s",
@@ -1753,6 +1754,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     code_files[ERROR_FILENAME] = (
                         existing + ("\n\n" if existing else "") + prod_error
                     )
+                    # Collect stub file paths so _retry_stub_files can pick them up.
+                    _prod_stub_files = [
+                        fname for fname, content in code_files.items()
+                        if fname != ERROR_FILENAME and _detect_stub_patterns(content, fname)[0]
+                    ]
                 else:
                     logger.info(
                         "Production-ready validation passed for %d file(s) (dict-response path)",
@@ -1785,6 +1791,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     "files_failed": files_failed_count,
                     "rejection_rate": round(rejection_rate, 4),
                     "shadow_warnings": shadow_warnings,
+                    "stub_files_detected": _prod_stub_files,
                 })
                 return finalized
         elif all(isinstance(v, str) for v in response.values()) and any(
@@ -1900,6 +1907,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             if code_files:
                 # Perform production-ready validation
                 is_production_ready, prod_error = validate_production_ready(code_files)
+                _prod_stub_files: List[str] = []
                 if not is_production_ready:
                     logger.warning("Production-ready validation failed: %s", prod_error)
                     # Append to any pre-existing syntax errors rather than overwriting them.
@@ -1907,6 +1915,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     code_files[ERROR_FILENAME] = (
                         existing + ("\n\n" if existing else "") + prod_error
                     )
+                    # Collect stub file paths so _retry_stub_files can pick them up.
+                    _prod_stub_files = [
+                        fname for fname, content in code_files.items()
+                        if fname != ERROR_FILENAME and _detect_stub_patterns(content, fname)[0]
+                    ]
                 else:
                     logger.info("Production-ready validation passed for %d files", len(code_files))
 
@@ -1940,6 +1953,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     "files_failed": files_failed_count,
                     "rejection_rate": round(rejection_rate, 4),
                     "shadow_warnings": shadow_warnings,
+                    "stub_files_detected": _prod_stub_files,
                 })
                 return finalized
     except json.JSONDecodeError:
@@ -2023,6 +2037,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 if code_files:
                     # Perform production-ready validation
                     is_production_ready, prod_error = validate_production_ready(code_files)
+                    _prod_stub_files: List[str] = []
                     if not is_production_ready:
                         logger.warning("Production-ready validation failed for multi-file response")
                         # Append to any pre-existing syntax errors rather than overwriting them.
@@ -2030,7 +2045,12 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         code_files[ERROR_FILENAME] = (
                             existing + ("\n\n" if existing else "") + prod_error
                         )
-                    
+                        # Collect stub file paths so _retry_stub_files can pick them up.
+                        _prod_stub_files = [
+                            fname for fname, content in code_files.items()
+                            if fname != ERROR_FILENAME and _detect_stub_patterns(content, fname)[0]
+                        ]
+
                     log_action(
                         "Parsed Multi-File Response",
                         {
@@ -2072,6 +2092,7 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                         "files_failed": files_failed_count,
                         "rejection_rate": round(rejection_rate, 4),
                         "shadow_warnings": shadow_warnings,
+                        "stub_files_detected": _prod_stub_files,
                     })
                     return finalized
                 # If nothing usable, fall through to single-file handling.

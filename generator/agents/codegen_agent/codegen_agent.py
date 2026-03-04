@@ -1193,6 +1193,7 @@ async def _retry_stub_files(
     result = dict(merged_files)
 
     syntax_error_streak = 0
+    wrong_filename_streak = 0  # Tracks wrong-filename responses (separate from syntax errors)
     _explicit_filename_hint: str = ""  # Injected when LLM returns wrong filenames
     for attempt in range(_STUB_RETRY_MAX_ATTEMPTS):
         retry_hint = build_stub_retry_prompt_hint(result)
@@ -1400,23 +1401,62 @@ async def _retry_stub_files(
                         target,
                     )
 
-        if not matched_files:
-            syntax_error_streak += 1
-            # Only abort after 3 consecutive zero-match attempts (not 2), and only
-            # when the LLM has also not returned ANY valid files at all (i.e. only
-            # error.txt / __validation_summary__ were returned).  This prevents
-            # aborting when the LLM returned mostly-good code with one syntax issue.
-            _all_returned_are_errors = all(
-                p in ("error.txt", "__syntax_errors__", "__validation_summary__")
-                for p in new_files
-            )
-            if syntax_error_streak >= 3 and _all_returned_are_errors:
-                logger.warning(
-                    "[CODEGEN] _retry_stub_files: 3 consecutive all-error responses; aborting stub retry"
+        # Check __validation_summary__ for stub files that validate_production_ready
+        # detected in the LLM's response.  These are logged here so operators can
+        # correlate retry behaviour with validation output.  The existing
+        # _detect_stub_patterns scan (run at the top of each iteration) is the
+        # authoritative mechanism that adds these files to expected_paths on the
+        # next attempt; this block provides early-warning observability.
+        _vs_raw = new_files.get("__validation_summary__", "")
+        if _vs_raw:
+            try:
+                _additional_stubs: List[str] = (
+                    json.loads(_vs_raw).get("stub_files_detected") or []
                 )
-                break
+                if _additional_stubs:
+                    logger.info(
+                        "[CODEGEN] _retry_stub_files: validate_production_ready flagged "
+                        "%d stub file(s) in LLM response (will be retried next pass): %s",
+                        len(_additional_stubs),
+                        sorted(_additional_stubs),
+                    )
+            except (json.JSONDecodeError, TypeError, AttributeError):
+                pass
+
+        returned_paths = set(new_files.keys())
+        _no_match = bool(returned_paths) and not (returned_paths & expected_paths) and not matched_files
+
+        if not matched_files:
+            # Detect whether the LLM returned wrong filenames vs. actual syntax errors.
+            # These are two distinct failure modes and should be tracked separately so
+            # that filename mismatches don't burn through the syntax-error abort budget.
+            if _no_match:
+                # Wrong filenames — the _explicit_filename_hint mechanism below will
+                # prompt the LLM with the correct paths.  Do NOT increment
+                # syntax_error_streak here; doing so would conflate two failure modes
+                # and abort the retry loop prematurely.
+                wrong_filename_streak += 1
+                logger.debug(
+                    "[CODEGEN] _retry_stub_files: wrong_filename_streak=%d (filenames mismatch)",
+                    wrong_filename_streak,
+                )
+            else:
+                # Genuine syntax-error-only response (only error.txt / __validation_summary__
+                # returned, no matched code files).  This counts against the abort budget.
+                # Evaluate lazily — only on this code path where the result is needed.
+                _all_returned_are_errors = all(
+                    p in ("error.txt", "__syntax_errors__", "__validation_summary__")
+                    for p in new_files
+                )
+                syntax_error_streak += 1
+                if syntax_error_streak >= 3 and _all_returned_are_errors:
+                    logger.warning(
+                        "[CODEGEN] _retry_stub_files: 3 consecutive all-error responses; aborting stub retry"
+                    )
+                    break
         else:
             syntax_error_streak = 0
+            wrong_filename_streak = 0
 
         replaced = 0
         for path, content in matched_files.items():
@@ -1431,8 +1471,6 @@ async def _retry_stub_files(
                 result[path] = content
                 replaced += 1
 
-        returned_paths = set(new_files.keys())
-        _no_match = returned_paths and not (returned_paths & expected_paths) and not matched_files
         if _no_match:
             logger.warning(
                 "[CODEGEN] _retry_stub_files: attempt %d — LLM returned %d file(s) "
@@ -1650,6 +1688,10 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
                     f"async def update_{entity}(item_id: int):\n"
                     f'    """Update a {entity}."""\n'
                     f"    return {{}}\n\n\n"
+                    f"@{_router_var}.patch('/{{item_id}}')\n"
+                    f"async def patch_{entity}(item_id: int):\n"
+                    f'    """Partially update a {entity}."""\n'
+                    f"    return {{}}\n\n\n"
                     f"@{_router_var}.delete('/{{item_id}}')\n"
                     f"async def delete_{entity}(item_id: int):\n"
                     f'    """Delete a {entity}."""\n'
@@ -1661,6 +1703,11 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
                     router_path, path,
                 )
                 module = router_path.replace("/", ".").removesuffix(".py")
+                # Leave prefix="" so the main.py generation step (below) can apply
+                # the project-level /api/v1/ prefix via include_router(..., prefix=...)
+                # when detected.  Storing a non-empty prefix here would cause main.py
+                # to omit it from the include_router() call (to avoid double-prefixing),
+                # which would prevent ProjectEndpointAnalyzer from finding it.
                 router_modules.append({
                     "module": module,
                     "var": _router_var,
@@ -1932,13 +1979,14 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         {"health", "healthz", "readyz", "root", "index", "ws", "websocket"}
     )
     # Detect whether this project uses /api/v1/ paths (REST API heuristic).
-    # Scope the scan to router/route files and the existing main.py to avoid
-    # O(N) scans over non-code assets (templates, static files, etc.).
-    _API_V1_SCAN_RE = re.compile(r'^app/(?:routers?|routes?|main).*\.py$')
+    # Scan ALL Python files — not just router/main — because service and schema
+    # files often reference /api/v1/ paths before dedicated router files exist
+    # (e.g. when stub routers are auto-generated from app/services/*_service.py).
+    # Non-code assets (templates, static files) are excluded by the .py filter.
     _has_api_v1 = any(
         "/api/v1/" in content
         for path, content in updated.items()
-        if _API_V1_SCAN_RE.match(path)
+        if path.endswith(".py")
     )
     for rm in router_modules:
         if rm['prefix']:

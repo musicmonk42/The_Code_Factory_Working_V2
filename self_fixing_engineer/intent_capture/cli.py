@@ -373,12 +373,13 @@ def resource_guard():
     try:
         mem_percent = psutil.virtual_memory().percent
         CLI_RESOURCE_USAGE.labels(resource="memory").set(mem_percent)
-        if mem_percent > 95.0:
-            raise RuntimeError(f"Hard memory limit exceeded ({mem_percent:.1f}%).")
-        if mem_percent > 80.0:
-            logger.warning(f"Soft memory limit reached ({mem_percent:.1f}%).")
-    except psutil.Error as e:
+    except Exception as e:
         logger.warning(f"Could not read resource usage: {e}")
+        return
+    if mem_percent > 95.0:
+        raise RuntimeError(f"Hard memory limit exceeded ({mem_percent:.1f}%).")
+    if mem_percent > 80.0:
+        logger.warning(f"Soft memory limit reached ({mem_percent:.1f}%).")
 
 
 # PRESERVED: CommandDispatcher with all mapped handlers
@@ -615,7 +616,7 @@ async def main_cli_loop():
         )
     except ImportError:
 
-        def get_or_create_agent(*a, **k):
+        async def get_or_create_agent(*a, **k):
             class Dummy:
                 memory = {}
 

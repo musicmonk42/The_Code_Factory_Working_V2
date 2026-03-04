@@ -201,6 +201,14 @@ def test_analyzer_stack_end_to_end(tmp_path, monkeypatch):
             if analyzer.__package__
             else importlib.import_module("core_audit")
         )
+        # Primary: patch audit_logger.log_event to capture events regardless of TESTING_MODE
+        if hasattr(core_audit, "audit_logger"):
+            monkeypatch.setattr(
+                core_audit.audit_logger,
+                "log_event",
+                lambda *a, **k: audit_sink.emit(*a, **k),
+                raising=False,
+            )
         if hasattr(core_audit, "emit_event"):
             monkeypatch.setattr(
                 core_audit,
