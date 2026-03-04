@@ -3,10 +3,25 @@
 import json
 import os
 import shutil
+import sys
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+# Import dashboard at module level to ensure all tests and fixtures share the
+# same module object.  With dual PYTHONPATH entries (workspace root +
+# self_fixing_engineer/) the module can end up registered under both
+# "self_fixing_engineer.simulation.dashboard" and "simulation.dashboard" as
+# *separate* objects.  A single module-level import pins the reference.
+from self_fixing_engineer.simulation import dashboard as _dashboard
+
+# Ensure the short alias (if it exists) points to the same module object so
+# that any internal ``from simulation.dashboard import …`` calls share state.
+_FULL_KEY = "self_fixing_engineer.simulation.dashboard"
+_SHORT_KEY = "simulation.dashboard"
+if _FULL_KEY in sys.modules:
+    sys.modules[_SHORT_KEY] = sys.modules[_FULL_KEY]
 
 
 # Mock Streamlit to prevent it from running the app during tests
@@ -57,14 +72,12 @@ def render_main_component(main):
         json.dump({"test_file": "session_1_tests", "status": "COMPLETED"}, f)
 
     # Patch Config class to use temporary directories
-    from self_fixing_engineer.simulation import dashboard
-
     with patch.object(
-        dashboard.Config, "PLUGINS_DIR", plugins_dir
+        _dashboard.Config, "PLUGINS_DIR", plugins_dir
     ), patch.object(
-        dashboard.Config, "RESULTS_DIR", results_dir
+        _dashboard.Config, "RESULTS_DIR", results_dir
     ), patch.object(
-        dashboard.Config, "CONFIG_DIR", configs_dir
+        _dashboard.Config, "CONFIG_DIR", configs_dir
     ):
         yield {"PLUGINS_DIR": plugins_dir, "RESULTS_DIR": results_dir, "CONFIG_DIR": configs_dir}
 
@@ -108,13 +121,11 @@ def test_load_plugin_dashboard_panels_cached(mock_plugin_and_result_dirs):
     Test that the caching function correctly discovers and loads plugins
     from the mock directory.
     """
-    from self_fixing_engineer.simulation import dashboard
+    _dashboard.load_plugin_dashboard_panels_cached()
 
-    dashboard.load_plugin_dashboard_panels_cached()
-
-    panels = dashboard.get_registered_dashboard_panels()
-    sidebar_components = dashboard.get_registered_sidebar_components()
-    main_components = dashboard.get_registered_main_components()
+    panels = _dashboard.get_registered_dashboard_panels()
+    sidebar_components = _dashboard.get_registered_sidebar_components()
+    main_components = _dashboard.get_registered_main_components()
 
     assert len(panels) == 1
     assert panels[0]["id"] == "my_panel"
@@ -135,11 +146,9 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
     with open(dangerous_plugin_path, "w") as f:
         f.write("def register_my_dashboard_panels(register_func): pass")
 
-    from self_fixing_engineer.simulation import dashboard
+    _dashboard.load_plugin_dashboard_panels_cached()
 
-    dashboard.load_plugin_dashboard_panels_cached()
-
-    panels = dashboard.get_registered_dashboard_panels()
+    panels = _dashboard.get_registered_dashboard_panels()
     assert (
         len(panels) == 1
     )  # The original plugin should still load, but 'os.py' should not
@@ -147,11 +156,9 @@ def test_load_plugin_dashboard_panels_cached_with_dangerous_name(
 
 def test_is_version_compatible():
     """Test the version compatibility check helper function."""
-    from self_fixing_engineer.simulation import dashboard
-
-    assert dashboard.is_version_compatible("1.1.0", "1.0.0", "2.0.0") is True
-    assert dashboard.is_version_compatible("0.9.0", "1.0.0", "2.0.0") is False
-    assert dashboard.is_version_compatible("2.1.0", "1.0.0", "2.0.0") is False
+    assert _dashboard.is_version_compatible("1.1.0", "1.0.0", "2.0.0") is True
+    assert _dashboard.is_version_compatible("0.9.0", "1.0.0", "2.0.0") is False
+    assert _dashboard.is_version_compatible("2.1.0", "1.0.0", "2.0.0") is False
 
 
 # ==============================================================================
@@ -163,8 +170,6 @@ def test_display_onboarding_wizard_config_generation(
     mock_streamlit, mock_plugin_and_result_dirs
 ):
     """Test that the onboarding wizard correctly generates config and plugins."""
-    from self_fixing_engineer.simulation import dashboard
-
     # Mock user input
     mock_streamlit.selectbox.side_effect = ["agentic_swarm", "redis", "fs"]
     mock_streamlit.multiselect.return_value = ["python"]
@@ -172,7 +177,7 @@ def test_display_onboarding_wizard_config_generation(
 
     # Mock `form_submit_button` to be True
     with patch.object(mock_streamlit, "form_submit_button", return_value=True):
-        dashboard.display_onboarding_wizard()
+        _dashboard.display_onboarding_wizard()
 
     # Check if config.json was created
     config_path = os.path.join(mock_plugin_and_result_dirs["CONFIG_DIR"], "config.json")
@@ -189,8 +194,6 @@ def test_display_onboarding_wizard_config_generation(
 @pytest.mark.asyncio
 async def test_run_health_checks_gui_success(mock_onboarding_backends):
     """Test that health checks pass successfully."""
-    from self_fixing_engineer.simulation import dashboard
-
     mock_config = {
         "notification_backend": {"type": "redis", "url": "redis://localhost:6379/0"},
         "checkpoint_backend": {"type": "fs", "dir": "./checkpoints"},
@@ -199,23 +202,21 @@ async def test_run_health_checks_gui_success(mock_onboarding_backends):
     # The async function is called via run_async_streamlit
     with patch("self_fixing_engineer.simulation.dashboard.st_dash") as mock_st_dash:
         mock_st_dash.session_state.plugin_manager_instance = MagicMock()
-        await dashboard._run_health_checks_gui(mock_config)
+        await _dashboard._run_health_checks_gui(mock_config)
 
         assert mock_st_dash.success.call_count == 2
 
 
 def test_sanitize_plugin_name():
     """Test the sanitize_plugin_name function for security."""
-    from self_fixing_engineer.simulation import dashboard
-
     with pytest.raises(ValueError, match="Path traversal"):
-        dashboard.sanitize_plugin_name("../etc/passwd")
+        _dashboard.sanitize_plugin_name("../etc/passwd")
 
-    sanitized = dashboard.sanitize_plugin_name("my-plugin_1.0")
+    sanitized = _dashboard.sanitize_plugin_name("my-plugin_1.0")
     assert sanitized == "my-plugin_10"
 
     with pytest.raises(ValueError, match="Dangerous plugin name detected"):
-        dashboard.sanitize_plugin_name("sys")
+        _dashboard.sanitize_plugin_name("sys")
 
 
 # ==============================================================================
@@ -225,9 +226,7 @@ def test_sanitize_plugin_name():
 
 def test_load_all_simulation_results(mock_plugin_and_result_dirs):
     """Test that results are loaded and sorted correctly."""
-    from self_fixing_engineer.simulation import dashboard
-
-    results = dashboard.load_all_simulation_results(
+    results = _dashboard.load_all_simulation_results(
         mock_plugin_and_result_dirs["RESULTS_DIR"]
     )
 
@@ -244,9 +243,7 @@ def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_di
     with open(invalid_json_path, "w") as f:
         f.write("{'key': 'invalid_json'")
 
-    from self_fixing_engineer.simulation import dashboard
-
-    results = dashboard.load_all_simulation_results(
+    results = _dashboard.load_all_simulation_results(
         mock_plugin_and_result_dirs["RESULTS_DIR"]
     )
     assert len(results) == 1  # Only the valid one should be loaded
@@ -259,18 +256,16 @@ def test_load_all_simulation_results_with_invalid_json(mock_plugin_and_result_di
 
 def test_translation_function(mock_streamlit):
     """Test the localization function `t` with different languages."""
-    from self_fixing_engineer.simulation import dashboard
-
     # Mock session state for language
     mock_streamlit.session_state["lang"] = "en"
-    assert dashboard.t("welcome_message") == "Welcome"
+    assert _dashboard.t("welcome_message") == "Welcome"
 
     mock_streamlit.session_state["lang"] = "es"
-    assert dashboard.t("welcome_message") == "Bienvenido"
+    assert _dashboard.t("welcome_message") == "Bienvenido"
 
     # Test fallback to default language
-    assert dashboard.t("non_existent_key") == "non_existent_key"
+    assert _dashboard.t("non_existent_key") == "non_existent_key"
 
     # Test fallback to key if not found in default language
     mock_streamlit.session_state["lang"] = "en"
-    assert dashboard.t("language_selector_label") == "Language"
+    assert _dashboard.t("language_selector_label") == "Language"
