@@ -2135,6 +2135,14 @@ async function applyFix(fixId, silent = false) {
             }
             return {ok: false, message: 'Fix was not applied'};
         }
+        // Invalidate the file count cache so the job card shows updated file counts
+        // after SFE fixes are applied.
+        if (fixData.applied || fixData.output_refreshed) {
+            const fix = currentFixesData.find(f => f.fix_id === fixId);
+            if (fix && fix.job_id) {
+                completedJobFilesCache.delete(fix.job_id);
+            }
+        }
         if (!silent) {
             const changesFailed = fixData.changes_failed || 0;
             if (changesFailed > 0) {

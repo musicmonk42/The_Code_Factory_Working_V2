@@ -492,7 +492,14 @@ async def apply_fix(
     - dry_run: Simulate application without making changes
 
     **Returns:**
-    - Application result
+    - Application result including:
+      - applied (bool): True when file changes were written to disk
+      - files_modified (list[str]): Paths of files that were modified
+      - changes_applied (int): Number of changes written to disk
+      - changes_failed (int): Number of changes that could not be applied
+      - output_refreshed (bool): True when job.output_files was re-scanned
+        after the fix was applied; callers should invalidate any client-side
+        file-count caches when this flag is True
 
     **Errors:**
     - 404: Fix not found
@@ -538,10 +545,13 @@ async def apply_fix(
 
     logger.info(f"Applied fix {fix_id} (dry_run={request.dry_run})")
 
+    response_data = dict(result)
+    response_data["output_refreshed"] = not request.dry_run and bool(result.get("applied"))
+
     return SuccessResponse(
         success=True,
         message=f"Fix {fix_id} {'simulated' if request.dry_run else 'applied'} successfully",
-        data=result,
+        data=response_data,
     )
 
 
