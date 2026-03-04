@@ -5110,6 +5110,12 @@ else:
                         defect_type = defect.get("type", "unknown")
                         try:
                             sfe = SFEService()
+                            # Register the defect so propose_fix can look it up.
+                            # A fresh SFEService instance has an empty
+                            # _errors_cache and the current defects are not yet
+                            # in any saved analysis-report file, so without this
+                            # step propose_fix would always raise 404.
+                            sfe.register_defect(error_id, defect, job_id)
                             proposal = await sfe.propose_fix(error_id)
                             fix_id = proposal.get("fix_id")
                             if not fix_id:
