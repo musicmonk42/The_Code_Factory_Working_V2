@@ -1664,44 +1664,85 @@ class SFEService:
             "confidence": 0.60,
         }
 
+    # Maximum number of rglob candidates to check during prefix-stripped path search
+    # to avoid unbounded traversal on large directory trees.
+    _RGLOB_CANDIDATE_LIMIT = 20
+
     def _resolve_fix_path(self, change_file: str, job_output_dir: Optional[Path]) -> Optional[Path]:
         """Resolve fix file path with multiple fallback strategies.
 
+        Path resolution is scoped to the job output directory wherever possible to
+        prevent accidental modification of files outside the job sandbox.
+
         Args:
-            change_file: File path string from the fix proposal
-            job_output_dir: Resolved job output directory, or None
+            change_file: File path string from the fix proposal (may be relative or
+                absolute to an in-container filesystem, e.g. /app/uploads/…).
+            job_output_dir: Resolved job output directory, or None.
 
         Returns:
-            Resolved Path if found, or None if resolution failed
+            Resolved Path if found, or None if resolution failed.
         """
-        # Strategy 1: Absolute path exists
+        # Strategy 1: Path exists as-is (absolute on the host, or relative to cwd).
+        # Only accept if it falls within job_output_dir to prevent path traversal.
         abs_path = Path(change_file)
         if abs_path.exists():
-            logger.debug(f"Path resolved (absolute): {abs_path}")
-            return abs_path
+            if job_output_dir is None:
+                logger.debug(f"Path resolved (absolute, no sandbox): {abs_path}")
+                return abs_path
+            try:
+                abs_path.resolve().relative_to(job_output_dir.resolve())
+                logger.debug(f"Path resolved (absolute, within sandbox): {abs_path}")
+                return abs_path
+            except ValueError:
+                # Path exists but is outside the job directory — refuse it.
+                logger.warning(
+                    f"Refusing path outside job sandbox: {abs_path} "
+                    f"(job_output_dir={job_output_dir})"
+                )
 
         if job_output_dir:
-            # Strategy 2: Relative to job output directory
-            rel_path = job_output_dir / change_file
+            # Normalise change_file to a relative form before joining with the
+            # job output directory so that an absolute change_file such as
+            # /app/uploads/job-id/app/routes.py cannot escape the sandbox.
+            relative_part = Path(change_file)
+            if relative_part.is_absolute():
+                # Strip the leading root (e.g. "/" or "C:\") to make it relative.
+                try:
+                    relative_part = relative_part.relative_to(relative_part.anchor)
+                except ValueError:
+                    relative_part = Path(relative_part.name)
+
+            # Strategy 2: Relative path joined with job output directory.
+            rel_path = job_output_dir / relative_part
             if rel_path.exists():
                 logger.debug(f"Path resolved (relative to output dir): {rel_path}")
                 return rel_path
 
-            # Strategy 3: Just the filename relative to job output dir
-            name_path = job_output_dir / Path(change_file).name
+            # Strategy 3: Filename-only search within job output directory.
+            name_path = job_output_dir / relative_part.name
             if name_path.exists():
                 logger.debug(f"Path resolved (filename in output dir): {name_path}")
                 return name_path
 
-            # Strategy 4: Strip common absolute prefixes and search within job output dir
+            # Strategy 4: Strip well-known deployment prefixes then rglob for the
+            # filename, capped to avoid performance issues on large trees.
             for prefix in ["/app/uploads/", "uploads/", "generated/"]:
                 if change_file.startswith(prefix):
-                    stripped = change_file[len(prefix):]
-                    # Try stripping job_id segment if present
-                    for candidate in job_output_dir.rglob(Path(stripped).name):
-                        if candidate.exists():
-                            logger.debug(f"Path resolved (stripped prefix '{prefix}'): {candidate}")
-                            return candidate
+                    stripped_name = Path(change_file[len(prefix):]).name
+                    candidates = (
+                        c for c in job_output_dir.rglob(stripped_name) if c.is_file()
+                    )
+                    for i, candidate in enumerate(candidates):
+                        if i >= self._RGLOB_CANDIDATE_LIMIT:
+                            logger.warning(
+                                f"rglob candidate limit ({self._RGLOB_CANDIDATE_LIMIT}) "
+                                f"reached searching for '{stripped_name}' in {job_output_dir}"
+                            )
+                            break
+                        logger.debug(
+                            f"Path resolved (stripped prefix '{prefix}'): {candidate}"
+                        )
+                        return candidate
 
         logger.warning(
             f"Could not resolve path: {change_file} "
@@ -1929,14 +1970,27 @@ class SFEService:
             try:
                 from generator.runner import call_llm_api
 
+                # Guard against sending excessively large files to the LLM.
+                # Limit to ~8 000 characters (≈ 2 000 tokens) which is enough
+                # context for most per-file fixes while staying well within limits.
+                _MAX_FILE_CONTENT_CHARS = 8_000
                 file_content = ""
                 if file_path and file_path.exists():
-                    file_content = file_path.read_text(encoding="utf-8")
+                    raw = file_path.read_text(encoding="utf-8")
+                    if len(raw) > _MAX_FILE_CONTENT_CHARS:
+                        file_content = (
+                            raw[:_MAX_FILE_CONTENT_CHARS]
+                            + f"\n# … (truncated at {_MAX_FILE_CONTENT_CHARS} chars)"
+                        )
+                    else:
+                        file_content = raw
 
-                # Detect language from file extension for a more accurate prompt
+                # Detect language from file extension for a more accurate prompt.
                 file_ext = file_path.suffix.lstrip(".") if file_path else "py"
-                lang = {"py": "Python", "js": "JavaScript", "ts": "TypeScript",
-                        "java": "Java", "go": "Go", "rb": "Ruby"}.get(file_ext, file_ext or "code")
+                lang = {
+                    "py": "Python", "js": "JavaScript", "ts": "TypeScript",
+                    "java": "Java", "go": "Go", "rb": "Ruby", "rs": "Rust",
+                }.get(file_ext, file_ext or "code")
 
                 fix_prompt = f"""You are a code fixer. Fix the following issue in a {lang} file.
 
@@ -1951,10 +2005,10 @@ Current file content:
 ```
 
 Return ONLY a JSON object with:
-- "action": "replace" or "insert" or "delete"
-- "line": the line number to modify
-- "content": the fixed code (for replace/insert)
-- "reasoning": brief explanation
+- "action": "replace", "insert", or "delete"
+- "line": the line number to modify (integer)
+- "content": the fixed code (for replace/insert); omit for delete
+- "reasoning": brief explanation of the fix
 
 Example response:
 {{"action": "replace", "line": 42, "content": "fixed_code_here", "reasoning": "Added missing import"}}
@@ -1971,18 +2025,42 @@ Example response:
                     fix_data = json.loads(raw_content)
                 except json.JSONDecodeError as _json_err:
                     raise ValueError(
-                        f"LLM returned invalid JSON: {_json_err}. Raw response: {raw_content[:200]}"
+                        f"LLM returned invalid JSON: {_json_err}. "
+                        f"Raw response (first 200 chars): {raw_content[:200]}"
                     ) from _json_err
+
+                # Validate that the LLM returned a recognised, safe action value.
+                _ALLOWED_ACTIONS = {"replace", "insert", "delete"}
+                llm_action = str(fix_data.get("action", "replace")).lower()
+                if llm_action not in _ALLOWED_ACTIONS:
+                    raise ValueError(
+                        f"LLM returned unsupported action '{llm_action}'. "
+                        f"Allowed values: {_ALLOWED_ACTIONS}"
+                    )
+
+                # Validate and coerce the line number to a positive integer.
+                try:
+                    llm_line = int(fix_data.get("line", line))
+                    if llm_line < 1:
+                        raise ValueError(f"line must be ≥ 1, got {llm_line}")
+                except (TypeError, ValueError) as _le:
+                    raise ValueError(f"LLM returned invalid line number: {_le}") from _le
+
                 fix_result = {
                     "success": True,
                     "content": fix_data.get("content", ""),
-                    "action": fix_data.get("action", "replace"),
-                    "line": fix_data.get("line", line),
+                    "action": llm_action,
+                    "line": llm_line,
                     "reasoning": fix_data.get("reasoning", f"LLM-generated fix for {error_type}"),
                 }
-                logger.info(f"LLM generated fix for {error_type} at {file_path_str}:{line}")
+                logger.info(
+                    "LLM generated fix for %s at %s:%s (action=%s)",
+                    error_type, file_path_str, llm_line, llm_action,
+                )
             except Exception as _llm_err:
-                logger.warning(f"LLM fix generation failed: {_llm_err}, falling back to info action")
+                logger.warning(
+                    "LLM fix generation failed: %s — falling back to info action", _llm_err
+                )
                 fix_result = {
                     "success": True,
                     "content": f"# Manual fix required for {error_type}: {message}",
@@ -2060,28 +2138,36 @@ Example response:
 
     async def apply_fix(self, fix_id: str, dry_run: bool = False) -> Dict[str, Any]:
         """
-        Apply a proposed fix with improved path resolution.
+        Apply a proposed fix to the filesystem.
 
         Args:
-            fix_id: Fix identifier
-            dry_run: If True, simulate without applying
+            fix_id: Fix identifier (must be present in fixes_db).
+            dry_run: When True the fix is simulated — paths are resolved and
+                     logged but no file is written or modified.
 
         Returns:
-            Application result
-
-        This method now:
-        1. Verifies resolved paths exist before writing
-        2. Logs actual paths modified for debugging
-        3. Handles the "info" action for non-code changes
-        4. Better error handling for path resolution failures
+            Dict with keys:
+              fix_id       – the fix identifier
+              applied      – True when changes were actually written (False for dry_run
+                             or when all changes failed)
+              dry_run      – mirrors the input flag
+              status       – "success" | "simulated" | "partial" | "error"
+              files_modified – list of file paths that were successfully written
+              changes_applied   – count of changes written to disk
+              changes_skipped   – count of info-only changes (no disk write)
+              changes_failed    – count of changes that could not be applied
         """
-        logger.info(f"Applying fix {fix_id} (dry_run={dry_run})")
+        import shutil
 
-        # Look up fix from fixes_db
+        logger.info("Applying fix %s (dry_run=%s)", fix_id, dry_run)
+
+        # ------------------------------------------------------------------ #
+        # Look up the fix record
+        # ------------------------------------------------------------------ #
         from server.storage import fixes_db
 
         if fix_id not in fixes_db:
-            logger.warning(f"Fix {fix_id} not found in fixes_db")
+            logger.warning("Fix %s not found in fixes_db", fix_id)
             return {
                 "fix_id": fix_id,
                 "applied": False,
@@ -2089,57 +2175,72 @@ Example response:
                 "status": "error",
                 "error": "Fix not found",
                 "files_modified": [],
+                "changes_applied": 0,
+                "changes_skipped": 0,
+                "changes_failed": 0,
             }
 
         fix = fixes_db[fix_id]
-        
-        # Allow fixes without job_id if file paths are absolute
+
+        # Require a job_id when proposed_changes contain relative paths.
         if not fix.job_id:
-            # Check if any file paths need job resolution
-            needs_job = any(not Path(change["file"]).is_absolute() for change in fix.proposed_changes)
+            needs_job = any(
+                not Path(change["file"]).is_absolute()
+                for change in fix.proposed_changes
+            )
             if needs_job:
                 return {
+                    "fix_id": fix_id,
+                    "applied": False,
+                    "dry_run": dry_run,
                     "status": "error",
                     "message": "Cannot apply fix: no job_id and paths are relative.",
-                    "files_modified": []
+                    "files_modified": [],
+                    "changes_applied": 0,
+                    "changes_skipped": 0,
+                    "changes_failed": 0,
                 }
-        
-        files_modified = []
+
+        files_modified: List[str] = []
+        applied_count = 0
+        skipped_count = 0
+        failed_count = 0
 
         try:
-            # Resolve job output directory if job_id is available
-            job_output_dir = None
+            # ---------------------------------------------------------------- #
+            # Resolve the job output directory once, up front
+            # ---------------------------------------------------------------- #
+            job_output_dir: Optional[Path] = None
             if fix.job_id:
                 resolved_path = self._resolve_job_code_path(fix.job_id, ".")
                 job_output_dir = Path(resolved_path)
-                logger.info(f"Resolved job output directory: {job_output_dir}")
+                logger.info("Resolved job output directory: %s", job_output_dir)
 
-            applied_count = 0
-            skipped_count = 0
-            failed_count = 0
-
-            # Apply each proposed change
+            # ---------------------------------------------------------------- #
+            # Iterate over every proposed change
+            # ---------------------------------------------------------------- #
             for change in fix.proposed_changes:
                 action = change.get("action", "insert")
 
-                # Handle "info" action (guidance only, no file modification)
+                # ---- Info-only: guidance, no file modification ---- #
                 if action == "info":
                     logger.warning(
-                        f"SKIPPED (info-only): Fix for "
-                        f"{change.get('file', '?')}:{change.get('line', '?')} - "
-                        f"no code change generated"
+                        "SKIPPED (info-only): Fix for %s:%s — no code change generated",
+                        change.get("file", "?"),
+                        change.get("line", "?"),
                     )
                     skipped_count += 1
                     continue
 
-                # Resolve file path using the helper with multiple strategies
+                # ---- Resolve the target file path ---- #
                 change_file = change["file"]
                 file_path = self._resolve_fix_path(change_file, job_output_dir)
 
                 if not file_path:
                     logger.warning(
-                        f"FAILED (path not found): Fix for {change_file}:{change.get('line', '?')} - "
-                        f"could not resolve path"
+                        "FAILED (path not found): Fix for %s:%s — could not resolve path",
+                        change_file,
+                        change.get("line", "?"),
                     )
                     failed_count += 1
                     continue
@@ -2147,157 +2248,217 @@ Example response:
                 content = change.get("content", "")
                 line = change.get("line", 1)
 
-                files_modified.append(str(file_path))
-
                 if dry_run:
-                    logger.info(f"[DRY RUN] Would {action} at {file_path}:{line}")
+                    logger.info(
+                        "[DRY RUN] Would %s at %s:%s", action, file_path, line
+                    )
+                    # Track what would be modified without writing
+                    files_modified.append(str(file_path))
                     continue
 
-                # Log the actual path being modified
-                logger.info(f"Modifying file: {file_path.absolute()}")
-
-                # Create backup before modifying
+                # ---- Create a backup before any write ---- #
+                logger.info("Modifying file: %s", file_path.absolute())
                 if file_path.exists():
-                    backup_path = Path(f"{file_path}.bak")
+                    backup_path = file_path.with_suffix(file_path.suffix + ".bak")
                     try:
-                        import shutil
                         shutil.copy2(file_path, backup_path)
-                        logger.info(f"Created backup at {backup_path}")
-                    except Exception as e:
-                        logger.warning(f"Could not create backup: {e}")
+                        logger.info("Created backup at %s", backup_path)
+                    except OSError as _bak_err:
+                        logger.warning("Could not create backup: %s", _bak_err)
 
-                # Apply the change
+                # ---- Apply the change ---- #
+                write_succeeded = False
+
                 if action == "insert":
-                    # Insert content at specified line
                     if file_path.exists():
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            lines = f.readlines()
-
-                        # Insert at line (1-indexed)
+                        with open(file_path, "r", encoding="utf-8") as fh:
+                            file_lines = fh.readlines()
                         insert_pos = max(0, line - 1)
-                        lines.insert(insert_pos, content + "\n")
-
-                        with open(file_path, "w", encoding="utf-8") as f:
-                            f.writelines(lines)
-                        logger.info(f"APPLIED: Fix written to {file_path}:{line} (action={action})")
-                        applied_count += 1
+                        file_lines.insert(insert_pos, content + "\n")
+                        with open(file_path, "w", encoding="utf-8") as fh:
+                            fh.writelines(file_lines)
+                        logger.info(
+                            "APPLIED: Fix written to %s:%s (action=%s)",
+                            file_path, line, action,
+                        )
+                        write_succeeded = True
                     else:
-                        # Create new file
+                        # create the file from scratch
                         file_path.parent.mkdir(parents=True, exist_ok=True)
-                        with open(file_path, "w", encoding="utf-8") as f:
-                            f.write(content + "\n")
-                        logger.info(f"APPLIED: New file created at {file_path} (action={action})")
-                        applied_count += 1
+                        with open(file_path, "w", encoding="utf-8") as fh:
+                            fh.write(content + "\n")
+                        logger.info(
+                            "APPLIED: New file created at %s (action=%s)",
+                            file_path, action,
+                        )
+                        write_succeeded = True
 
                 elif action == "replace":
-                    # Replace line(s) with new content
-                    if file_path.exists():
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            lines = f.readlines()
-
-                        # Support multi-line replacement
-                        if 0 < line <= len(lines):
-                            # If content has multiple lines, replace with all of them
+                    if not file_path.exists():
+                        logger.warning(
+                            "FAILED: File %s does not exist for replace action",
+                            file_path,
+                        )
+                        failed_count += 1
+                    else:
+                        with open(file_path, "r", encoding="utf-8") as fh:
+                            file_lines = fh.readlines()
+                        if 0 < line <= len(file_lines):
                             content_lines = content.split("\n")
                             if len(content_lines) == 1:
-                                # Single line replacement - preserve newline
-                                lines[line - 1] = content + "\n"
+                                file_lines[line - 1] = content + "\n"
                             else:
-                                # Multi-line replacement - replace one line with multiple
-                                # Ensure all lines except the last have newlines
-                                new_lines = []
-                                for i, content_line in enumerate(content_lines):
-                                    if i < len(content_lines) - 1 or content_line:  # Add newline unless it's the last empty line
-                                        new_lines.append(content_line + "\n")
-                                lines[line - 1:line] = new_lines
-
-                            with open(file_path, "w", encoding="utf-8") as f:
-                                f.writelines(lines)
-                            logger.info(f"APPLIED: Fix written to {file_path}:{line} (action={action})")
-                            applied_count += 1
+                                new_lines = [
+                                    cl + "\n"
+                                    for i, cl in enumerate(content_lines)
+                                    if i < len(content_lines) - 1 or cl
+                                ]
+                                file_lines[line - 1 : line] = new_lines
+                            with open(file_path, "w", encoding="utf-8") as fh:
+                                fh.writelines(file_lines)
+                            logger.info(
+                                "APPLIED: Fix written to %s:%s (action=%s)",
+                                file_path, line, action,
+                            )
+                            write_succeeded = True
                         else:
-                            logger.warning(f"FAILED: Line {line} out of range for {file_path} (has {len(lines)} lines)")
+                            logger.warning(
+                                "FAILED: Line %s out of range for %s (has %s lines)",
+                                line, file_path, len(file_lines),
+                            )
                             failed_count += 1
-                    else:
-                        logger.warning(f"FAILED: File {file_path} does not exist for replace action")
-                        failed_count += 1
 
                 elif action == "delete":
-                    # Delete line
-                    if file_path.exists():
-                        with open(file_path, "r", encoding="utf-8") as f:
-                            lines = f.readlines()
-
-                        if 0 < line <= len(lines):
-                            del lines[line - 1]
-
-                            with open(file_path, "w", encoding="utf-8") as f:
-                                f.writelines(lines)
-                            logger.info(f"APPLIED: Fix written to {file_path}:{line} (action={action})")
-                            applied_count += 1
-                        else:
-                            logger.warning(f"FAILED: Line {line} out of range for {file_path}")
-                            failed_count += 1
-                    else:
-                        logger.warning(f"FAILED: File {file_path} does not exist for delete action")
+                    if not file_path.exists():
+                        logger.warning(
+                            "FAILED: File %s does not exist for delete action",
+                            file_path,
+                        )
                         failed_count += 1
+                    else:
+                        with open(file_path, "r", encoding="utf-8") as fh:
+                            file_lines = fh.readlines()
+                        if 0 < line <= len(file_lines):
+                            del file_lines[line - 1]
+                            with open(file_path, "w", encoding="utf-8") as fh:
+                                fh.writelines(file_lines)
+                            logger.info(
+                                "APPLIED: Fix written to %s:%s (action=%s)",
+                                file_path, line, action,
+                            )
+                            write_succeeded = True
+                        else:
+                            logger.warning(
+                                "FAILED: Line %s out of range for %s (has %s lines)",
+                                line, file_path, len(file_lines),
+                            )
+                            failed_count += 1
 
-            logger.info(
-                f"Fix application complete: {applied_count} applied, "
-                f"{skipped_count} skipped (info-only), {failed_count} failed"
-            )
+                if write_succeeded:
+                    files_modified.append(str(file_path))
+                    applied_count += 1
 
-            # After successful application, invalidate the analysis cache so the
-            # next detect_errors call re-analyzes the actual state of the codebase.
-            if not dry_run and fix.job_id:
-                self._invalidate_analysis_cache(fix.job_id)
+            # ---------------------------------------------------------------- #
+            # Post-loop summary
+            # ---------------------------------------------------------------- #
+            if dry_run:
+                logger.info(
+                    "Dry-run simulation complete: %s would be modified, "
+                    "%s skipped (info-only)",
+                    len(files_modified),
+                    skipped_count,
+                )
+            else:
+                logger.info(
+                    "Fix application complete: %s applied, "
+                    "%s skipped (info-only), %s failed",
+                    applied_count, skipped_count, failed_count,
+                )
 
-            # Invalidate cached ZIP after applying fixes so the next download
-            # reflects the updated files on disk.
-            if not dry_run and applied_count > 0 and fix.job_id:
-                zip_cache_path = Path(f"uploads/{fix.job_id}/output.zip")
-                if zip_cache_path.exists():
-                    zip_cache_path.unlink()
-                    logger.info(
-                        f"Invalidated cached ZIP for job {fix.job_id} "
-                        f"after applying {applied_count} fix(es)"
-                    )
+            if not dry_run:
+                # Invalidate the analysis cache so the next detect_errors call
+                # re-analyzes the actual state of the codebase.
+                if fix.job_id:
+                    self._invalidate_analysis_cache(fix.job_id)
 
-            # Feed fix outcome to MetaLearning so insights accumulate over time.
-            if not dry_run and files_modified:
-                try:
-                    ml = self._sfe_components.get("meta_learning")
-                    if ml is None:
-                        from self_fixing_engineer.simulation.agent_core import get_meta_learning_instance
-                        ml = get_meta_learning_instance()
-                    experience = {
-                        "fix_id": fix_id,
-                        "job_id": fix.job_id,
-                        "files_modified": files_modified,
-                        "outcome": "success",
-                        "proposed_changes": fix.proposed_changes,
-                    }
-                    ml.learn([experience])
-                except Exception as _ml_err:
-                    logger.warning(f"MetaLearning feed skipped: {_ml_err}")
+                # Invalidate any cached output ZIP so the next download
+                # reflects the updated files on disk.
+                if applied_count > 0 and fix.job_id:
+                    zip_cache_path = Path(f"uploads/{fix.job_id}/output.zip")
+                    if zip_cache_path.exists():
+                        zip_cache_path.unlink()
+                        logger.info(
+                            "Invalidated cached ZIP for job %s after applying %s fix(es)",
+                            fix.job_id, applied_count,
+                        )
+
+                # Update fix status to APPLIED when at least one change was written.
+                if applied_count > 0:
+                    try:
+                        from server.schemas import FixStatus
+                        from datetime import datetime, timezone
+                        now = datetime.now(timezone.utc)
+                        fix.status = FixStatus.APPLIED
+                        fix.applied_at = now
+                        fix.updated_at = now
+                    except Exception as _status_err:
+                        logger.warning(
+                            "Could not update fix status to APPLIED: %s", _status_err
+                        )
+
+                # Feed fix outcome to MetaLearning so insights accumulate.
+                if files_modified:
+                    try:
+                        ml = self._sfe_components.get("meta_learning")
+                        if ml is None:
+                            from self_fixing_engineer.simulation.agent_core import (
+                                get_meta_learning_instance,
+                            )
+                            ml = get_meta_learning_instance()
+                        experience = {
+                            "fix_id": fix_id,
+                            "job_id": fix.job_id,
+                            "files_modified": files_modified,
+                            "outcome": "success",
+                            "proposed_changes": fix.proposed_changes,
+                        }
+                        ml.learn([experience])
+                    except Exception as _ml_err:
+                        logger.warning("MetaLearning feed skipped: %s", _ml_err)
+
+            # Determine overall status
+            if dry_run:
+                overall_status = "simulated"
+            elif applied_count > 0 and failed_count == 0:
+                overall_status = "success"
+            elif applied_count > 0 and failed_count > 0:
+                overall_status = "partial"
+            else:
+                overall_status = "error"
 
             return {
                 "fix_id": fix_id,
-                "applied": not dry_run,
+                "applied": not dry_run and applied_count > 0,
                 "dry_run": dry_run,
-                "status": "success" if not dry_run else "simulated",
+                "status": overall_status,
                 "files_modified": files_modified,
+                "changes_applied": applied_count,
+                "changes_skipped": skipped_count,
+                "changes_failed": failed_count,
             }
 
-        except Exception as e:
-            logger.error(f"Error applying fix {fix_id}: {e}", exc_info=True)
+        except Exception as exc:
+            logger.error("Error applying fix %s: %s", fix_id, exc, exc_info=True)
             return {
                 "fix_id": fix_id,
                 "applied": False,
                 "dry_run": dry_run,
                 "status": "error",
-                "error": str(e),
+                "error": str(exc),
                 "files_modified": files_modified,
+                "changes_applied": applied_count,
+                "changes_skipped": skipped_count,
+                "changes_failed": failed_count,
             }
 
     async def apply_all_pending_fixes(self, job_id: str) -> Dict[str, Any]:
