@@ -329,6 +329,9 @@ def _initialize_opentelemetry_mock():
             pass
         def set_status(self, status):
             pass
+        def is_recording(self):
+            """Simulates a non-recording span for testing purposes (returns False)."""
+            return False
         def record_exception(self, exception):
             """Record an exception on this span."""
             pass

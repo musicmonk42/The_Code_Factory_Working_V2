@@ -1389,7 +1389,7 @@ async def fuzz_test(
         span.set_attribute("fuzz.tool_name", "custom_fuzzer")
         span.set_attribute("fuzz.tool_version", "1.0")
 
-    if language == "python" and HAS_HYPOTHESIS:
+    if language == "python":
         logger.info(f"Running general fuzz tests for {language} code.")
 
         discoveries: int = 0
