@@ -131,6 +131,15 @@ core_policy_module._get_policy_hmac_key = mock_get_policy_hmac_key
 core_policy_module._policy_hmac_key = b"test_hmac_key_12345"
 
 
+@pytest.fixture(autouse=True)
+def reinstall_core_mocks():
+    """Reinstall mock modules before each test to prevent sys.modules pollution from other test files."""
+    sys.modules["core_utils"] = MockCoreUtils()
+    sys.modules["core_audit"] = MockCoreAudit()
+    sys.modules["core_secrets"] = MockCoreSecrets()
+    yield
+
+
 @pytest.fixture
 def mock_alert_operator_policy():
     mock_alert_operator.reset_mock()

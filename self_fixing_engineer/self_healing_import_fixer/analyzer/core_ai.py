@@ -12,7 +12,16 @@ import warnings
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx  # Recommended for async HTTP requests
-import tiktoken  # For accurate token counting
+
+# tiktoken is optional; fall back to character-based approximation when unavailable
+try:
+    import tiktoken  # For accurate token counting
+
+    _TIKTOKEN_AVAILABLE = True
+except Exception:  # Broad catch: covers ImportError, shadowed-module failures, and registry load errors
+    tiktoken = None  # type: ignore[assignment]
+    _TIKTOKEN_AVAILABLE = False
+
 from openai import (  # Production-grade LLM client with specific error handling
     APIError,
     AsyncOpenAI,
@@ -162,13 +171,17 @@ class AIManager:
         )
 
         # --- Tokenizer with fallback ---
-        try:
-            self.token_encoder = tiktoken.encoding_for_model(self.model_name)
-        except Exception:
-            warnings.warn(
-                "Failed to get specific tiktoken encoder. Falling back to default."
-            )
-            self.token_encoder = tiktoken.get_encoding("cl100k_base")
+        self.token_encoder = None
+        if _TIKTOKEN_AVAILABLE:
+            try:
+                self.token_encoder = tiktoken.encoding_for_model(self.model_name)
+            except Exception:  # KeyError for unknown model names, or any load error
+                try:
+                    self.token_encoder = tiktoken.get_encoding("cl100k_base")
+                except Exception:  # Network/filesystem errors when downloading encoder data
+                    warnings.warn(
+                        "tiktoken encoder unavailable. Using approximate token counting."
+                    )
 
         self.api_concurrency_limit = self.config.get("api_concurrency_limit", 5)
         self.token_quota_per_minute = self.config.get("token_quota_per_minute", 60000)
