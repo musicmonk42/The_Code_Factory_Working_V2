@@ -1672,6 +1672,8 @@ class SFEService:
     _MAX_LLM_FILE_CONTENT_CHARS = 8_000
     # Base directory for job uploads, relative to the server working directory.
     _UPLOADS_BASE_DIR = Path("uploads")
+    # Valid action values that the LLM is allowed to return for code fixes.
+    _ALLOWED_FIX_ACTIONS = frozenset({"replace", "insert", "delete"})
 
     def _resolve_fix_path(self, change_file: str, job_output_dir: Optional[Path]) -> Optional[Path]:
         """Resolve fix file path with multiple fallback strategies.
@@ -2037,12 +2039,11 @@ Example response:
                     ) from _json_err
 
                 # Validate that the LLM returned a recognised, safe action value.
-                _ALLOWED_ACTIONS = {"replace", "insert", "delete"}
                 llm_action = str(fix_data.get("action", "replace")).lower()
-                if llm_action not in _ALLOWED_ACTIONS:
+                if llm_action not in self._ALLOWED_FIX_ACTIONS:
                     raise ValueError(
                         f"LLM returned unsupported action '{llm_action}'. "
-                        f"Allowed values: {_ALLOWED_ACTIONS}"
+                        f"Allowed values: {self._ALLOWED_FIX_ACTIONS}"
                     )
 
                 # Validate and coerce the line number to a positive integer.
