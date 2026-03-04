@@ -518,9 +518,21 @@ async def apply_fix(
     result = await sfe_service.apply_fix(fix_id, dry_run=request.dry_run)
 
     if not request.dry_run:
-        fix.status = FixStatus.APPLIED
-        fix.applied_at = datetime.now(timezone.utc)
-        fix.applied_changes = result.get("files_modified", [])
+        if result.get("applied"):
+            fix.status = FixStatus.APPLIED
+            fix.applied_at = datetime.now(timezone.utc)
+            fix.applied_changes = result.get("files_modified", [])
+        else:
+            # Nothing was written to disk (path not found, empty proposed_changes,
+            # or all changes failed). Keep status as APPROVED so the user can retry
+            # after diagnosing the issue via the returned result data.
+            logger.warning(
+                "Fix %s reported applied=False (files_modified=%s, status=%s); "
+                "fix status kept as APPROVED for retry",
+                fix_id,
+                result.get("files_modified", []),
+                result.get("status"),
+            )
 
     fix.updated_at = datetime.now(timezone.utc)
 

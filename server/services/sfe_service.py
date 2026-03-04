@@ -2260,7 +2260,10 @@ Example response:
             job_output_dir: Optional[Path] = None
             if fix.job_id:
                 resolved_path = self._resolve_job_code_path(fix.job_id, ".")
-                job_output_dir = Path(resolved_path)
+                # Resolve to absolute so that _resolve_fix_path's sandbox check
+                # (which uses .resolve() on both sides) works correctly when the
+                # cache stores absolute paths and job_output_dir is relative.
+                job_output_dir = Path(resolved_path).resolve()
                 logger.info("Resolved job output directory: %s", job_output_dir)
 
             # ---------------------------------------------------------------- #
@@ -3491,9 +3494,11 @@ Example response:
                                 # Add file path to each issue
                                 for issue in issues:
                                     if "file" not in issue:
-                                        issue["file"] = str(
-                                            Path(py_file).relative_to(code_path_obj)
-                                        )
+                                        # Resolve to absolute so _resolve_fix_path
+                                        # Strategy-1 sandbox check works correctly;
+                                        # relative_to() threw silently when py_file
+                                        # was absolute but code_path_obj was relative.
+                                        issue["file"] = str(Path(py_file).resolve())
                                     all_issues.append(issue)
                                     
                             except Exception as e:
