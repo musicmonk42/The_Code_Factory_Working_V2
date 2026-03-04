@@ -597,16 +597,32 @@ class GrokLLM(LLMProvider):
                 "Set GROK_API_KEY or XAI_API_KEY to enable LLM-based generation."
             )
 
-        # Prepare request parameters
+        # Prepare request parameters — override with deterministic settings when enabled
         temperature = kwargs.get("temperature", self._config.default_temperature)
         max_tokens = kwargs.get("max_tokens", self._config.default_max_tokens)
 
-        payload = {
+        payload: Dict[str, Any] = {
             "model": self.model,
             "messages": [{"role": "user", "content": prompt}],
             "temperature": temperature,
             "max_tokens": max_tokens,
         }
+
+        # In deterministic mode inject temperature=0, seed=0, top_p=1 for reproducible outputs
+        try:
+            from generator.deterministic import (
+                get_deterministic_llm_params as _det_params,
+                is_deterministic as _is_det,
+            )
+            if _is_det():
+                det = _det_params()
+                payload["temperature"] = det.get("temperature", temperature)
+                if "seed" in det:
+                    payload["seed"] = det["seed"]
+                if "top_p" in det:
+                    payload["top_p"] = det["top_p"]
+        except ImportError:
+            pass
 
         logger.info(
             "Initiating Grok API call",

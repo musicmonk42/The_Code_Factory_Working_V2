@@ -1517,6 +1517,14 @@ class WorkflowEngine:
                                     cleaned_codegen_files[cleaned_fname] = content
                                 codegen_files = cleaned_codegen_files
                                 
+                                # In deterministic mode, sort file keys for stable write order
+                                try:
+                                    from generator.deterministic import is_deterministic as _is_det
+                                    if _is_det():
+                                        codegen_files = dict(sorted(codegen_files.items()))
+                                except ImportError:
+                                    pass
+                                
                                 if HAS_MATERIALIZER:
                                     mat_result = await _materialize_file_map_cli(codegen_files, output_dir)
                                     if mat_result.get("success"):
