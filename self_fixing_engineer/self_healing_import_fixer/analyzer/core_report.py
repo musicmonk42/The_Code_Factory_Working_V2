@@ -41,6 +41,7 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
+    from .core_audit import audit_logger
     from .core_secrets import SECRETS_MANAGER
     from .core_utils import alert_operator
 except ImportError as e:
