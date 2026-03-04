@@ -412,9 +412,7 @@ async def test_run_subprocess_safe_timeout(
         return FakeProcess()
 
     async def fake_wait_for(coro, timeout):
-        # Properly close the coroutine to avoid "coroutine was never awaited" warning
-        if hasattr(coro, 'close'):
-            coro.close()
+        coro.close()
         raise asyncio.TimeoutError()
 
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
