@@ -1740,6 +1740,11 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     lines += [f"[{fname}]", str(emsg), ""]
                 code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
 
+            if not code_files and not errors:
+                error_msg = "LLM response dict had a 'files' key but contained no files."
+                logger.error(error_msg)
+                return {ERROR_FILENAME: error_msg}
+
             if code_files:
                 # Production-ready validation: reject files with raw SQL injections,
                 # stub pass-bodies, etc.  Mirrors the check in the JSON parsing path.
@@ -1820,7 +1825,18 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
         raw = response
     
     raw = raw.strip() if raw else ''
-    
+
+    # Guard: a dict response that yielded no extractable content is an error —
+    # proceeding to validate an empty string would produce {DEFAULT_FILENAME: ''}
+    # which is not useful and masks the real problem (empty/missing/malformed response).
+    if not raw and isinstance(response, dict):
+        error_msg = (
+            "LLM response was empty or contained no extractable content. "
+            "The response dict had no usable 'choices', 'content', or 'text' field."
+        )
+        logger.error(error_msg)
+        return {ERROR_FILENAME: error_msg}
+
     # Log raw response length for debugging
     logger.debug(
         "Processing LLM response - length: %d chars, first 100: %s",
