@@ -1251,58 +1251,14 @@ class SFEService:
                     f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}"
                 )
 
-                # Resolve code path using improved path resolution
-                # First check job metadata, then standard locations
-                from server.storage import jobs_db
-
-                job_dir = None
-                job = jobs_db.get(job_id)
-                if job and job.metadata:
-                    # Check metadata for output paths
-                    for key in ("output_path", "code_path", "generated_path"):
-                        path = job.metadata.get(key)
-                        if path and Path(path).exists():
-                            job_dir = Path(path)
-                            logger.info(
-                                f"Found job path from metadata.{key}: {job_dir}"
-                            )
-                            break
-
-                # If not in metadata, check standard locations
-                if not job_dir:
-                    uploads_dir = Path("./uploads")
-                    job_base = uploads_dir / job_id
-
-                    # Try to find the generated code directory
-                    if job_base.exists():
-                        # Check standard subdirectories
-                        for subdir_name in ["generated", "output"]:
-                            subdir = job_base / subdir_name
-                            if subdir.exists():
-                                # Look for project subdirectories
-                                subdirs = sorted(
-                                    [
-                                        d
-                                        for d in subdir.iterdir()
-                                        if d.is_dir() and not d.name.startswith(".")
-                                    ],
-                                    key=lambda d: d.name,
-                                )
-                                if subdirs:
-                                    # Use the first non-hidden subdirectory (typically the project directory)
-                                    job_dir = subdirs[0]
-                                    logger.info(f"Found generated project at {job_dir}")
-                                    break
-                                else:
-                                    # No subdirectories, use this directory directly
-                                    job_dir = subdir
-                                    break
-
-                        # If no generated/ or output/, use job_base directly
-                        if not job_dir:
-                            job_dir = job_base
-
-                if not job_dir or not job_dir.exists():
+                # Resolve code path via the shared helper (DRY: avoids duplicating
+                # the metadata-lookup + candidate-root scan already in that method).
+                resolved = self._resolve_job_code_path(job_id, "")
+                if not resolved:
+                    logger.warning(f"Job directory not found for {job_id}")
+                    return []
+                job_dir = Path(resolved)
+                if not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
                     return []
 
@@ -2189,7 +2145,6 @@ Example response:
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
         from server.schemas import Fix, FixStatus
-        from datetime import datetime, timezone
 
         try:
             now = datetime.now(timezone.utc)
@@ -2609,7 +2564,6 @@ Example response:
                 result = await self.apply_fix(fix_id)
                 if result.get("applied"):
                     # Update fix status to APPLIED
-                    from datetime import datetime, timezone
                     fix.status = FixStatus.APPLIED
                     fix.applied_at = datetime.now(timezone.utc)
                     fix.updated_at = datetime.now(timezone.utc)
