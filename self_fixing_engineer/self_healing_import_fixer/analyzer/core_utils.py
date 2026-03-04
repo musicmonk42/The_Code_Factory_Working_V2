@@ -15,15 +15,19 @@ import logging
 import os
 import re
 import secrets
+import smtplib
 import socket
+import sys
 import threading
 import time
 import traceback
+import urllib.request
 import uuid
 from collections import deque
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
+from email.mime.text import MIMEText
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -68,6 +72,18 @@ except ImportError:
 
 # Configure module logger
 logger = logging.getLogger(__name__)
+
+# Register module under both short and full import paths so that
+# patch("self_healing_import_fixer.analyzer.core_utils.logger") works
+# regardless of whether the module was imported via the short or full path.
+_this_module = sys.modules.get(__name__)
+if _this_module is not None:
+    for _alias in (
+        "analyzer.core_utils",
+        "self_healing_import_fixer.analyzer.core_utils",
+    ):
+        if _alias not in sys.modules:
+            sys.modules[_alias] = _this_module
 
 # Global constants
 PRODUCTION_MODE = os.getenv("PRODUCTION_MODE", "false").lower() == "true"
@@ -391,10 +407,10 @@ class RateLimiter:
     """Token bucket rate limiter implementation."""
 
     def __init__(
-        self, max_calls: int = RATE_LIMIT_MAX_CALLS, window: int = RATE_LIMIT_WINDOW
+        self, max_calls: int = RATE_LIMIT_MAX_CALLS, window_seconds: int = RATE_LIMIT_WINDOW
     ):
         self.max_calls = max_calls
-        self.window = window
+        self.window = window_seconds
         self.calls = deque()
         self._lock = threading.Lock()
 
@@ -499,12 +515,12 @@ def retry_with_backoff(
     return decorator
 
 
-def cached(ttl: int = 300):
+def cached(ttl_seconds: int = 300):
     """
     Simple in-memory cache decorator with TTL.
 
     Args:
-        ttl: Time-to-live in seconds
+        ttl_seconds: Time-to-live in seconds
     """
     cache = {}
     cache_lock = threading.Lock()
@@ -519,7 +535,7 @@ def cached(ttl: int = 300):
                 # Check if cached and not expired
                 if key in cache:
                     value, timestamp = cache[key]
-                    if time.time() - timestamp < ttl:
+                    if time.time() - timestamp < ttl_seconds:
                         cache_hits.inc()
                         logger.debug(f"Cache hit for {func.__name__}")
                         return value
@@ -539,6 +555,97 @@ def cached(ttl: int = 300):
         return wrapper
 
     return decorator
+
+
+def alert_operator(
+    message: str,
+    level: AlertLevel = AlertLevel.INFO,
+    *,
+    details: Optional[Dict] = None,
+    dedupe_key: Optional[str] = None,
+) -> None:
+    """
+    Send alerts to operators through configured channels (synchronous version).
+
+    Args:
+        message: Alert message
+        level: Alert severity level
+        details: Additional details to include with the alert
+        dedupe_key: Key for deduplication (same key within TTL suppresses duplicates)
+    """
+    # Deduplication check
+    if dedupe_key is not None:
+        cache_key = f"alert_dedupe:{dedupe_key}"
+        now = time.time()
+        if cache_key in _cache:
+            _, timestamp = _cache[cache_key]
+            if now - timestamp < 300:  # 5-minute deduplication TTL
+                return
+        _cache[cache_key] = (True, now)
+
+    # Rate limiting check (CRITICAL and EMERGENCY bypass)
+    is_critical = level in (AlertLevel.CRITICAL, AlertLevel.EMERGENCY)
+    if not is_critical and "alerts" in _rate_limiters:
+        if not _rate_limiters["alerts"].is_allowed():
+            logger.warning(f"Alert rate limited: {message}")
+            return
+
+    # Dispatch to configured channels
+    channels = _alert_config.enabled_channels
+    for channel in channels:
+        try:
+            if channel == AlertChannel.LOG:
+                log_level = getattr(logging, level.value, logging.INFO)
+                logger.log(log_level, message)
+
+            elif channel == AlertChannel.SLACK and _alert_config.slack_webhook_url:
+                payload = json.dumps({
+                    "attachments": [
+                        {
+                            "title": f"{level.value}: {message}",
+                            "text": details or "",
+                        }
+                    ]
+                }).encode("utf-8")
+                req = urllib.request.Request(
+                    _alert_config.slack_webhook_url,
+                    data=payload,
+                    headers={"Content-Type": "application/json"},
+                    method="POST",
+                )
+                urllib.request.urlopen(req, timeout=10)
+
+            elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn:
+                if AWS_AVAILABLE:
+                    sns = boto3.client("sns")
+                    sns.publish(
+                        TopicArn=_alert_config.sns_topic_arn,
+                        Subject=f"{level.value} Alert from {SERVICE_NAME}",
+                        Message=message,
+                    )
+
+            elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
+                msg = MIMEText(message)
+                msg["Subject"] = f"{level.value} Alert"
+                msg["From"] = _alert_config.email_from or ""
+                msg["To"] = ", ".join(_alert_config.email_to or [])
+                with smtplib.SMTP(_alert_config.email_smtp_host) as server:
+                    server.send_message(msg)
+
+            elif channel == AlertChannel.WEBHOOK and _alert_config.webhook_urls:
+                for url in _alert_config.webhook_urls:
+                    if url:
+                        payload = json.dumps({"message": message, "level": level.value}).encode("utf-8")
+                        req = urllib.request.Request(
+                            url,
+                            data=payload,
+                            headers={"Content-Type": "application/json"},
+                            method="POST",
+                        )
+                        urllib.request.urlopen(req, timeout=10)
+
+        except Exception as e:
+            logger.error(f"Failed to send alert via {channel}: {e}")
 
 
 async def alert_operator_async(
@@ -1139,11 +1246,3 @@ __all__ = [
     "distributed_lock",
     "encode_for_logging",
 ]
-
-
-def alert_operator(msg: str, level: str = "INFO") -> None:
-    print(f"[OPS ALERT - {level}] {msg}")
-
-
-def scrub_secrets(obj):
-    return obj
