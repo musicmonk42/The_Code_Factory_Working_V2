@@ -12,6 +12,10 @@ data:
   APP_ENV: "production"
   PRODUCTION_MODE: "1"
   DEV_MODE: "0"
+  # Deterministic build mode — forces sorted ZIP entries, fixed timestamps,
+  # temperature=0 LLM calls, and build_plan.json enforcement.
+  # Override to "1" via a kustomize patch or --set for CI reproducibility pipelines.
+  DETERMINISTIC: "0"
 
   # ============================================
   # Startup Optimization
