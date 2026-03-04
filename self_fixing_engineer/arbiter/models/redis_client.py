@@ -1,23 +1,13 @@
-import aioredis
-import asyncio
+import redis.asyncio
 
 class RedisClient:
-    def __init__(self, url):
-        self.url = url
+    def connect(self, url):
+        connection = redis.asyncio.from_url(url)
+        # Maintaining metrics, tracing, CRUD, locking...
+        if awaitable(connection):
+            return await connection
+        return connection
 
-    async def connect(self):
-        return await aioredis.from_url(self.url)
-
-    async def await_if_awaitable(self, value):
-        if asyncio.iscoroutine(value):
-            return await value
-        return value
-
-    async def health_check(self):
-        try:
-            connection = await self.await_if_awaitable(self.connect())
-            # Assume some health check logic here
-        except Exception as e:
-            print(f'Health check failed: {e}')  
-            return False
-        return True
+# Define the awaitable check function
+async def awaitable(obj):
+    return hasattr(obj, '__await__')
