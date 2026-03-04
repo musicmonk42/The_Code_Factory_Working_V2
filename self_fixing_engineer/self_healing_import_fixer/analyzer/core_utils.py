@@ -603,7 +603,7 @@ def alert_operator(
                     "attachments": [
                         {
                             "title": f"{level.value}: {message}",
-                            "text": json.dumps(details) if details else "",
+                            "text": details or "",
                         }
                     ]
                 }).encode("utf-8")
@@ -613,7 +613,7 @@ def alert_operator(
                     headers={"Content-Type": "application/json"},
                     method="POST",
                 )
-                urllib.request.urlopen(req)
+                urllib.request.urlopen(req, timeout=10)
 
             elif channel == AlertChannel.SNS and _alert_config.sns_topic_arn:
                 if AWS_AVAILABLE:
@@ -626,7 +626,7 @@ def alert_operator(
 
             elif channel == AlertChannel.EMAIL and _alert_config.email_smtp_host:
                 msg = MIMEText(message)
-                msg["Subject"] = f"Alert: {message}"
+                msg["Subject"] = f"{level.value} Alert"
                 msg["From"] = _alert_config.email_from or ""
                 msg["To"] = ", ".join(_alert_config.email_to or [])
                 with smtplib.SMTP(_alert_config.email_smtp_host) as server:
@@ -642,7 +642,7 @@ def alert_operator(
                             headers={"Content-Type": "application/json"},
                             method="POST",
                         )
-                        urllib.request.urlopen(req)
+                        urllib.request.urlopen(req, timeout=10)
 
         except Exception as e:
             logger.error(f"Failed to send alert via {channel}: {e}")
