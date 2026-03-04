@@ -20,7 +20,15 @@ logger = logging.getLogger(__name__)
 # SQLAlchemy column-type → Python/annotation type mapping used by
 # _check_type_consistency.  Defined at module level so it is only
 # instantiated once rather than on every call.
+#
+# The map drives Step 3: ``_SA_TYPE_MAP.get(model_type.lower())`` returns
+# the *expected* router annotation string.  A missing key causes the entity
+# to be skipped (no check run), so every PK type that should be validated
+# must have an entry — including identity mappings ("int" → "int") needed
+# for the SQLAlchemy 2.0 ``Mapped[int]`` annotation style where the type
+# extracted from the source is already a Python primitive name.
 _SA_TYPE_MAP: Dict[str, str] = {
+    # Legacy Column() positional-type-argument names
     "integer": "int",
     "biginteger": "int",
     "smallinteger": "int",
@@ -28,6 +36,11 @@ _SA_TYPE_MAP: Dict[str, str] = {
     "text": "str",
     "varchar": "str",
     "uuid": "uuid.UUID",
+    # SQLAlchemy 2.0 Mapped[X] annotation types — identity mappings that
+    # enable the consistency check for modern declarative-style models.
+    "int": "int",
+    "str": "str",
+    "uuid.uuid": "uuid.UUID",  # lower-cased form of uuid.UUID
 }
 
 
@@ -238,6 +251,46 @@ def _check_type_consistency(output_dir: Path) -> List[str]:
                     continue
                 model_pk_types[entity] = col_type
 
+            # SQLAlchemy 2.0 mapped_column() style:
+            #   id: Mapped[int] = mapped_column(primary_key=True)
+            for stmt in node.body:
+                if not isinstance(stmt, ast.AnnAssign) or not isinstance(stmt.value, ast.Call):
+                    continue
+                call = stmt.value
+                if isinstance(call.func, ast.Name):
+                    func_name = call.func.id
+                elif isinstance(call.func, ast.Attribute):
+                    func_name = call.func.attr
+                else:
+                    continue
+                if func_name.lower() != "mapped_column":
+                    continue
+                is_pk = any(
+                    kw.arg == "primary_key"
+                    and isinstance(kw.value, ast.Constant)
+                    and kw.value.value is True
+                    for kw in call.keywords
+                )
+                if not is_pk:
+                    continue
+                # Extract type from the Mapped[X] annotation on the target
+                ann = stmt.annotation
+                if not isinstance(ann, ast.Subscript):
+                    continue
+                slice_node = ann.slice
+                if isinstance(slice_node, ast.Name):
+                    mc_type: str = slice_node.id
+                elif (
+                    isinstance(slice_node, ast.Attribute)
+                    and isinstance(slice_node.value, ast.Name)
+                ):
+                    mc_type = f"{slice_node.value.id}.{slice_node.attr}"
+                else:
+                    continue
+                # Don't overwrite a Column()-detected entry for the same entity
+                if entity not in model_pk_types:
+                    model_pk_types[entity] = mc_type
+
     if not model_pk_types:
         return errors
 
@@ -251,14 +304,22 @@ def _check_type_consistency(output_dir: Path) -> List[str]:
             tree = ast.parse(source)
         except (SyntaxError, OSError):
             continue
+        # Infer entity name from file stem for bare `id` param lookup
+        rf_entity = rf.stem.rstrip("s")  # e.g. "patients.py" → "patient"
         for node in ast.walk(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             for arg in node.args.args:
-                if not (arg.arg.endswith("_id") and arg.annotation):
-                    continue
-                entity = arg.arg[: -len("_id")]
                 ann = arg.annotation
+                if not ann:
+                    continue
+                if arg.arg.endswith("_id"):
+                    entity = arg.arg[: -len("_id")]
+                elif arg.arg == "id":
+                    # Infer entity from the router file name
+                    entity = rf_entity
+                else:
+                    continue
                 if isinstance(ann, ast.Name):
                     ann_str: str = ann.id
                 elif isinstance(ann, ast.Attribute) and isinstance(ann.value, ast.Name):

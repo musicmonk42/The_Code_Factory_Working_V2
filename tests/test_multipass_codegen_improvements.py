@@ -172,6 +172,7 @@ def _install_stubs() -> None:
             ERROR_FILENAME="__error__",
             extract_function_name=lambda d: None,
             fix_response_model_type_mismatches=lambda f, **kw: f,
+            reconcile_schema_model_fields=lambda f, **kw: f,
             get_stub_files=lambda f: [],
         ),
     }
@@ -237,6 +238,7 @@ def _load_agent_module() -> types.ModuleType:
             ERROR_FILENAME="__error__",
             extract_function_name=lambda d: None,
             fix_response_model_type_mismatches=lambda f, **kw: f,
+            reconcile_schema_model_fields=lambda f, **kw: f,
             get_stub_files=lambda f: [],
         ),
     )
