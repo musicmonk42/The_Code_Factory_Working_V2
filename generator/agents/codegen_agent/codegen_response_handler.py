@@ -1692,7 +1692,6 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             files_obj = response["files"]
             code_files: Dict[str, str] = {}
             errors: Dict[str, str] = {}
-            repair_logs: List[str] = []
 
             for filename, content in files_obj.items():
                 if not isinstance(content, str):
@@ -1719,11 +1718,16 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                     cleaned_code = remove_dead_imports(validation_result['code'], filename)
                     code_files[filename] = cleaned_code
                     if validation_result['auto_repaired']:
-                        info = f"Auto-repaired {filename}: {', '.join(validation_result['repairs_applied'])}"
-                        repair_logs.append(info)
-                        logger.info(info)
+                        logger.info(
+                            "Auto-repaired %s: %s",
+                            filename, ", ".join(validation_result['repairs_applied']),
+                        )
                 else:
-                    code_files[filename] = cleaned
+                    # Invalid file: record in `errors` dict only — do NOT store in
+                    # code_files.  Later, `errors` is serialised into ERROR_FILENAME
+                    # (line ~1740) so the caller can detect parse failures and trigger
+                    # a retry.  Storing a broken file in code_files would silently
+                    # materialise invalid Python to disk.
                     logger.warning(
                         "Syntax validation failed for '%s' (%s): %s",
                         filename, file_lang, validation_result['error'],
@@ -1737,6 +1741,24 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
 
             if code_files:
+                # Production-ready validation: reject files with raw SQL injections,
+                # stub pass-bodies, etc.  Mirrors the check in the JSON parsing path.
+                is_production_ready, prod_error = validate_production_ready(code_files)
+                if not is_production_ready:
+                    logger.warning(
+                        "Production-ready validation failed for dict-response path: %s",
+                        prod_error,
+                    )
+                    existing = code_files.get(ERROR_FILENAME, "")
+                    code_files[ERROR_FILENAME] = (
+                        existing + ("\n\n" if existing else "") + prod_error
+                    )
+                else:
+                    logger.info(
+                        "Production-ready validation passed for %d file(s) (dict-response path)",
+                        len(code_files),
+                    )
+
                 code_files = _detect_module_package_collisions(code_files)
                 code_files = _detect_file_package_conflicts(code_files)
                 shadow_warnings = _detect_name_shadowing(code_files)
@@ -1747,6 +1769,16 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
                 files_failed_count = len(errors)
                 total_count = files_passed_count + files_failed_count
                 rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
+                if rejection_rate > MAX_REJECTION_RATE or files_failed_count > MAX_FAILED_FILES_ABSOLUTE:
+                    logger.warning(
+                        "High file rejection rate in dict-response path: %d/%d files failed (%.0f%%)",
+                        files_failed_count, total_count, rejection_rate * 100,
+                    )
+                    # NOTE: this is a monitoring-only check — we do NOT abort here.
+                    # The caller (_retry_stub_files / orchestrate) decides whether to
+                    # retry based on the presence of ERROR_FILENAME in the result.
+                    # Aborting here would discard the valid files that did parse, making
+                    # recovery harder than a targeted retry of the failed files.
                 finalized = _finalize_with_pydantic_v2_validation(code_files)
                 finalized["__validation_summary__"] = json.dumps({
                     "files_passed": files_passed_count,

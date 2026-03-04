@@ -7286,6 +7286,10 @@ class OmniCoreService:
             
             # Run pipeline stages sequentially
             stages_completed = []
+            # stages_failed is initialized here (alongside stages_completed) so it
+            # is always defined in the outer except handler regardless of how early
+            # an exception is raised (e.g., compliance gate in _execute_codegen).
+            stages_failed: List[str] = []
             
             # Initialize result tracking for critique context
             testgen_result = None
@@ -8305,6 +8309,9 @@ class OmniCoreService:
             # 2c. Spec fidelity check (uses existing provenance.validate_spec_fidelity)
             # This is a GATE: if >SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD of required
             # endpoints are missing after the final codegen attempt, fail the job.
+            # _spec_fidelity_metadata is always populated so the generator.py
+            # MIN_SPEC_FIDELITY_THRESHOLD gate has real data to check.
+            _spec_fidelity_metadata: Dict[str, Any] = {}
             if output_path_for_validation and _PROVENANCE_AVAILABLE:
                 try:
                     if md_content:
@@ -8321,6 +8328,14 @@ class OmniCoreService:
                         if spec_result.get("valid", True):
                             stages_completed.append("spec_validate")
                             logger.info(f"[PIPELINE] Job {job_id} completed step: spec_validate")
+                            # Capture fidelity metadata for the API-layer gate even on success.
+                            _found_eps = spec_result.get("found_endpoints", [])
+                            _req_eps = spec_result.get("required_endpoints", [])
+                            _spec_fidelity_metadata = {
+                                "found_endpoint_count": len(_found_eps),
+                                "required_endpoint_count": len(_req_eps),
+                                "missing_endpoint_count": 0,
+                            }
                         else:
                             missing_eps = spec_result.get("missing_endpoints", [])
                             required_eps = spec_result.get("required_endpoints", [])
@@ -8336,6 +8351,16 @@ class OmniCoreService:
                                 ] or missing_eps
                             missing_count = len(missing_eps)
                             required_count = len(required_eps)
+                            # Use max(..., 0) directly: if missing_count somehow exceeds
+                            # required_count due to data inconsistencies, found_count
+                            # must not go negative.
+                            found_count = max(required_count - missing_count, 0)
+                            # Always record fidelity metadata so the API-layer gate works.
+                            _spec_fidelity_metadata = {
+                                "found_endpoint_count": found_count,
+                                "required_endpoint_count": required_count,
+                                "missing_endpoint_count": missing_count,
+                            }
                             if (
                                 required_count > 0
                                 and missing_count / required_count > SPEC_FIDELITY_MISSING_ENDPOINT_THRESHOLD
@@ -8374,6 +8399,7 @@ class OmniCoreService:
                                     "stages_completed": stages_completed,
                                     "missing_endpoints": missing_ep_labels,
                                     "output_path": output_path_for_validation,
+                                    "spec_fidelity_metadata": _spec_fidelity_metadata,
                                 }
                             else:
                                 logger.warning(
@@ -9503,6 +9529,7 @@ class OmniCoreService:
                 "validation_warnings": validation_warnings,
                 "sfe_analysis": sfe_result if sfe_result is not None else {},  # Include SFE results in pipeline return
                 "sfe_feedback": sfe_feedback,  # Summarised SFE findings for callers
+                "spec_fidelity_metadata": _spec_fidelity_metadata,  # found/required endpoint counts for API-layer gate
             }
             
         except Exception as e:
@@ -9511,10 +9538,23 @@ class OmniCoreService:
             # Finalize failed job
             await self._finalize_failed_job(job_id, error=str(e))
             
+            # Annotate the failure category so callers can distinguish compliance
+            # blocks from unexpected exceptions without parsing the message string.
+            # stages_failed is always defined (initialized at the start of the try
+            # block alongside stages_completed).
+            _error_category = (
+                "compliance:blocked"
+                if "Compliance gate FAILED" in str(e)
+                else "pipeline:exception"
+            )
+            if _error_category not in stages_failed:
+                stages_failed.append(_error_category)
+
             return {
                 "status": "failed",
                 "message": str(e),
                 "error_type": type(e).__name__,
+                "stages_failed": stages_failed,
             }
         finally:
             # ==========================================================================

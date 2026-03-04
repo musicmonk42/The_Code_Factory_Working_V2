@@ -1246,18 +1246,20 @@ async def _retry_stub_files(
 
         # Split large batches so the LLM is not overwhelmed with too many files
         # at once.  When the stub set exceeds _STUB_RETRY_BATCH_SIZE, process
-        # only a window of files per attempt (round-robin across attempts) so
-        # each LLM call stays focused and is more likely to produce valid JSON.
+        # only the first _STUB_RETRY_BATCH_SIZE files (by sorted path) on each
+        # attempt.  As the LLM successfully resolves stubs they drop off the list
+        # naturally, so each subsequent attempt automatically advances to the next
+        # group without any index arithmetic.
+        #
+        # NOTE: a round-robin approach using (attempt * batch_size) % total is
+        # incorrect here because `stub_paths` is recomputed from the CURRENT
+        # remaining stubs on every iteration, so `total` changes and the modulo
+        # arithmetic produces unpredictably small slices (e.g. only 2 of 6).
         _all_stub_sorted = sorted(stub_paths)
         if len(_all_stub_sorted) > _STUB_RETRY_BATCH_SIZE:
-            _batch_start = (attempt * _STUB_RETRY_BATCH_SIZE) % max(len(_all_stub_sorted), 1)
-            _batch_slice = (
-                _all_stub_sorted[_batch_start:_batch_start + _STUB_RETRY_BATCH_SIZE]
-                or _all_stub_sorted[:_STUB_RETRY_BATCH_SIZE]
-            )
-            stub_paths = set(_batch_slice)
+            stub_paths = set(_all_stub_sorted[:_STUB_RETRY_BATCH_SIZE])
             logger.info(
-                "[CODEGEN] _retry_stub_files: large batch split — processing %d of %d stubs this attempt: %s",
+                "[CODEGEN] _retry_stub_files: large batch split — processing first %d of %d stubs this attempt: %s",
                 len(stub_paths),
                 len(_all_stub_sorted),
                 sorted(stub_paths),
@@ -1623,13 +1625,15 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             router_path = f"app/routers/{entity}s.py"  # pluralise for REST convention
             if router_path not in updated:
                 _router_var = f"{entity}s_router"
-                _class_name = entity.replace("_", " ").title().replace(" ", "")
+                # Do NOT instantiate the service at module level — services typically
+                # require constructor arguments (database sessions, settings) that are
+                # only available through FastAPI's dependency-injection system.
+                # Module-level instantiation would cause import-time failures in
+                # production and violates the FastAPI dependency pattern.
                 stub_router = (
                     f"# Auto-generated stub router for {entity} — replace with real implementation\n"
                     f"from fastapi import APIRouter\n\n"
-                    f"from app.services.{entity}_service import {_class_name}Service\n\n"
-                    f"{_router_var} = APIRouter()\n"
-                    f"_svc = {_class_name}Service()\n\n\n"
+                    f"{_router_var} = APIRouter()\n\n\n"
                     f"@{_router_var}.get('/')\n"
                     f"async def list_{entity}s():\n"
                     f'    """List all {entity}s."""\n'
