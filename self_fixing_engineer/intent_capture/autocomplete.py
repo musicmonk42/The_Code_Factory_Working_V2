@@ -319,6 +319,19 @@ def is_toxic(text: str) -> bool:
 
 def add_to_history(line: str):
     # UPGRADE: Additive. History is anonymized, encrypted, and added for compliance.
+    # Detect whether we are already inside a running event loop.  asyncio.run()
+    # raises RuntimeError if called from a running loop (e.g., under pytest-asyncio),
+    # so skip async singleton initialization in that case and add history directly.
+    try:
+        asyncio.get_running_loop()
+        # Successfully obtained a running loop – we are inside an async context.
+        try:
+            readline.add_history(anonymize_pii(line))
+        except Exception as e:
+            logger.error(f"Failed to add to history: {e}")
+        return
+    except RuntimeError:
+        pass  # No running loop; safe to call asyncio.run() below.
     state = asyncio.run(AutocompleteState.instance())
     try:
         if state.encryptor:

@@ -288,13 +288,12 @@ class PluginManager:
 # --- Secure and Resilient Secret/Config Fetching ---
 def fetch_from_vault(path: str) -> Dict[str, Any]:
     if (
-        os.getenv("USE_VAULT", "false") != "true"
-        or not CRYPTOGRAPHY_AVAILABLE
+        os.environ.get("USE_VAULT", "false") != "true"
         or not hvac
     ):
         return {}
     try:
-        client = hvac.Client(url=os.getenv("VAULT_URL"), token=os.getenv("VAULT_TOKEN"))
+        client = hvac.Client(url=os.environ.get("VAULT_URL"), token=os.environ.get("VAULT_TOKEN"))
         if client.is_authenticated():
             secret = client.secrets.kv.read_secret_version(path=path)
             return secret["data"]["data"]
@@ -304,15 +303,14 @@ def fetch_from_vault(path: str) -> Dict[str, Any]:
     return {}
 
 
-@tracer.start_as_current_span("_fetch_config_from_service")
 def _fetch_config_from_service() -> Optional[Dict[str, Any]]:
-    service_url = os.getenv("CONFIG_SERVICE_URL")
+    service_url = os.environ.get("CONFIG_SERVICE_URL")
     if not service_url:
         return None
     try:
         headers = {}
-        if os.getenv("CONFIG_TOKEN"):
-            headers["Authorization"] = f"Bearer {os.getenv('CONFIG_TOKEN')}"
+        if os.environ.get("CONFIG_TOKEN"):
+            headers["Authorization"] = f"Bearer {os.environ.get('CONFIG_TOKEN')}"
         response = requests.get(
             service_url, headers=headers, timeout=10, verify=True
         )
@@ -542,7 +540,10 @@ class GlobalConfigManager:
 
 # --- UPGRADE: Audit Logging for Compliance - [Date: August 19, 2025]
 def log_audit_event(event_type: str, data: Dict):
-    if os.getenv("ENABLE_AUDIT", "false").lower() != "true" or not boto3:
+    if os.environ.get("ENABLE_AUDIT", "false").lower() != "true":
+        return
+    if boto3 is None:
+        config_logger.warning("boto3 not available; skipping audit log.")
         return
     try:
         log_data = {
@@ -571,7 +572,10 @@ def log_audit_event(event_type: str, data: Dict):
 
 # --- UPGRADE: Audit Pruning - [Date: August 19, 2025]
 def prune_audit_logs(retention_days: int = 90):
-    if os.getenv("CONSENT_PRUNE", "true").lower() != "true" or not boto3:
+    if os.environ.get("CONSENT_PRUNE", "true").lower() != "true":
+        return
+    if boto3 is None:
+        config_logger.warning("boto3 not available; skipping audit prune.")
         return
     try:
         s3 = boto3.client(

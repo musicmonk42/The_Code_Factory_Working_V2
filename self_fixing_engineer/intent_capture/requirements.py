@@ -126,18 +126,22 @@ except ImportError:
 
 # P5: Observability: OpenTelemetry Tracing
 # Use the centralized tracer like other modules to avoid overwriting global TracerProvider
+# Always try to import trace for Status/StatusCode, regardless of which tracer path is used.
 try:
-    from self_fixing_engineer.arbiter.otel_config import get_tracer
-    tracer = get_tracer(__name__)
+    from opentelemetry import trace
     OPENTELEMETRY_AVAILABLE = True
 except ImportError:
+    trace = None
+    OPENTELEMETRY_AVAILABLE = False
+
+if OPENTELEMETRY_AVAILABLE:
     try:
-        from opentelemetry import trace
-        tracer = trace.get_tracer(__name__)
-        OPENTELEMETRY_AVAILABLE = True
+        from self_fixing_engineer.arbiter.otel_config import get_tracer
+        tracer = get_tracer(__name__)
     except ImportError:
-        tracer = None
-        OPENTELEMETRY_AVAILABLE = False
+        tracer = trace.get_tracer(__name__)
+else:
+    tracer = None
 
 # --- Production-Ready Dependency Documentation & Imports ---
 # --- Database Dependencies (required for DB-backed checklists) ---
@@ -399,16 +403,22 @@ class RequirementsManager:
                 )
                 sys.exit(1)
 
-            self._db_pool = await asyncpg.create_pool(
-                database=db_name,
-                user=db_user,
-                password=db_pass,
-                host=db_host,
-                port=db_port,
-                min_size=1,  # P3: Connection pooling
-                max_size=10,
-                timeout=30,  # Connection timeout
-            )
+            try:
+                self._db_pool = await asyncpg.create_pool(
+                    database=db_name,
+                    user=db_user,
+                    password=db_pass,
+                    host=db_host,
+                    port=db_port,
+                    min_size=1,  # P3: Connection pooling
+                    max_size=10,
+                    timeout=30,  # Connection timeout
+                )
+            except TypeError as e:
+                raise ImportError(
+                    f"asyncpg.create_pool returned a non-awaitable object; "
+                    f"asyncpg may be mocked or not properly installed: {e}"
+                )
             logger.info(
                 f"PostgreSQL connection pool created for {db_host}:{db_port}/{db_name}"
             )

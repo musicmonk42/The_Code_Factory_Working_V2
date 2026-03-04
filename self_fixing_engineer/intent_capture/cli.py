@@ -645,8 +645,9 @@ async def main_cli_loop():
     )
 
     local_input_queue = asyncio.Queue()
+    _running_loop = asyncio.get_running_loop()
     threading.Thread(
-        target=lambda: _local_input_worker(asyncio.get_event_loop(), local_input_queue),
+        target=lambda: _local_input_worker(_running_loop, local_input_queue),
         daemon=True,
     ).start()
 
