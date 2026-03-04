@@ -410,9 +410,10 @@ def test_global_config_manager_reload(mock_env, mock_requests, mock_logger):
 # --- Tests for Audit Logging ---
 def test_log_audit_event_enabled(mock_boto3, monkeypatch):
     """Test audit logging when enabled."""
+    monkeypatch.delenv("SKIP_AUDIT_INIT", raising=False)
     monkeypatch.setenv("ENABLE_AUDIT", "true")
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test_key")
-    monkeypatch.setenv("AWS_SECRET_KEY", "test_secret")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test_secret")
 
     with patch("os.getlogin", return_value="testuser"):
         log_audit_event("test_event", {"data": "test"})
@@ -428,9 +429,10 @@ def test_log_audit_event_disabled(mock_boto3, monkeypatch):
 
 def test_prune_audit_logs(mock_boto3, monkeypatch):
     """Test pruning audit logs."""
+    monkeypatch.delenv("SKIP_AUDIT_INIT", raising=False)
     monkeypatch.setenv("CONSENT_PRUNE", "true")
     monkeypatch.setenv("AWS_ACCESS_KEY_ID", "test_key")
-    monkeypatch.setenv("AWS_SECRET_KEY", "test_secret")
+    monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "test_secret")
 
     prune_audit_logs(retention_days=30)
     mock_boto3.list_objects_v2.assert_called_once()

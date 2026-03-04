@@ -289,7 +289,6 @@ class PluginManager:
 def fetch_from_vault(path: str) -> Dict[str, Any]:
     if (
         os.getenv("USE_VAULT", "false") != "true"
-        or not CRYPTOGRAPHY_AVAILABLE
         or not hvac
     ):
         return {}
@@ -306,13 +305,14 @@ def fetch_from_vault(path: str) -> Dict[str, Any]:
 
 @tracer.start_as_current_span("_fetch_config_from_service")
 def _fetch_config_from_service() -> Optional[Dict[str, Any]]:
-    service_url = os.getenv("CONFIG_SERVICE_URL")
+    service_url = os.getenv("INTENT_AGENT_CONFIG_SERVICE_URL") or os.getenv("CONFIG_SERVICE_URL")
     if not service_url:
         return None
     try:
         headers = {}
-        if os.getenv("CONFIG_TOKEN"):
-            headers["Authorization"] = f"Bearer {os.getenv('CONFIG_TOKEN')}"
+        token = os.getenv("INTENT_AGENT_CONFIG_TOKEN") or os.getenv("CONFIG_TOKEN")
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         response = requests.get(
             service_url, headers=headers, timeout=10, verify=True
         )
@@ -542,6 +542,8 @@ class GlobalConfigManager:
 
 # --- UPGRADE: Audit Logging for Compliance - [Date: August 19, 2025]
 def log_audit_event(event_type: str, data: Dict):
+    if os.getenv("SKIP_AUDIT_INIT", "0") == "1":
+        return
     if os.getenv("ENABLE_AUDIT", "false").lower() != "true" or not boto3:
         return
     try:
@@ -554,7 +556,7 @@ def log_audit_event(event_type: str, data: Dict):
         s3 = boto3.client(
             "s3",
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             region_name=os.getenv("AWS_REGION", "us-east-1"),
         )
         s3.put_object(
@@ -562,7 +564,6 @@ def log_audit_event(event_type: str, data: Dict):
             Key=f"{datetime.datetime.now().strftime('%Y/%m/%d')}/{os.urandom(16).hex()}.json",
             Body=json.dumps(log_data),
             ServerSideEncryption="AES256",
-            ACL="private",
         )
         config_logger.info(f"Audit event for {os.getlogin()} sent to S3.")
     except Exception as e:
@@ -571,13 +572,15 @@ def log_audit_event(event_type: str, data: Dict):
 
 # --- UPGRADE: Audit Pruning - [Date: August 19, 2025]
 def prune_audit_logs(retention_days: int = 90):
+    if os.getenv("SKIP_AUDIT_INIT", "0") == "1":
+        return
     if os.getenv("CONSENT_PRUNE", "true").lower() != "true" or not boto3:
         return
     try:
         s3 = boto3.client(
             "s3",
             aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_KEY"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
             region_name=os.getenv("AWS_REGION", "us-east-1"),
         )
         bucket = os.getenv("AUDIT_BUCKET", "config-audit-logs")

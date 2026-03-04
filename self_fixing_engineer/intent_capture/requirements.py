@@ -130,6 +130,7 @@ try:
     from self_fixing_engineer.arbiter.otel_config import get_tracer
     tracer = get_tracer(__name__)
     OPENTELEMETRY_AVAILABLE = True
+    from opentelemetry import trace
 except ImportError:
     try:
         from opentelemetry import trace
@@ -137,6 +138,7 @@ except ImportError:
         OPENTELEMETRY_AVAILABLE = True
     except ImportError:
         tracer = None
+        trace = None
         OPENTELEMETRY_AVAILABLE = False
 
 # --- Production-Ready Dependency Documentation & Imports ---
@@ -372,7 +374,7 @@ class RequirementsManager:
 
     async def get_db_conn_pool(
         self,
-    ) -> asyncpg.Pool:  # P3: Make async and return a pool
+    ) -> "asyncpg.Pool":  # P3: Make async and return a pool
         """Production: Securely connect to a requirements DB cluster (e.g., Postgres) using a connection pool."""
         if not DB_AVAILABLE:
             raise ImportError("asyncpg required for DB-backed checklists.")
@@ -1336,6 +1338,8 @@ async def get_embedding_model():
 
 
 async def get_db_conn_pool():
+    if not DB_AVAILABLE:
+        raise ImportError("asyncpg required for DB-backed checklists.")
     return await manager.get_db_conn_pool()
 
 
