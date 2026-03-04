@@ -1,13 +1,8 @@
-import redis.asyncio
+import aioredis
 
 class RedisClient:
-    def connect(self, url):
-        connection = redis.asyncio.from_url(url)
-        # Maintaining metrics, tracing, CRUD, locking...
-        if awaitable(connection):
-            return await connection
-        return connection
-
-# Define the awaitable check function
-async def awaitable(obj):
-    return hasattr(obj, '__await__')
+    @staticmethod
+    async def connect(url):
+        # _maybe_await safeguard
+        url = url if isinstance(url, str) else url()
+        return await aioredis.from_url(url)
