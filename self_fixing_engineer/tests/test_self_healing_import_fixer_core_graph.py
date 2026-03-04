@@ -82,9 +82,17 @@ AnalyzerCriticalError = core_graph_module.AnalyzerCriticalError
 NonCriticalError = core_graph_module.NonCriticalError
 
 # Mark all tests to use asyncio
-pytestmark = pytest.mark.asyncio
 
 # --- Fixtures ---
+
+
+@pytest.fixture(autouse=True)
+def reinstall_core_mocks():
+    """Reinstall mock modules before each test to prevent sys.modules pollution from other test files."""
+    sys.modules["core_utils"] = MockCoreUtils()
+    sys.modules["core_audit"] = MockCoreAudit()
+    sys.modules["core_secrets"] = MockCoreSecrets()
+    yield
 
 
 @pytest.fixture
