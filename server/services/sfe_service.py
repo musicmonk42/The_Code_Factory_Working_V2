@@ -1653,8 +1653,8 @@ class SFEService:
 
         guidance = f"Complexity score: {complexity} at line {line_num}. Recommendations:\n" + "\n".join(f"  - {s}" for s in suggestions)
         logger.warning(
-            f"SKIPPED (info-only): Complexity fix for {file_path}:{line_num} - "
-            "refactoring requires manual review"
+            "SKIPPED (info-only): Complexity fix for %s:%s - refactoring requires manual review",
+            file_path, line_num,
         )
         return {
             "success": True,
@@ -1667,6 +1667,11 @@ class SFEService:
     # Maximum number of rglob candidates to check during prefix-stripped path search
     # to avoid unbounded traversal on large directory trees.
     _RGLOB_CANDIDATE_LIMIT = 20
+    # Maximum characters of file content to include in an LLM fix prompt.
+    # Keeps requests within token limits while providing sufficient context.
+    _MAX_LLM_FILE_CONTENT_CHARS = 8_000
+    # Base directory for job uploads, relative to the server working directory.
+    _UPLOADS_BASE_DIR = Path("uploads")
 
     def _resolve_fix_path(self, change_file: str, job_output_dir: Optional[Path]) -> Optional[Path]:
         """Resolve fix file path with multiple fallback strategies.
@@ -1965,7 +1970,10 @@ class SFEService:
             description = f"Fix security vulnerability in {file_path_str}"
 
         else:
-            # Unknown error type - use LLM to generate a real code fix
+            # Unknown error type - use LLM to generate a real code fix.
+            # `call_llm_api` is imported here rather than at module level to
+            # avoid a circular import between the server package and the
+            # generator package (which is also imported by other server modules).
             description = f"Fix {error_type} in {file_path_str}"
             try:
                 from generator.runner import call_llm_api
@@ -1973,14 +1981,13 @@ class SFEService:
                 # Guard against sending excessively large files to the LLM.
                 # Limit to ~8 000 characters (≈ 2 000 tokens) which is enough
                 # context for most per-file fixes while staying well within limits.
-                _MAX_FILE_CONTENT_CHARS = 8_000
                 file_content = ""
                 if file_path and file_path.exists():
                     raw = file_path.read_text(encoding="utf-8")
-                    if len(raw) > _MAX_FILE_CONTENT_CHARS:
+                    if len(raw) > self._MAX_LLM_FILE_CONTENT_CHARS:
                         file_content = (
-                            raw[:_MAX_FILE_CONTENT_CHARS]
-                            + f"\n# … (truncated at {_MAX_FILE_CONTENT_CHARS} chars)"
+                            raw[: self._MAX_LLM_FILE_CONTENT_CHARS]
+                            + f"\n# … (truncated at {self._MAX_LLM_FILE_CONTENT_CHARS} chars)"
                         )
                     else:
                         file_content = raw
@@ -2039,8 +2046,10 @@ Example response:
                     )
 
                 # Validate and coerce the line number to a positive integer.
+                # The fallback uses the original error record's line, clamped to ≥ 1.
+                safe_fallback_line = max(1, int(line)) if isinstance(line, (int, float)) else 1
                 try:
-                    llm_line = int(fix_data.get("line", line))
+                    llm_line = int(fix_data.get("line", safe_fallback_line))
                     if llm_line < 1:
                         raise ValueError(f"line must be ≥ 1, got {llm_line}")
                 except (TypeError, ValueError) as _le:
@@ -2057,16 +2066,34 @@ Example response:
                     "LLM generated fix for %s at %s:%s (action=%s)",
                     error_type, file_path_str, llm_line, llm_action,
                 )
-            except Exception as _llm_err:
+            except (json.JSONDecodeError, ValueError) as _parse_err:
+                # Response parsing / validation failure — log with enough detail
+                # for a developer to diagnose malformed LLM output.
                 logger.warning(
-                    "LLM fix generation failed: %s — falling back to info action", _llm_err
+                    "LLM fix generation failed (response parsing): %s — "
+                    "falling back to info action",
+                    _parse_err,
                 )
                 fix_result = {
                     "success": True,
                     "content": f"# Manual fix required for {error_type}: {message}",
                     "action": "info",
                     "line": line,
-                    "reasoning": f"Could not auto-generate fix: {_llm_err}",
+                    "reasoning": f"Could not parse LLM response: {_parse_err}",
+                }
+            except Exception as _llm_err:
+                # Network, authentication, rate-limit, or other API-level failure.
+                logger.warning(
+                    "LLM fix generation failed (API error): %s — "
+                    "falling back to info action",
+                    _llm_err,
+                )
+                fix_result = {
+                    "success": True,
+                    "content": f"# Manual fix required for {error_type}: {message}",
+                    "action": "info",
+                    "line": line,
+                    "reasoning": f"LLM API error: {_llm_err}",
                 }
 
         # Build proposed changes — only include when a real fix was generated
@@ -2384,7 +2411,7 @@ Example response:
                 # Invalidate any cached output ZIP so the next download
                 # reflects the updated files on disk.
                 if applied_count > 0 and fix.job_id:
-                    zip_cache_path = Path(f"uploads/{fix.job_id}/output.zip")
+                    zip_cache_path = self._UPLOADS_BASE_DIR / fix.job_id / "output.zip"
                     if zip_cache_path.exists():
                         zip_cache_path.unlink()
                         logger.info(
@@ -2393,6 +2420,8 @@ Example response:
                         )
 
                 # Update fix status to APPLIED when at least one change was written.
+                # fixes_db is an in-memory dict; direct attribute mutation is the
+                # correct persistence mechanism (no separate save call required).
                 if applied_count > 0:
                     try:
                         from server.schemas import FixStatus
