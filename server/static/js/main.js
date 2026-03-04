@@ -2125,8 +2125,23 @@ async function applyFix(fixId, silent = false) {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({force: false, dry_run: false})
         });
+        const data = await response.json();
+        const fixData = (data && data.data != null) ? data.data : data;
+        if (fixData.applied === false) {
+            if (!silent) {
+                const failedCount = fixData.changes_failed || 0;
+                showError(`Fix was not applied: ${failedCount} change(s) failed`);
+                loadFixes();
+            }
+            return {ok: false, message: 'Fix was not applied'};
+        }
         if (!silent) {
-            showSuccess('Fix applied successfully');
+            const changesFailed = fixData.changes_failed || 0;
+            if (changesFailed > 0) {
+                showError(`Fix partially applied: ${changesFailed} change(s) failed`);
+            } else {
+                showSuccess('Fix applied successfully');
+            }
             loadFixes();
         }
         return {ok: true, message: ''};
