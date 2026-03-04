@@ -10,7 +10,10 @@ producing Base/Create/Update/Read/List variants with Field() constraints
 and ConfigDict(from_attributes=True) for SQLAlchemy ORM compatibility.
 
 Template Variables:
-- class_names: List of schema entity names to generate (e.g. User, Product)
+- class_names: List of ROOT schema entity names to generate CRUD families for
+               (e.g. User, Product — NOT PatientCreate, PatientInDB)
+- intermediate_class_names: Already-suffixed schema names (e.g. PatientCreate,
+               PatientInDB) that should be emitted as simple stubs, not CRUD families
 - function_names: List of validation helper function names to generate
 #}
 from __future__ import annotations
@@ -53,6 +56,13 @@ class {{ cls }}List(BaseModel):
 
     items: list[{{ cls }}Read] = Field(..., description="List of {{ cls | lower }} records")
     total: int = Field(..., ge=0, description="Total number of records")
+
+{% endfor %}
+{% for cls in intermediate_class_names | default([]) %}
+
+class {{ cls }}(BaseModel):
+    """Stub schema — replace with actual field definitions."""
+    model_config = ConfigDict(from_attributes=True)
 
 {% endfor %}
 {% for fn in function_names %}

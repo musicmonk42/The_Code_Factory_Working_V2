@@ -221,6 +221,15 @@ DEFAULT_SFE_ANALYSIS_TIMEOUT = int(os.getenv("SFE_ANALYSIS_TIMEOUT_SECONDS", "30
 # Maximum number of files to analyze in depth during SFE analysis (prevents timeout)
 MAX_SFE_FILES_TO_ANALYZE = int(os.getenv("MAX_SFE_FILES_TO_ANALYZE", "50"))
 
+# Maximum number of compliance violations before the pipeline is treated as a
+# FAILURE for regulated project types (HIPAA / GDPR).  Set to 0 to disable.
+# Production incident: 43 HIPAA violations were shipped because this threshold
+# was not enforced — every healthcare job must pass this gate.
+MAX_COMPLIANCE_VIOLATIONS: int = int(os.getenv("MAX_COMPLIANCE_VIOLATIONS", "20"))
+# Compliance frameworks that trigger the blocking gate (case-insensitive match
+# against the matched_specs list returned by the compliance scanner).
+_BLOCKING_COMPLIANCE_SPECS: frozenset = frozenset({"hipaa", "gdpr", "pci-dss", "sox"})
+
 # Per-step pipeline timeouts — codegen timeout triggers a FAILED job (critical path).
 # Other step timeouts (testgen, critique, sfe_analysis, docgen) return an error status
 # and allow the pipeline to continue gracefully (non-critical path).
@@ -3990,8 +3999,8 @@ class OmniCoreService:
                     # Run post-generation compliance validation via generator.specs router.
                     # Scans generated files for PHI/PII patterns that indicate missing
                     # security controls (e.g. unencrypted PHI fields, missing audit logs).
-                    # Violations are logged as warnings and recorded in job metadata but
-                    # do NOT block the pipeline — they inform retry and reporting.
+                    # For regulated frameworks (HIPAA / GDPR) violations above
+                    # MAX_COMPLIANCE_VIOLATIONS cause a pipeline FAILURE.
                     try:
                         from generator.specs import check_generated_output  # noqa: PLC0415
                         _spec_violations = check_generated_output(
@@ -3999,24 +4008,65 @@ class OmniCoreService:
                             requirements,
                             compliance_preferences,
                         )
-                        if _spec_violations:
-                            logger.warning(
-                                "[CODEGEN] Post-generation compliance scan found %d violation(s) "
-                                "in job %s — review generated code for missing security controls",
-                                len(_spec_violations),
-                                job_id,
-                                extra={
-                                    "job_id": job_id,
-                                    "violation_count": len(_spec_violations),
-                                    "violations": _spec_violations[:10],  # cap log size
-                                },
+                        _violation_count = len(_spec_violations) if _spec_violations else 0
+                        if _violation_count:
+                            # Determine if any blocking compliance framework is in play.
+                            _matched = [
+                                s.lower()
+                                for s in (compliance_preferences or {}).keys()
+                                if s.lower() in _BLOCKING_COMPLIANCE_SPECS
+                            ]
+                            _is_regulated = bool(_matched)
+                            _exceeds_threshold = (
+                                MAX_COMPLIANCE_VIOLATIONS > 0
+                                and _violation_count > MAX_COMPLIANCE_VIOLATIONS
                             )
+                            if _is_regulated and _exceeds_threshold:
+                                logger.error(
+                                    "[CODEGEN] Post-generation compliance scan found %d violation(s) "
+                                    "in job %s — BLOCKING pipeline: %d > MAX_COMPLIANCE_VIOLATIONS=%d "
+                                    "(specs: %s)",
+                                    _violation_count, job_id, _violation_count,
+                                    MAX_COMPLIANCE_VIOLATIONS, _matched,
+                                    extra={
+                                        "job_id": job_id,
+                                        "violation_count": _violation_count,
+                                        "violations": _spec_violations[:10],
+                                        "blocking": True,
+                                        "matched_specs": _matched,
+                                    },
+                                )
+                                # Record violation count in requirements so downstream
+                                # stages (and pipeline result) can surface it.
+                                requirements["compliance_violation_count"] = _violation_count
+                                requirements["compliance_blocked"] = True
+                                # Signal blocking failure via the codegen result.
+                                raise RuntimeError(
+                                    f"Compliance gate FAILED: {_violation_count} violation(s) found "
+                                    f"for {_matched} — exceeds MAX_COMPLIANCE_VIOLATIONS={MAX_COMPLIANCE_VIOLATIONS}. "
+                                    "Review and fix security controls before shipping."
+                                )
+                            else:
+                                logger.warning(
+                                    "[CODEGEN] Post-generation compliance scan found %d violation(s) "
+                                    "in job %s — review generated code for missing security controls",
+                                    _violation_count,
+                                    job_id,
+                                    extra={
+                                        "job_id": job_id,
+                                        "violation_count": _violation_count,
+                                        "violations": _spec_violations[:10],  # cap log size
+                                    },
+                                )
+                                requirements["compliance_violation_count"] = _violation_count
                         else:
                             logger.info(
                                 "[CODEGEN] Post-generation compliance scan passed for job %s",
                                 job_id,
                                 extra={"job_id": job_id},
                             )
+                    except RuntimeError:
+                        raise  # Re-raise blocking compliance failures
                     except Exception as _cv_err:
                         logger.warning(
                             "[CODEGEN] Post-generation compliance scan failed for job %s: %s",

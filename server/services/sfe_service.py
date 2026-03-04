@@ -149,6 +149,11 @@ class SFEService:
         self._arbiter_instance = None
         self._arbiter_running = False
 
+        # Per-job lock set: tracks which job IDs currently have an active
+        # Arbiter analysis to prevent concurrent duplicate runs of the same job.
+        # Each entry is removed when the analysis completes.
+        self._active_arbiter_analyses: set = set()
+
         logger.info("SFEService initialized")
 
     def _init_sfe_components(self):
@@ -3110,6 +3115,32 @@ Example response:
             Structured results with defects, policy_violations, severity_breakdown,
             complexity_info, and files_analyzed.
         """
+        # Concurrency guard: return immediately if an analysis is already running
+        # for this job to prevent duplicate/concurrent Arbiter runs (e.g. when the
+        # user clicks the "Start Arbiter" button multiple times while the first
+        # analysis is still in progress).
+        if job_id in self._active_arbiter_analyses:
+            logger.info(
+                "Arbiter analysis for job %s is already in progress — skipping duplicate request",
+                job_id,
+            )
+            return {
+                "status": "already_running",
+                "job_id": job_id,
+                "message": "Arbiter analysis is already in progress for this job",
+                "defects": [],
+                "policy_violations": [],
+                "severity_breakdown": {},
+                "files_analyzed": 0,
+            }
+        self._active_arbiter_analyses.add(job_id)
+        try:
+            return await self._run_arbiter_analysis_inner(job_id)
+        finally:
+            self._active_arbiter_analyses.discard(job_id)
+
+    async def _run_arbiter_analysis_inner(self, job_id: str) -> Dict[str, Any]:
+        """Internal implementation of _run_arbiter_analysis (runs after concurrency guard)."""
         logger.info(f"Running Arbiter analysis for job {job_id}")
 
         # Resolve the code path for this job

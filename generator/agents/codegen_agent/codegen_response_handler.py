@@ -1684,8 +1684,77 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
     if isinstance(response, dict):
         # Check if this is already a file map ({"files": {...}} or {"app/main.py": "..."})
         if "files" in response and isinstance(response["files"], dict):
-            logger.info("Response is already a file map dict with 'files' key")
-            raw = json.dumps(response)
+            # Fast path: directly extract and process files from the dict without
+            # round-tripping through json.dumps → json.loads, which can trigger
+            # the single-file syntax repair path and corrupt Python code that
+            # contains JSON-special characters (unterminated string false positives).
+            logger.info("Response is already a file map dict with 'files' key — processing directly")
+            files_obj = response["files"]
+            code_files: Dict[str, str] = {}
+            errors: Dict[str, str] = {}
+            repair_logs: List[str] = []
+
+            for filename, content in files_obj.items():
+                if not isinstance(content, str):
+                    errors[filename] = "Content is not a string."
+                    continue
+                cleaned = _normalize_file_content(content)
+                if _is_non_python_artifact(filename, lang):
+                    code_files[filename] = cleaned
+                    continue
+                file_lang = _infer_language_from_filename(filename, default_lang=lang)
+                # For Python files, try ast.parse first — if it succeeds, skip
+                # the full validate_and_repair_syntax pipeline to avoid incorrect
+                # auto-repair of valid Python code embedded in JSON values.
+                if file_lang in ("python", "py") and not _should_skip_syntax_validation(filename):
+                    try:
+                        ast.parse(cleaned)
+                        cleaned_code = remove_dead_imports(cleaned, filename)
+                        code_files[filename] = cleaned_code
+                        continue
+                    except SyntaxError:
+                        pass  # Fall through to full validation/repair below
+                validation_result = validate_and_repair_syntax(cleaned, file_lang, filename)
+                if validation_result['valid']:
+                    cleaned_code = remove_dead_imports(validation_result['code'], filename)
+                    code_files[filename] = cleaned_code
+                    if validation_result['auto_repaired']:
+                        info = f"Auto-repaired {filename}: {', '.join(validation_result['repairs_applied'])}"
+                        repair_logs.append(info)
+                        logger.info(info)
+                else:
+                    code_files[filename] = cleaned
+                    logger.warning(
+                        "Syntax validation failed for '%s' (%s): %s",
+                        filename, file_lang, validation_result['error'],
+                    )
+                    errors[filename] = validation_result['error']
+
+            if errors:
+                lines = ["One or more files failed syntax validation.", ""]
+                for fname, emsg in errors.items():
+                    lines += [f"[{fname}]", str(emsg), ""]
+                code_files[ERROR_FILENAME] = "\n".join(lines).rstrip()
+
+            if code_files:
+                code_files = _detect_module_package_collisions(code_files)
+                code_files = _detect_file_package_conflicts(code_files)
+                shadow_warnings = _detect_name_shadowing(code_files)
+                for w in shadow_warnings:
+                    logger.warning("Name shadowing detected: %s", w)
+                non_error_files = {k: v for k, v in code_files.items() if k != ERROR_FILENAME}
+                files_passed_count = len(non_error_files)
+                files_failed_count = len(errors)
+                total_count = files_passed_count + files_failed_count
+                rejection_rate = files_failed_count / total_count if total_count > 0 else 0.0
+                finalized = _finalize_with_pydantic_v2_validation(code_files)
+                finalized["__validation_summary__"] = json.dumps({
+                    "files_passed": files_passed_count,
+                    "files_failed": files_failed_count,
+                    "rejection_rate": round(rejection_rate, 4),
+                    "shadow_warnings": shadow_warnings,
+                })
+                return finalized
         elif all(isinstance(v, str) for v in response.values()) and any(
             "/" in k or "." in k for k in response.keys()
         ):
@@ -3117,7 +3186,25 @@ def validate_and_repair_syntax(code: str, language: str, filename: str) -> Dict[
         if fixed_code != code:
             logger.info(f"Fixed bare identifiers in {filename} before validation")
             code = fixed_code
-    
+
+    # Guard: for Python files, if ast.parse() succeeds on the raw (normalized)
+    # content, skip the full _validate_syntax + auto-repair pipeline entirely.
+    # This prevents SyntaxAutoRepair.repair_unterminated_strings() from
+    # incorrectly mangling valid Python code that contains JSON-special chars
+    # (e.g. single-quoted strings inside JSON-double-quoted file values).
+    if language.lower() in ("python", "py") and not _should_skip_syntax_validation(filename):
+        try:
+            ast.parse(code)
+            return {
+                'valid': True,
+                'code': code,
+                'error': None,
+                'repairs_applied': [],
+                'auto_repaired': False
+            }
+        except SyntaxError:
+            pass  # Fall through to full validation / repair
+
     # Try original code first
     is_valid, error_msg = _validate_syntax(code, language, filename)
     
@@ -5053,8 +5140,12 @@ def _classify_stub_module(module_path: str, symbols: Set[str]) -> str:
     dir_parts = [p.lower() for p in path_obj.parts[:-1]]
     sym_lower = {s.lower() for s in symbols}
 
-    # Priority 1 — Database: unambiguous async session factory symbols.
-    if "async_sessionmaker" in sym_lower or "get_db" in sym_lower:
+    # Priority 1 — Database: unambiguous async session factory symbols OR
+    # the file is literally named "database.py" regardless of what it exports.
+    # The path-based check ensures that `from app.database import Base` (without
+    # importing get_db or async_sessionmaker) is still classified as "database"
+    # and receives the proper SQLAlchemy async template.
+    if "async_sessionmaker" in sym_lower or "get_db" in sym_lower or stem == "database":
         return "database"
 
     # Priority 2 — Service: directory named service/services.
@@ -5205,6 +5296,28 @@ def _render_stub_template(
             and not _is_likely_variable(s)
         )
 
+        # For schema stubs: split class names into root entity names (no suffix)
+        # and intermediate schema names (already end with a Pydantic suffix like
+        # "Create", "InDB", "Update" etc).  The schema_stub.jinja2 template
+        # generates a full CRUD family (XxxBase, XxxCreate, XxxRead, …) for each
+        # class name, which is wrong for intermediate names like "PatientCreate" —
+        # it would produce "PatientCreateBase", "PatientCreateCreate", etc.
+        # Root entities are passed normally; intermediate classes are emitted as
+        # simple stub definitions via the ``intermediate_class_names`` variable.
+        if category == "schema":
+            _pydantic_sfx_lower = tuple(s.lower() for s in _PYDANTIC_CLASS_SUFFIXES)
+            _root_class_names = []
+            _intermediate_class_names = []
+            for _cls in class_names:
+                _cls_lower = _cls.lower()
+                if any(_cls_lower.endswith(sfx) for sfx in _pydantic_sfx_lower):
+                    _intermediate_class_names.append(_cls)
+                else:
+                    _root_class_names.append(_cls)
+            class_names = _root_class_names  # Only root entities → CRUD family
+        else:
+            _intermediate_class_names = []
+
         # Derive a human-readable base resource name by stripping well-known
         # module-type suffixes (e.g. "product_service" → "product").
         stem = Path(module_path).stem
@@ -5300,6 +5413,7 @@ def _render_stub_template(
             module_name=module_name,
             router_prefix=_auth_prefix,
             token_url=f"{_auth_prefix}/token",
+            intermediate_class_names=_intermediate_class_names,
         )
         rendered: str = template.render(**render_context)
         return rendered
@@ -5612,8 +5726,18 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             has_sqlalchemy_class = _is_sqlalchemy_module and any(
                 sym[0].isupper() for sym in symbols
             )
-            # Detect database modules by the presence of async session-factory symbols.
-            _is_database_module = "async_sessionmaker" in symbols or "get_db" in symbols
+            # Detect database modules by the presence of async session-factory symbols
+            # OR by path — app/database.py should always get the SQLAlchemy async
+            # setup even when only Base is imported (not get_db or async_sessionmaker).
+            # Production bug: when only `from app.database import Base` was present,
+            # _is_database_module was False and the stub generator emitted a Pydantic
+            # BaseModel stub, breaking every ORM model in the project.
+            _path_stem = Path(target_module_path).stem.lower()
+            _is_database_module = (
+                "async_sessionmaker" in symbols
+                or "get_db" in symbols
+                or _path_stem == "database"
+            )
             if _is_database_module:
                 # Emit a self-contained, production-ready async database module that:
                 #  • Reads DATABASE_URL from the environment (twelve-factor config)

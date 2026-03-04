@@ -1095,6 +1095,12 @@ class CodebaseAnalyzer:
                     )
                     b_mgr.discover_files([str(file_path)])
                     b_mgr.run_tests()
+                    # B101 (assert_used) is a false positive in test files — Pytest
+                    # relies on assert statements as its primary assertion mechanism.
+                    _is_test_file = (
+                        "/test" in str(file_path).lower()
+                        or str(file_path).lower().endswith(("_test.py", "test_.py"))
+                    )
                     defects.extend(
                         [
                             {
@@ -1105,6 +1111,7 @@ class CodebaseAnalyzer:
                                 "source": "bandit",
                             }
                             for issue in b_mgr.get_issue_list()
+                            if not (_is_test_file and getattr(issue, "test_id", "") == "B101")
                         ]
                     )
                 elif tool["name"] == "Mypy" and MYPY_AVAILABLE and not _SFE_SKIP_MYPY and not _SFE_FAST_MODE:
@@ -1478,7 +1485,15 @@ class CodebaseAnalyzer:
                 )
                 b_mgr.discover_files([path], False)
                 b_mgr.run_tests()
+                # B101 (assert_used) is a false positive in test files — Pytest
+                # relies on assert statements as its primary assertion mechanism.
+                _is_test_path = (
+                    "/test" in path.lower()
+                    or path.lower().endswith(("_test.py", "test_.py"))
+                )
                 for issue in b_mgr.get_issue_list():
+                    if _is_test_path and getattr(issue, "test_id", "") == "B101":
+                        continue  # Skip assert-in-test false positives
                     issues.append(
                         {
                             "type": issue.test_id,

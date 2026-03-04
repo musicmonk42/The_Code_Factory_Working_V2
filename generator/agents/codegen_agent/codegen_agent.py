@@ -630,8 +630,16 @@ def _extract_spec_models(requirements: Dict[str, Any]) -> str:
 _PLACEHOLDER_SERVICE_THRESHOLD_PCT = 30.0
 
 # Maximum number of targeted LLM stub-replacement passes after the ensemble merge.
-# Kept small to prevent unbounded retry loops when the LLM persistently returns stubs.
-_STUB_RETRY_MAX_ATTEMPTS: int = 2
+# Set to 5 to give the LLM sufficient attempts to replace all stub files, especially
+# for large projects with many stubs (e.g. healthcare apps with 14+ missing modules).
+# Production logs showed 2 attempts was insufficient when LLM returned malformed JSON
+# on all attempts, leaving all business routers as stubs with 0 files replaced.
+_STUB_RETRY_MAX_ATTEMPTS: int = 5
+
+# Maximum batch size for a single stub-retry LLM call.  When more than this many
+# stub files are outstanding, the batch is split into smaller chunks so the LLM
+# is not overwhelmed with a huge JSON payload and is more likely to produce valid output.
+_STUB_RETRY_BATCH_SIZE: int = 6
 
 # Plain-text prompt suffix used by _retry_stub_files when the Jinja2 template is
 # unavailable.  Centralised here so the exception-fallback and the no-template
@@ -1235,6 +1243,26 @@ async def _retry_stub_files(
         # Never ask the LLM to regenerate main.py — it's auto-wired by _reconcile_app_wiring
         stub_paths.discard("app/main.py")
         stub_paths.discard("main.py")
+
+        # Split large batches so the LLM is not overwhelmed with too many files
+        # at once.  When the stub set exceeds _STUB_RETRY_BATCH_SIZE, process
+        # only a window of files per attempt (round-robin across attempts) so
+        # each LLM call stays focused and is more likely to produce valid JSON.
+        _all_stub_sorted = sorted(stub_paths)
+        if len(_all_stub_sorted) > _STUB_RETRY_BATCH_SIZE:
+            _batch_start = (attempt * _STUB_RETRY_BATCH_SIZE) % max(len(_all_stub_sorted), 1)
+            _batch_slice = (
+                _all_stub_sorted[_batch_start:_batch_start + _STUB_RETRY_BATCH_SIZE]
+                or _all_stub_sorted[:_STUB_RETRY_BATCH_SIZE]
+            )
+            stub_paths = set(_batch_slice)
+            logger.info(
+                "[CODEGEN] _retry_stub_files: large batch split — processing %d of %d stubs this attempt: %s",
+                len(stub_paths),
+                len(_all_stub_sorted),
+                sorted(stub_paths),
+            )
+
         logger.info(
             "[CODEGEN] _retry_stub_files: attempt %d/%d — %d stub file(s) remaining: %s",
             attempt + 1,
@@ -1372,9 +1400,17 @@ async def _retry_stub_files(
 
         if not matched_files:
             syntax_error_streak += 1
-            if syntax_error_streak >= 2:
+            # Only abort after 3 consecutive zero-match attempts (not 2), and only
+            # when the LLM has also not returned ANY valid files at all (i.e. only
+            # error.txt / __validation_summary__ were returned).  This prevents
+            # aborting when the LLM returned mostly-good code with one syntax issue.
+            _all_returned_are_errors = all(
+                p in ("error.txt", "__syntax_errors__", "__validation_summary__")
+                for p in new_files
+            )
+            if syntax_error_streak >= 3 and _all_returned_are_errors:
                 logger.warning(
-                    "[CODEGEN] _retry_stub_files: 2 consecutive syntax-error-only responses; aborting stub retry"
+                    "[CODEGEN] _retry_stub_files: 3 consecutive all-error responses; aborting stub retry"
                 )
                 break
         else:
@@ -1575,7 +1611,60 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
         )
 
     if not router_modules:
-        return updated  # Nothing to wire — return unchanged                           #
+        # Before giving up entirely, check whether there are service files in
+        # app/services/ that lack corresponding router files.  If so, generate
+        # minimal stub routers so they can be wired into main.py.
+        _svc_re = re.compile(r'^app/services/([^/]+)_service\.py$')
+        for path in list(updated.keys()):
+            _m = _svc_re.match(path)
+            if not _m:
+                continue
+            entity = _m.group(1)  # e.g. "patient", "appointment", "prescription"
+            router_path = f"app/routers/{entity}s.py"  # pluralise for REST convention
+            if router_path not in updated:
+                _router_var = f"{entity}s_router"
+                _class_name = entity.replace("_", " ").title().replace(" ", "")
+                stub_router = (
+                    f"# Auto-generated stub router for {entity} — replace with real implementation\n"
+                    f"from fastapi import APIRouter\n\n"
+                    f"from app.services.{entity}_service import {_class_name}Service\n\n"
+                    f"{_router_var} = APIRouter()\n"
+                    f"_svc = {_class_name}Service()\n\n\n"
+                    f"@{_router_var}.get('/')\n"
+                    f"async def list_{entity}s():\n"
+                    f'    """List all {entity}s."""\n'
+                    f"    return []\n\n\n"
+                    f"@{_router_var}.post('/')\n"
+                    f"async def create_{entity}():\n"
+                    f'    """Create a new {entity}."""\n'
+                    f"    return {{}}\n\n\n"
+                    f"@{_router_var}.get('/{{item_id}}')\n"
+                    f"async def get_{entity}(item_id: int):\n"
+                    f'    """Get a single {entity} by ID."""\n'
+                    f"    return {{}}\n\n\n"
+                    f"@{_router_var}.put('/{{item_id}}')\n"
+                    f"async def update_{entity}(item_id: int):\n"
+                    f'    """Update a {entity}."""\n'
+                    f"    return {{}}\n\n\n"
+                    f"@{_router_var}.delete('/{{item_id}}')\n"
+                    f"async def delete_{entity}(item_id: int):\n"
+                    f'    """Delete a {entity}."""\n'
+                    f"    return {{}}\n"
+                )
+                updated[router_path] = stub_router
+                logger.info(
+                    "[CODEGEN] _reconcile_app_wiring: generated stub router %s for service %s",
+                    router_path, path,
+                )
+                module = router_path.replace("/", ".").removesuffix(".py")
+                router_modules.append({
+                    "module": module,
+                    "var": _router_var,
+                    "prefix": "",
+                    "router_dir": "routers",
+                })
+        if not router_modules:
+            return updated  # Nothing to wire — return unchanged                           #
 
     # ------------------------------------------------------------------ #
     # 1b. Deduplicate router files that define the same HTTP endpoint.    #
