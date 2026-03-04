@@ -328,8 +328,6 @@ class SecurityAnalyzer:
         return bandit_issues, pip_vulns, snyk_vulns
 
     def _run_bandit(self) -> List[Dict[str, Any]]:
-        from .core_audit import audit_logger
-
         logger.info(f"Running Bandit on {self.project_root}...")
         audit_logger.log_event("bandit_scan_start", project_root=self.project_root)
         try:
@@ -369,8 +367,6 @@ class SecurityAnalyzer:
             )
 
     def _run_pip_audit(self) -> List[Dict[str, Any]]:
-        from .core_audit import audit_logger
-
         logger.info("Running pip-audit for dependency vulnerabilities...")
         audit_logger.log_event("pip_audit_scan_start", project_root=self.project_root)
         try:
@@ -419,8 +415,6 @@ class SecurityAnalyzer:
             )
 
     def _run_snyk(self) -> List[Dict[str, Any]]:
-        from .core_audit import audit_logger
-
         logger.info("Running Snyk code and dependency scan...")
         audit_logger.log_event("snyk_scan_start", project_root=self.project_root)
         snyk_token = SECRETS_MANAGER.get_secret(
@@ -480,8 +474,6 @@ class SecurityAnalyzer:
             )
 
     async def perform_security_scan(self) -> Dict[str, Any]:
-        from .core_audit import audit_logger
-
         logger.info(f"Starting comprehensive security scan for {self.project_root}...")
         audit_logger.log_event("security_scan_start", project_root=self.project_root)
         cache_key_hash = hashlib.sha256(self.project_root.encode("utf-8")).hexdigest()
@@ -643,8 +635,6 @@ class SecurityAnalyzer:
         return results
 
     def security_health_check(self, check_only: bool = False) -> bool:
-        from .core_audit import audit_logger
-
         logger.info("Performing security component health check...")
         audit_logger.log_event(
             "security_health_check_start",
