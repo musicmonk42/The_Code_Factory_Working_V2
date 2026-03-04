@@ -1718,7 +1718,213 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             return updated  # Nothing to wire — return unchanged                           #
 
     # ------------------------------------------------------------------ #
-    # 1b. Deduplicate router files that define the same HTTP endpoint.    #
+    # 1c. Detect ForeignKey relationships and inject nested resource      #
+    #     routes (e.g. GET /patients/{patient_id}/encounters) into the   #
+    #     parent entity's router when they are missing.                   #
+    # ------------------------------------------------------------------ #
+    # Build two mappings from AST inspection of all model files:
+    #   _parent_to_children: parent_table → [(ChildClass, child_table, fk_col)]
+    #   _table_pk_type:       table_name  → Python type annotation string
+    # The pk-type map enables generating type-correct path parameters for
+    # nested endpoints instead of unconditionally defaulting to ``int``.
+    _parent_to_children: Dict[str, List[tuple]] = {}  # parent_table → [(ChildClass, child_table, fk_col)]
+    _table_pk_type: Dict[str, str] = {}  # table_name → "int" | "uuid.UUID" | "str" | ...
+
+    # _resolve_pk_type: extract the Python type from a Column()/mapped_column() PK statement.
+    def _resolve_pk_type(stmt: ast.stmt) -> Optional[str]:
+        """Return the Python annotation string for a PK column statement, or None."""
+        call: Optional[ast.Call] = None
+        ann_node: Optional[ast.expr] = None
+        if isinstance(stmt, ast.Assign) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+        elif isinstance(stmt, ast.AnnAssign) and isinstance(stmt.value, ast.Call):
+            call = stmt.value
+            ann_node = stmt.annotation
+        if call is None:
+            return None
+        fn_name = (
+            call.func.id if isinstance(call.func, ast.Name)
+            else call.func.attr if isinstance(call.func, ast.Attribute)
+            else None
+        )
+        if fn_name is None:
+            return None
+        is_pk = any(
+            kw.arg == "primary_key"
+            and isinstance(kw.value, ast.Constant)
+            and kw.value.value is True
+            for kw in call.keywords
+        )
+        if not is_pk:
+            return None
+        if fn_name.lower() == "column" and call.args:
+            # Column(Integer, primary_key=True) — type from first positional arg
+            type_arg = call.args[0]
+            if isinstance(type_arg, ast.Name):
+                col_name = type_arg.id.lower()
+                return {"integer": "int", "biginteger": "int", "smallinteger": "int",
+                        "string": "str", "text": "str", "varchar": "str",
+                        "uuid": "uuid.UUID"}.get(col_name)
+        elif fn_name.lower() == "mapped_column" and isinstance(ann_node, ast.Subscript):
+            # id: Mapped[int] = mapped_column(primary_key=True) — type from annotation
+            sl = ann_node.slice
+            if isinstance(sl, ast.Name):
+                return sl.id
+            if isinstance(sl, ast.Attribute) and isinstance(sl.value, ast.Name):
+                return f"{sl.value.id}.{sl.attr}"
+        return None
+
+    for _mf_path, _mf_content in updated.items():
+        if not re.match(r'^app/models/(?!__init__)[^/]+\.py$', _mf_path):
+            continue
+        try:
+            _mf_tree = ast.parse(_mf_content)
+        except SyntaxError:
+            continue
+        for _cls_node in ast.walk(_mf_tree):
+            if not isinstance(_cls_node, ast.ClassDef):
+                continue
+            _child_class = _cls_node.name
+            # Determine child table from __tablename__ or a CamelCase→snake_s pluralisation.
+            # Note: the fallback pluralisation appends "s" which works for the common English
+            # regular-plural case; irregular plurals (e.g. "person"→"people") are not handled
+            # but are uncommon in auto-generated healthcare/CRUD schemas.
+            _child_table: Optional[str] = None
+            for _stmt in _cls_node.body:
+                if (
+                    isinstance(_stmt, ast.Assign)
+                    and any(
+                        isinstance(t, ast.Name) and t.id == "__tablename__"
+                        for t in _stmt.targets
+                    )
+                    and isinstance(_stmt.value, ast.Constant)
+                ):
+                    _child_table = str(_stmt.value.value)
+                    break
+            if not _child_table:
+                _child_table = re.sub(r'(?<!^)(?=[A-Z])', '_', _child_class).lower() + "s"
+            # Collect the PK type for this entity's table
+            for _stmt in _cls_node.body:
+                _pk_type = _resolve_pk_type(_stmt)
+                if _pk_type is not None:
+                    _table_pk_type[_child_table] = _pk_type
+                    break
+            # Scan class body for ForeignKey columns
+            for _stmt in _cls_node.body:
+                _fk_col: Optional[str] = None
+                _call_node: Optional[ast.Call] = None
+                if isinstance(_stmt, ast.Assign) and isinstance(_stmt.value, ast.Call):
+                    _call_node = _stmt.value
+                    _fk_col = (
+                        _stmt.targets[0].id
+                        if _stmt.targets and isinstance(_stmt.targets[0], ast.Name)
+                        else None
+                    )
+                elif isinstance(_stmt, ast.AnnAssign) and isinstance(_stmt.value, ast.Call):
+                    _call_node = _stmt.value
+                    _fk_col = (
+                        _stmt.target.id
+                        if isinstance(_stmt.target, ast.Name)
+                        else None
+                    )
+                if _call_node is None or _fk_col is None:
+                    continue
+                # Look for a ForeignKey() in the call's args or keyword args
+                _fk_ref: Optional[str] = None
+                for _call_arg in ast.walk(_call_node):
+                    if not isinstance(_call_arg, ast.Call):
+                        continue
+                    _fn = (
+                        _call_arg.func.id if isinstance(_call_arg.func, ast.Name)
+                        else _call_arg.func.attr if isinstance(_call_arg.func, ast.Attribute)
+                        else None
+                    )
+                    if _fn != "ForeignKey":
+                        continue
+                    if _call_arg.args and isinstance(_call_arg.args[0], ast.Constant):
+                        _fk_ref = str(_call_arg.args[0].value)  # e.g. "patients.id"
+                    break
+                if not _fk_ref:
+                    continue
+                _parent_table = _fk_ref.split(".")[0]  # "patients"
+                _parent_to_children.setdefault(_parent_table, []).append(
+                    (_child_class, _child_table, _fk_col)
+                )
+
+    # For each discovered parent→child relationship, add a nested GET route
+    # to the parent router file if it does not already have one.
+    if _parent_to_children:
+        for _router_path, _router_content in list(updated.items()):
+            if not _router_path_re.match(_router_path):
+                continue
+            # Derive the entity name from the router filename stem.
+            # rstrip("s") is the same simple singularisation used above for
+            # table → entity mapping; it handles the regular-plural convention
+            # that generated router filenames follow (patients.py, providers.py).
+            _stem = _router_path.rsplit("/", 1)[-1].removesuffix(".py")  # e.g. "patients"
+            _parent_entity = _stem.rstrip("s")
+            # Check plural, singular+s, and singular forms as candidate parent table keys
+            for _pt in (_stem, _parent_entity + "s", _parent_entity):
+                if _pt in _parent_to_children:
+                    _parent_table_key = _pt
+                    break
+            else:
+                continue
+            _router_var_local = _router_var_re.findall(_router_content)
+            if not _router_var_local:
+                continue
+            _rv = _router_var_local[0]
+            # Determine the correct path-parameter type for the parent PK,
+            # falling back to ``int`` (the most common case) when not detected.
+            _pk_ann = _table_pk_type.get(_parent_table_key, "int")
+            _additions: List[str] = []
+            _needs_db_import = (
+                "from sqlalchemy.orm import Session" not in _router_content
+                and "Session" not in _router_content
+            )
+            _needs_depends = "Depends" not in _router_content
+            _needs_get_db = "get_db" not in _router_content
+            for _child_cls, _child_tbl, _fk_col in _parent_to_children[_parent_table_key]:
+                # Check whether a nested route already exists
+                _nested_path_pattern = f"/{{{_parent_entity}_id}}/{_child_tbl}"
+                _alt_pattern = f"/{_parent_entity}_id/{_child_tbl}"
+                if _nested_path_pattern in _router_content or _alt_pattern in _router_content:
+                    continue
+                _child_entity = _child_tbl.rstrip("s")
+                _additions.append(
+                    f"\n\n@{_rv}.get('/{{{_parent_entity}_id}}/{_child_tbl}')\n"
+                    f"async def get_{_parent_entity}_{_child_tbl}("
+                    f"{_parent_entity}_id: {_pk_ann}, db: Session = Depends(get_db)):\n"
+                    f'    """Get all {_child_entity}s for a {_parent_entity}."""\n'
+                    f"    return db.query({_child_cls}).filter("
+                    f"{_child_cls}.{_fk_col} == {_parent_entity}_id).all()\n"
+                )
+            if _additions:
+                _new_content = _router_content.rstrip()
+                # Inject missing imports before the first non-import line
+                _extra_imports: List[str] = []
+                if _needs_depends:
+                    _extra_imports.append("from fastapi import Depends")
+                if _needs_db_import:
+                    _extra_imports.append("from sqlalchemy.orm import Session")
+                if _needs_get_db:
+                    _extra_imports.append("from app.database import get_db")
+                if _extra_imports:
+                    _import_block = "\n".join(_extra_imports) + "\n"
+                    # Insert after last existing import line
+                    _lines = _new_content.splitlines(keepends=True)
+                    _last_import_idx = 0
+                    for _li, _line in enumerate(_lines):
+                        if _line.strip().startswith(("import ", "from ")):
+                            _last_import_idx = _li + 1
+                    _lines.insert(_last_import_idx, _import_block)
+                    _new_content = "".join(_lines)
+                updated[_router_path] = _new_content + "".join(_additions) + "\n"
+                logger.info(
+                    "[CODEGEN] _reconcile_app_wiring: added %d nested route(s) to %s",
+                    len(_additions),
+                    _router_path,
+                )
     #                                                                      #
     # The LLM sometimes generates both products_import.py AND             #
     # products_import_router.py, both registering POST /import.  Including#
@@ -1791,7 +1997,16 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
     for rm in router_modules:
         init_lines.append('    "' + rm['alias'] + '",')
     init_lines.append("]")
-    updated[f"app/{router_dir_name}/__init__.py"] = "\n".join(init_lines) + "\n"
+    # Preserve any existing "from .submodule import Symbol" re-export lines
+    # that were injected by ensure_local_module_stubs or earlier passes so they
+    # are not silently dropped when this __init__.py is regenerated.
+    _reexport_re = re.compile(r'^from \.[^\s]+ import .+', re.MULTILINE)
+    _init_key = f"app/{router_dir_name}/__init__.py"
+    _existing_init = updated.get(_init_key, "")
+    for _rex_line in _reexport_re.findall(_existing_init):
+        if _rex_line not in "\n".join(init_lines):
+            init_lines.append(_rex_line)
+    updated[_init_key] = "\n".join(init_lines) + "\n"
 
     # ------------------------------------------------------------------ #
     # 3. Rebuild app/main.py mounting all routers                         #
@@ -1993,9 +2208,10 @@ def _reconcile_app_wiring(files: Dict[str, str]) -> Dict[str, str]:
             # Router already has a prefix defined in APIRouter() — do NOT add it
             # again to include_router() or routes will be double-prefixed, e.g.
             # /api/v1/products/api/v1/products/import.
+            _existing_prefix = rm["prefix"]
             main_lines.append(
                 f"app.include_router({rm['alias']})"
-                f"  # prefix already defined in router: {rm['prefix']}"
+                f"  # prefix=\"{_existing_prefix}\" already defined in router"
             )
         else:
             stem = rm["module"].rsplit(".", 1)[-1]
