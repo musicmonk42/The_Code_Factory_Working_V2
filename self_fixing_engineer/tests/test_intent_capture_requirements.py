@@ -154,7 +154,7 @@ def mock_tracer():
     mock_tracer_instance = MagicMock()
     mock_tracer_instance.start_as_current_span = MagicMock(return_value=mock_span)
 
-    with patch("intent_capture.requirements.tracer", mock_tracer_instance):
+    with patch.object(requirements_module, "tracer", mock_tracer_instance):
         yield mock_tracer_instance
 
 
@@ -264,11 +264,11 @@ async def test_get_embedding_model_success(
 
 
 @pytest.mark.asyncio
-async def test_get_embedding_model_no_ml():
+async def test_get_embedding_model_no_ml(monkeypatch):
     """Test model loading when ML not enabled."""
-    with patch("intent_capture.requirements.ML_ENABLED", False):
-        with pytest.raises(ImportError):
-            await get_embedding_model()
+    monkeypatch.setattr(requirements_module, "ML_ENABLED", False)
+    with pytest.raises(ImportError):
+        await get_embedding_model()
 
 
 # --- Tests for DB Connection Pool ---
@@ -285,11 +285,11 @@ async def test_get_db_conn_pool_success(mock_asyncpg, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_db_conn_pool_no_db():
+async def test_get_db_conn_pool_no_db(monkeypatch):
     """Test pool when DB not available."""
-    with patch("intent_capture.requirements.DB_AVAILABLE", False):
-        with pytest.raises(ImportError):
-            await get_db_conn_pool()
+    monkeypatch.setattr(requirements_module, "DB_AVAILABLE", False)
+    with pytest.raises(ImportError):
+        await get_db_conn_pool()
 
 
 @pytest.mark.asyncio
@@ -374,10 +374,10 @@ async def test_get_global_custom_checklists_db(mock_asyncpg, temp_files):
 
 
 @pytest.mark.asyncio
-async def test_get_global_custom_checklists_file(temp_files):
+async def test_get_global_custom_checklists_file(temp_files, monkeypatch):
     """Test getting global checklists from file."""
-    with patch("intent_capture.requirements.DB_AVAILABLE", False):
-        checklists = await get_global_custom_checklists()
+    monkeypatch.setattr(requirements_module, "DB_AVAILABLE", False)
+    checklists = await get_global_custom_checklists()
     assert checklists == {"proj": {"dom": [{"id": "1"}]}}
 
 

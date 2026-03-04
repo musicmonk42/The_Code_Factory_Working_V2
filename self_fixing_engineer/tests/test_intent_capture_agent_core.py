@@ -563,26 +563,24 @@ async def test_get_or_create_agent_with_token(
 # --- Test for Configuration Validation ---
 
 
-def test_validate_environment(mock_env_vars):
+def test_validate_environment(mock_env_vars, monkeypatch):
     """Test environment validation"""
     from intent_capture.agent_core import validate_environment
 
     # Should pass with all required vars
     validate_environment()
 
-    # Should fail with missing JWT_SECRET.  Use clear=True to ensure only the
-    # explicitly provided variables are present, avoiding interference from
-    # ambient CI environment variables or monkeypatch/patch.dict interactions.
-    env_without_jwt = {k: v for k, v in mock_env_vars.items() if k != "JWT_SECRET"}
-    with patch.dict(os.environ, env_without_jwt, clear=True):
-        with pytest.raises(ConfigurationError, match="JWT_SECRET"):
-            validate_environment()
+    # Should fail with missing JWT_SECRET.  Use monkeypatch.delenv to robustly
+    # remove JWT_SECRET regardless of any ambient CI environment variable.
+    monkeypatch.delenv("JWT_SECRET", raising=False)
+    with pytest.raises(ConfigurationError, match="JWT_SECRET"):
+        validate_environment()
 
-    # Should fail with missing OPENAI_API_KEYS
-    env_without_openai = {k: v for k, v in mock_env_vars.items() if k != "OPENAI_API_KEYS"}
-    with patch.dict(os.environ, env_without_openai, clear=True):
-        with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
-            validate_environment()
+    # Restore JWT_SECRET then remove OPENAI_API_KEYS
+    monkeypatch.setenv("JWT_SECRET", mock_env_vars["JWT_SECRET"])
+    monkeypatch.delenv("OPENAI_API_KEYS", raising=False)
+    with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
+        validate_environment()
 
 
 # --- Integration Test ---
