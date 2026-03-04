@@ -2960,6 +2960,11 @@ async function sendToSelfFixing(jobId) {
                 // Success case
                 const correlationId = data.correlation_id ? ` (ID: ${data.correlation_id})` : '';
                 showSuccess(`✓ Job sent to Self-Fixing Engineer successfully!${correlationId}`);
+
+                // Invalidate the cached file count for this job so that the job
+                // card reflects any files that SFE may fix automatically during
+                // or shortly after dispatch.
+                completedJobFilesCache.delete(jobId);
                 
                 // Log success for debugging
                 console.log('SFE dispatch successful:', {
