@@ -291,6 +291,29 @@ class ArbiterGrowthManager:
         self._snapshot_breaker.add_listener(snapshot_listener)
         self._push_event_breaker.add_listener(push_event_listener)
 
+    async def _call_with_breaker(self, breaker, func, *args, **kwargs):
+        """Async-compatible circuit breaker call.
+
+        ``pybreaker``'s built-in ``call_async`` relies on ``tornado.gen``
+        which may not be installed.  This helper uses the breaker's state
+        management directly so that async callables are properly awaited.
+        """
+        with breaker._lock:
+            state = breaker.state
+            state.before_call(func, *args, **kwargs)
+            for listener in breaker.listeners:
+                listener.before_call(breaker, func, *args, **kwargs)
+        try:
+            ret = await func(*args, **kwargs)
+        except BaseException as e:
+            with breaker._lock:
+                breaker.state._handle_error(e)
+            raise
+        else:
+            with breaker._lock:
+                breaker.state._handle_success()
+            return ret
+
     async def start(self) -> None:
         """
         Initializes the manager, loads state, and starts background tasks.
@@ -673,7 +696,8 @@ class ArbiterGrowthManager:
     async def _save_snapshot_to_db(self) -> None:
         """Executes the actual database save operation for a snapshot."""
         try:
-            await self._snapshot_breaker.call_async(
+            await self._call_with_breaker(
+                self._snapshot_breaker,
                 self.storage_backend.save_snapshot,
                 self.arbiter,
                 self._state.model_dump(),
@@ -742,7 +766,7 @@ class ArbiterGrowthManager:
                         self.arbiter, event.type, event.details
                     )
 
-            await self._push_event_breaker.call_async(_push)
+            await self._call_with_breaker(self._push_event_breaker, _push)
         except CircuitBreakerError:
             self._last_error = "Push event circuit breaker is open."
             logger.error(self._last_error)
