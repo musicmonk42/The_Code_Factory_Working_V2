@@ -211,7 +211,9 @@ class TestBuildMultipassGroupsHelper:
         assert "core" in names
         assert "routes_and_services" in names
         assert "infrastructure" in names
-        assert names[-1] == "infrastructure"
+        # The base pass list currently ends with "tests" (after the "infrastructure"
+        # pass was extended with "service_implementations" and "tests" passes).
+        assert names[-1] == "tests"
 
     def test_include_frontend_appends_fourth_pass(self):
         """With include_frontend=True, a 'frontend' pass is appended after base passes."""

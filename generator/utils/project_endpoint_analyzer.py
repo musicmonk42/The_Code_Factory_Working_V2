@@ -771,10 +771,32 @@ class ProjectEndpointAnalyzer:
         if not self._router_prefix_map:
             logger.debug(
                 "ProjectEndpointAnalyzer: no include_router() calls with "
-                "prefix= found — skipping resolution (files scanned: %d)",
+                "prefix= found — falling back to per-file local path extraction "
+                "(files scanned: %d)",
                 len(self._files),
             )
-            return []
+            # Fall back to direct per-file extraction without prefix resolution.
+            # This won't produce fully-qualified paths, but it correctly reports
+            # that endpoints *exist* (with their local decorator paths) so that
+            # downstream gap-fill passes are not fooled into thinking zero
+            # endpoints are implemented.
+            from generator.main.provenance import (  # noqa: PLC0415
+                extract_endpoints_from_code,
+            )
+            fallback_endpoints: List[Dict[str, str]] = []
+            _router_file_re = re.compile(r'^app/(?:routers?|routes?)/(?!__init__)[^/]+\.py$')
+            for filename, content in self._files.items():
+                if not _router_file_re.match(filename):
+                    continue
+                for ep in extract_endpoints_from_code(content, filename):
+                    fallback_endpoints.append(ep)
+            if fallback_endpoints:
+                logger.debug(
+                    "ProjectEndpointAnalyzer: fallback extracted %d local endpoint(s) "
+                    "from router files",
+                    len(fallback_endpoints),
+                )
+            return fallback_endpoints
 
         logger.debug(
             "ProjectEndpointAnalyzer: resolving endpoints with prefix map %r, "
