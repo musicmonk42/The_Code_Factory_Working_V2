@@ -8,6 +8,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import aiohttp
 import pytest
+
+# Save a reference to the real class before any patching occurs.
+# unittest.mock raises InvalidSpecError when asked to spec a Mock object.
+_REAL_AIOHTTP_CLIENT_SESSION = aiohttp.ClientSession
 from aiohttp.client_exceptions import ClientResponseError
 from self_fixing_engineer.simulation.plugins.dlt_clients.dlt_base import (
     SECRETS_MANAGER,
@@ -52,7 +56,7 @@ def create_mock_response(status, text=None, json_data=None, headers=None):
 def mock_aiohttp(mocker):
     """Mocks the aiohttp.ClientSession for controlled testing of HTTP requests."""
     # Create a mock session instance
-    mock_session_instance = MagicMock(spec=aiohttp.ClientSession)
+    mock_session_instance = MagicMock(spec=_REAL_AIOHTTP_CLIENT_SESSION)
 
     # Make the instance itself async-context-manager compatible
     mock_session_instance.__aenter__ = AsyncMock(return_value=mock_session_instance)

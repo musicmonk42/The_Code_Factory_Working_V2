@@ -271,34 +271,25 @@ def display_onboarding_wizard():
 
 async def _run_health_checks_gui(config: dict):
     """
-    Run health checks for notification and checkpoint backends,
-    using classes that must be provided in global scope.
+    Run health checks for notification and checkpoint backends.
     """
     try:
         notif_cfg = config.get("notification_backend", {})
         notif_type = notif_cfg.get("type")
         if notif_type:
-            MeshPubSub = globals().get("MeshPubSub")
-            if MeshPubSub:
-                mp = MeshPubSub(notif_type)
-                health = await mp.healthcheck()
-                st_dash.success(
-                    f"Notification backend {notif_type}: {health.get('message', health)}"
-                )
-            else:
-                st_dash.error("MeshPubSub class missing.")
+            mp = MeshPubSub(notif_type)
+            health = await mp.healthcheck()
+            st_dash.success(
+                f"Notification backend {notif_type}: {health.get('message', health)}"
+            )
         cp_cfg = config.get("checkpoint_backend", {})
         cp_type = cp_cfg.get("type")
         if cp_type:
-            CheckpointManager = globals().get("CheckpointManager")
-            if CheckpointManager:
-                cm = CheckpointManager(cp_type)
-                health = await cm.load()
-                st_dash.success(
-                    f"Checkpoint backend {cp_type}: {health.get('status', health)}"
-                )
-            else:
-                st_dash.error("CheckpointManager class missing.")
+            cm = CheckpointManager(cp_type)
+            health = await cm.load()
+            st_dash.success(
+                f"Checkpoint backend {cp_type}: {health.get('status', health)}"
+            )
     except Exception as e:
         logger.exception(f"Health check error: {e}")
         st_dash.error("Unexpected error during health checks.")
@@ -336,9 +327,11 @@ _translations = {
 
 
 def t(key: str) -> str:
-    lang = getattr(st_dash.session_state, "lang", "en")
-    if isinstance(st_dash.session_state, dict):
-        lang = st_dash.session_state.get("lang", lang)
+    session = st_dash.session_state
+    if isinstance(session, dict):
+        lang = session.get("lang", "en")
+    else:
+        lang = getattr(session, "lang", "en")
     return _translations.get(lang, _translations["en"]).get(
         key, _translations["en"].get(key, key)
     )
