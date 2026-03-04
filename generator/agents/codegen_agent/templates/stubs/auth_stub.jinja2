@@ -159,14 +159,19 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
     return {"sub": sub, **payload}
 
 {% if router_names %}
+{% set _prefix = router_prefix if router_prefix is defined else "/auth" %}
+{% set _token_path = token_url if token_url is defined else (_prefix + "/token") %}
+{# Compute the path relative to the router prefix to avoid double-prefixing in the route decorator.
+   e.g. router_prefix="/api/v1/auth", token_url="/api/v1/auth/login" → relative path "/login" #}
+{% set _relative_token_path = _token_path[_prefix|length:] if _token_path.startswith(_prefix) else _token_path %}
 {% for router_var in router_names %}
-{{ router_var }} = APIRouter(prefix="/auth", tags=["auth"])
+{{ router_var }} = APIRouter(prefix="{{ _prefix }}", tags=["auth"])
 {% endfor %}
 
 _auth_router = {{ router_names[0] }}
 
 
-@_auth_router.post("/token", summary="Obtain access token")
+@_auth_router.post("{{ _relative_token_path }}", summary="Obtain access token")
 async def login_for_access_token(username: str, password: str) -> dict:
     # IMPORTANT: This stub does NOT verify credentials.
     # Replace this implementation with real database lookup + verify_password() call

@@ -1751,9 +1751,21 @@ def _repair_double_prefix(output_dir: Path) -> None:
         new_content = content
         for m in _INCLUDE_ROUTER_PREFIX_VALUE_RE.finditer(content):
             prefix_val = m.group(1).rstrip("/")
+            # Exact match: the include_router prefix equals a router's own prefix.
+            # Suffix match: e.g. include_router has "/api/v1/patients" and
+            # the router declares prefix="/patients" — the inner prefix is
+            # redundant because the outer one already covers it.
+            matching_prefix = None
             if prefix_val in router_prefixes:
+                matching_prefix = prefix_val
+            else:
+                for rp in router_prefixes:
+                    if rp and prefix_val.endswith(rp):
+                        matching_prefix = prefix_val
+                        break
+            if matching_prefix is not None:
                 # Build a targeted pattern to remove only this specific prefix kwarg
-                escaped = re.escape(prefix_val)
+                escaped = re.escape(matching_prefix)
                 new_content = re.sub(
                     r',\s*prefix\s*=\s*["\']' + escaped + r'["\']',
                     "",

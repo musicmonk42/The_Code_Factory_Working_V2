@@ -269,10 +269,36 @@ _MULTIPASS_GROUPS = [
             "Helm values.yaml MUST be populated with sensible defaults for all configurable values. "
             "Helm charts (helm/**) MUST be valid Go template YAML (not JSON), "
             "CI/CD configs (.github/workflows/*.yml), pyproject.toml, requirements.txt, "
-            "Makefile, and test files (tests/**). "
+            "Makefile. "
             "Do NOT regenerate application source code files. "
+            "Do NOT generate test files in this pass — tests are handled in the next pass. "
             "Reference the symbol manifest provided above to determine service names, ports, and health check paths. "
             "Do NOT use generic placeholder values — use the actual service and model names from earlier passes. "
+        ),
+    },
+    {
+        "name": "tests",
+        "focus": (
+            "CRITICAL: You MUST provide COMPLETE, WORKING test implementations with REAL test cases. "
+            "Do NOT use `pass`, `...`, or placeholder comments. Every test function MUST have actual assertions.\n"
+            "Generate ONLY test files in the tests/ directory. Use pytest and the fixtures from conftest.py. "
+            "Reference the symbol manifest to import from the correct modules.\n"
+            "REQUIRED test files:\n"
+            "  tests/test_main.py — Health check tests: test that GET /healthz returns HTTP 200 with "
+            "{'status': 'ok'}, test that GET /readyz returns HTTP 200 when app is ready. "
+            "Use httpx.AsyncClient or TestClient from starlette.testclient.\n"
+            "  tests/test_auth.py — Authentication endpoint tests: test successful login returns access_token, "
+            "test login with invalid credentials returns 401, test accessing protected endpoint without token "
+            "returns 401, test accessing protected endpoint with valid token returns 200. "
+            "Import auth router paths from the symbol manifest.\n"
+            "  tests/test_{model}.py for EACH model/router — CRUD operation tests: "
+            "test list endpoint returns 200 with items array, test get-by-id returns 200 for valid ID, "
+            "test get-by-id returns 404 for unknown ID, test create returns 201 with created object, "
+            "test update returns 200 with updated fields, test delete returns 204 or 200. "
+            "Use actual model/schema field names from the symbol manifest — NOT generic placeholders.\n"
+            "All tests MUST use pytest fixtures from conftest.py (e.g. client, db_session, auth_headers). "
+            "All tests MUST use assert statements with meaningful failure messages. "
+            "Do NOT regenerate conftest.py or any non-test source files in this pass."
         ),
     },
 ]

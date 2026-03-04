@@ -5261,11 +5261,12 @@ def _render_stub_template(
         #      the complete template already provides a real implementation for
         #      it.  Unknown symbols must fall through to the parametric stub.
         symbols_all_known = not symbols or symbols.issubset(known_symbols)
+        # Derive router_prefix from the module stem (e.g. "auth" → "/auth").
+        # Computed here so it is available for both the complete template and stub fallback.
+        _auth_prefix = f"/{base_name}" if base_name else "/auth"
         if override_name and not class_names and symbols_all_known:
             try:
                 complete_template = _STUB_TEMPLATE_ENV.get_template(override_name)
-                # Derive router_prefix from the module stem (e.g. "auth" → "/auth").
-                _auth_prefix = f"/{base_name}" if base_name else "/auth"
                 rendered = complete_template.render(
                     class_names=class_names,
                     function_names=function_names,
@@ -5297,6 +5298,8 @@ def _render_stub_template(
             variable_names=variable_names,
             base_name=base_name,
             module_name=module_name,
+            router_prefix=_auth_prefix,
+            token_url=f"{_auth_prefix}/token",
         )
         rendered: str = template.render(**render_context)
         return rendered
