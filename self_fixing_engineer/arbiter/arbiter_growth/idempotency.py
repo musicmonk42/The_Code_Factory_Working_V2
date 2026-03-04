@@ -1,5 +1,6 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
+import inspect
 import logging
 import os
 from typing import Optional, Union
@@ -17,6 +18,19 @@ from shared.noop_metrics import safe_metric as _get_or_create_metric
 # Configure logging
 logger = logging.getLogger(__name__)
 tracer = get_tracer_safe(__name__)
+
+
+async def _maybe_await(obj):
+    """Await obj if it is a coroutine, otherwise return it as-is.
+
+    This defensive helper allows code that constructs a Redis client via
+    ``redis.from_url(...)`` or ``RedisCluster.from_url(...)`` to work
+    correctly whether the call returns a plain object (production) or a
+    coroutine (tests that patch these methods with an async mock).
+    """
+    if inspect.iscoroutine(obj):
+        return await obj
+    return obj
 
 
 # Prometheus metric to track idempotency cache hits and misses.
@@ -175,11 +189,11 @@ class IdempotencyStore:
             # The `from_url` method transparently handles connection pooling.
             # It also supports SSL/TLS via 'rediss://' protocol and authentication.
             if self.cluster_mode:
-                self.redis = RedisCluster.from_url(
+                self.redis = await _maybe_await(RedisCluster.from_url(
                     self._redis_url, decode_responses=True
-                )
+                ))
             else:
-                self.redis = redis.from_url(self._redis_url, decode_responses=True)
+                self.redis = await _maybe_await(redis.from_url(self._redis_url, decode_responses=True))
 
             await self.redis.ping()
             logger.debug("Ping successful.")
