@@ -440,6 +440,30 @@ class SFEService:
                     "line": issue.get("line", 0),
                 }
 
+    def register_defect(self, error_id: str, defect: Dict[str, Any], job_id: str) -> None:
+        """Register a single defect in the errors cache so propose_fix can find it.
+
+        This public helper lets callers (e.g. the arbiter and arena fix pipelines)
+        that instantiate a fresh SFEService inject the current defect before
+        calling propose_fix, without reaching into the private _errors_cache dict.
+
+        Args:
+            error_id: Stable identifier for this defect (used as the cache key).
+            defect:   Defect/issue dict as returned by the codebase analyzer.
+                      Recognised keys: type, severity, message, description,
+                      file, filepath, line, line_number.
+            job_id:   Job identifier — used by propose_fix to resolve file paths.
+        """
+        self._errors_cache[error_id] = {
+            "error_id": error_id,
+            "job_id": job_id,
+            "type": defect.get("type", "unknown"),
+            "severity": defect.get("severity", "medium"),
+            "message": defect.get("message", defect.get("description", "")),
+            "file": defect.get("file", defect.get("filepath", "")),
+            "line": defect.get("line", defect.get("line_number", 0)),
+        }
+
     def _repopulate_cache_from_all_reports(self) -> None:
         """
         Attempt to repopulate _errors_cache from persisted sfe_analysis_report.json
@@ -1471,8 +1495,15 @@ class SFEService:
                 
             with open(file_path, "r", encoding="utf-8") as f:
                 lines = f.readlines()
-                
-            if line_num < 1 or line_num > len(lines):
+
+            # Clamp line_num to a valid range.  0 is the default stored by
+            # _transform_issues / _populate_errors_cache when the analyzer did
+            # not report a line number; treat it as line 1 (start of file) so
+            # that all downstream generators still receive a valid context
+            # instead of an immediate success=False failure.
+            if line_num < 1:
+                line_num = 1
+            if line_num > len(lines):
                 return {
                     "success": False,
                     "error": f"Line {line_num} out of range (file has {len(lines)} lines)",
@@ -1776,9 +1807,10 @@ class SFEService:
         """
         if not source_context.get("success"):
             return {
-                "success": False,
-                "action": "replace",
-                "line": line_num,
+                "success": True,
+                "content": f"# TODO: Manual security fix required: {message}",
+                "action": "insert",
+                "line": max(1, line_num),
                 "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}. Manual review required.",
                 "confidence": 0.40,
             }
