@@ -588,6 +588,7 @@ class TestEventBusBridgeStartup:
 
         bridge = EventBusBridge()
         mock_mqs = MagicMock()
+        mock_mqs.connect = AsyncMock()
         mock_mqs.subscribe = AsyncMock()
         bridge.arbiter_mqs = mock_mqs
         bridge.mesh_bus = MagicMock()
