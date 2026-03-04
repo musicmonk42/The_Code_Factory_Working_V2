@@ -41,6 +41,7 @@ class AnalyzerCriticalError(RuntimeError):
 
 # --- Centralized Utilities (replacing placeholders) ---
 try:
+    from .core_audit import audit_logger
     from .core_secrets import SECRETS_MANAGER
     from .core_utils import alert_operator
 except ImportError as e:
@@ -317,8 +318,6 @@ class ReportGenerator:
         report_format: Literal["text", "markdown", "html", "pdf", "json"] = "html",
         user_id: str = "system",
     ) -> str:
-        from .core_audit import audit_logger
-
         logger.info(f"Generating {report_format} report: {report_name}...")
 
         formatted_content: Any  # Can be str or bytes for PDF
@@ -426,8 +425,6 @@ if FLASK_AVAILABLE:
 
     @app.route("/login", methods=["POST"])
     def login():
-        from .core_audit import audit_logger
-
         username = request.json.get("username", None)
         password = request.json.get("password", None)
         admin_password = SECRETS_MANAGER.get_secret("DASHBOARD_ADMIN_PASSWORD")
@@ -450,8 +447,6 @@ if FLASK_AVAILABLE:
     @app.route("/health")
     @jwt_required()
     def health_check_endpoint():
-        from .core_audit import audit_logger
-
         status = {"status": "healthy", "components": {"mock_db": "ok"}}
         audit_logger.log_event(
             "dashboard_access", endpoint="/health", user=get_jwt()["sub"]
@@ -461,8 +456,6 @@ if FLASK_AVAILABLE:
     @app.route("/report/<report_name_with_ext>")
     @jwt_required()
     def get_report_endpoint(report_name_with_ext: str):
-        from .core_audit import audit_logger
-
         claims = get_jwt()
         if "admin" not in claims.get("roles", []):
             audit_logger.log_event(
