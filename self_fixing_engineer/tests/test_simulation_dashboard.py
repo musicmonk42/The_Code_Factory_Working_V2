@@ -175,9 +175,9 @@ def test_display_onboarding_wizard_config_generation(
     mock_streamlit.multiselect.return_value = ["python"]
     mock_streamlit.text_input.side_effect = ["redis://localhost:6379", "./checkpoints"]
 
-    # Mock `form_submit_button` to be True
-    with patch.object(mock_streamlit, "form_submit_button", return_value=True):
-        _dashboard.display_onboarding_wizard()
+    # Mock `form_submit_button` to return True directly on the mock object
+    mock_streamlit.form_submit_button.return_value = True
+    _dashboard.display_onboarding_wizard()
 
     # Check if config.json was created
     config_path = os.path.join(mock_plugin_and_result_dirs["CONFIG_DIR"], "config.json")
