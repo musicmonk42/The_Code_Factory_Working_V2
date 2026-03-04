@@ -326,10 +326,12 @@ def _build_multipass_groups(
 ) -> List[Dict[str, str]]:
     """Return the ordered list of generation-pass descriptors for a single pipeline run.
 
-    Starts from :data:`_MULTIPASS_GROUPS` and conditionally appends a fourth
-    ``frontend`` pass when *include_frontend* is ``True``.  Keeping this logic in
-    one place ensures that both :class:`CodegenAgent` and
-    :class:`MultiPassCodegenAgent` always produce identical pass sequences.
+    Starts from :data:`_MULTIPASS_GROUPS` (currently five passes: ``core``,
+    ``routes_and_services``, ``service_implementations``, ``infrastructure``,
+    and ``tests``) and conditionally appends a ``frontend`` pass when
+    *include_frontend* is ``True``.  Keeping this logic in one place ensures
+    that both :class:`CodegenAgent` and :class:`MultiPassCodegenAgent` always
+    produce identical pass sequences.
 
     Args:
         include_frontend: Whether to append a frontend generation pass.
@@ -4059,7 +4061,7 @@ if PLUGIN_AVAILABLE:
                             for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                    f"({_pass_index}/{len(_groups_to_run)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))
@@ -4841,7 +4843,7 @@ else:
                             for _pass_index, _group in enumerate(_groups_to_run, start=1):
                                 logger.info(
                                     f"[CODEGEN] Multi-pass ensemble: starting pass '{_group['name']}' "
-                                    f"({_pass_index}/{len(_MULTIPASS_GROUPS)})"
+                                    f"({_pass_index}/{len(_groups_to_run)})"
                                 )
                                 _pass_start = time.monotonic()
                                 _already = list(set(_merged_files.keys()) | set(_already_generated))

@@ -1592,3 +1592,171 @@ class TestIntegrationNewValidations:
         )
         result = await validate_generated_project(project_dir)
         assert any("middleware" in w.lower() for w in result["warnings"])
+
+
+# ---------------------------------------------------------------------------
+# _repair_double_prefix — unit tests
+# ---------------------------------------------------------------------------
+
+class TestRepairDoublePrefix:
+    """Tests for _repair_double_prefix() covering exact-duplicate and
+    partial-suffix-overlap double-prefix patterns."""
+
+    def _import_func(self):
+        from generator.runner.runner_file_utils import _repair_double_prefix
+        return _repair_double_prefix
+
+    def _make_project(self, tmp_path, *, router_content: str, main_content: str):
+        """Helper: create a minimal project layout under tmp_path."""
+        app_dir = tmp_path / "app"
+        routers_dir = app_dir / "routers"
+        routers_dir.mkdir(parents=True)
+        (routers_dir / "__init__.py").write_text("")
+        (routers_dir / "patients.py").write_text(router_content)
+        (app_dir / "main.py").write_text(main_content)
+        return app_dir
+
+    # ------------------------------------------------------------------
+    # Pattern A — exact duplicate: include_router prefix == APIRouter prefix
+    # ------------------------------------------------------------------
+
+    def test_exact_duplicate_prefix_is_removed_from_include_router(self, tmp_path):
+        """Pattern A: include_router prefix exactly matching APIRouter prefix is stripped."""
+        _repair_double_prefix = self._import_func()
+        self._make_project(
+            tmp_path,
+            router_content=(
+                "from fastapi import APIRouter\n"
+                'router = APIRouter(prefix="/api/v1/patients")\n'
+            ),
+            main_content=(
+                "from fastapi import FastAPI\n"
+                "from app.routers.patients import router as patients_router\n"
+                "app = FastAPI()\n"
+                'app.include_router(patients_router, prefix="/api/v1/patients")\n'
+            ),
+        )
+        _repair_double_prefix(tmp_path)
+        content = (tmp_path / "app" / "main.py").read_text()
+        # The duplicate prefix kwarg must be removed from include_router.
+        assert 'prefix="/api/v1/patients"' not in content, (
+            "Exact-duplicate include_router prefix must be removed"
+        )
+        # The include_router call must still exist but without the prefix kwarg.
+        assert "include_router(patients_router)" in content and 'include_router(patients_router, prefix=' not in content
+
+    def test_exact_duplicate_repair_is_idempotent(self, tmp_path):
+        """Running _repair_double_prefix twice must not corrupt the file."""
+        _repair_double_prefix = self._import_func()
+        main_path = tmp_path / "app" / "main.py"
+        self._make_project(
+            tmp_path,
+            router_content=(
+                "from fastapi import APIRouter\n"
+                'router = APIRouter(prefix="/api/v1/patients")\n'
+            ),
+            main_content=(
+                "from fastapi import FastAPI\n"
+                "from app.routers.patients import router as patients_router\n"
+                "app = FastAPI()\n"
+                'app.include_router(patients_router, prefix="/api/v1/patients")\n'
+            ),
+        )
+        _repair_double_prefix(tmp_path)
+        after_first = main_path.read_text()
+        _repair_double_prefix(tmp_path)
+        after_second = main_path.read_text()
+        assert after_first == after_second, "Repair must be idempotent"
+
+    # ------------------------------------------------------------------
+    # Pattern B — suffix overlap: outer="/api/v1/patients", inner="/patients"
+    # ------------------------------------------------------------------
+
+    def test_partial_suffix_overlap_strips_inner_apirouter_prefix(self, tmp_path):
+        """Pattern B: redundant inner APIRouter prefix is stripped; outer prefix kept."""
+        _repair_double_prefix = self._import_func()
+        router_path = tmp_path / "app" / "routers" / "patients.py"
+        self._make_project(
+            tmp_path,
+            router_content=(
+                "from fastapi import APIRouter\n"
+                # Inner prefix = "/patients"; outer = "/api/v1/patients" in include_router
+                'patients_router = APIRouter(prefix="/patients", tags=["patients"])\n'
+                "\n"
+                '@patients_router.get("/{patient_id}")\n'
+                "async def get_patient(patient_id: int): ...\n"
+            ),
+            main_content=(
+                "from fastapi import FastAPI\n"
+                "from app.routers.patients import patients_router\n"
+                "app = FastAPI()\n"
+                'app.include_router(patients_router, prefix="/api/v1/patients")\n'
+            ),
+        )
+        _repair_double_prefix(tmp_path)
+        router_content = router_path.read_text()
+        main_content = (tmp_path / "app" / "main.py").read_text()
+
+        # Inner prefix must be removed from the router file.
+        assert 'prefix="/patients"' not in router_content, (
+            "Redundant inner APIRouter prefix '/patients' must be stripped from router file"
+        )
+        # Outer prefix in include_router must be preserved.
+        assert 'prefix="/api/v1/patients"' in main_content, (
+            "Outer include_router prefix '/api/v1/patients' must be preserved"
+        )
+
+    def test_partial_overlap_does_not_match_unrelated_prefix(self, tmp_path):
+        """Pattern B must NOT strip a prefix when the router variable does not match."""
+        _repair_double_prefix = self._import_func()
+        # Router file with prefix "/orders", include_router for "/api/v1/patients".
+        # These are unrelated — no repair should occur.
+        app_dir = tmp_path / "app"
+        routers_dir = app_dir / "routers"
+        routers_dir.mkdir(parents=True)
+        (routers_dir / "__init__.py").write_text("")
+        router_path = routers_dir / "orders.py"
+        router_content = (
+            "from fastapi import APIRouter\n"
+            'orders_router = APIRouter(prefix="/orders")\n'
+        )
+        router_path.write_text(router_content)
+        (app_dir / "main.py").write_text(
+            "from fastapi import FastAPI\n"
+            "from app.routers.orders import orders_router\n"
+            "app = FastAPI()\n"
+            'app.include_router(orders_router, prefix="/api/v1/patients")\n'
+        )
+        _repair_double_prefix(tmp_path)
+        # The router's own prefix should not be touched because the stem
+        # "orders" does not correspond to include_router variable "orders_router"
+        # with outer prefix "/api/v1/patients".
+        assert 'prefix="/orders"' in router_path.read_text(), (
+            "Unrelated router prefix must not be stripped"
+        )
+
+    def test_no_double_prefix_files_are_not_modified(self, tmp_path):
+        """When no double-prefix exists the files must be left untouched."""
+        _repair_double_prefix = self._import_func()
+        router_content = (
+            "from fastapi import APIRouter\n"
+            "router = APIRouter()\n"
+        )
+        main_content = (
+            "from fastapi import FastAPI\n"
+            "from app.routers.products import router as products_router\n"
+            "app = FastAPI()\n"
+            'app.include_router(products_router, prefix="/api/v1/products")\n'
+        )
+        app_dir = tmp_path / "app"
+        routers_dir = app_dir / "routers"
+        routers_dir.mkdir(parents=True)
+        (routers_dir / "__init__.py").write_text("")
+        (routers_dir / "products.py").write_text(router_content)
+        (app_dir / "main.py").write_text(main_content)
+
+        _repair_double_prefix(tmp_path)
+
+        # Neither file should be changed.
+        assert (routers_dir / "products.py").read_text() == router_content
+        assert (app_dir / "main.py").read_text() == main_content

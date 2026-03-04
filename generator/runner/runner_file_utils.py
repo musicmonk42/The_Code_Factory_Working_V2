@@ -1700,77 +1700,156 @@ def _enforce_output_layout(output_path: Path, project_name: str = "hello_generat
 
 
 def _repair_double_prefix(output_dir: Path) -> None:
-    """Auto-repair double-prefixed router registrations in ``main.py``.
+    """Auto-repair double-prefixed router registrations.
 
-    When the LLM generates both ``APIRouter(prefix="/api/v1/...")`` inside the
-    router module **and** ``app.include_router(router, prefix="/api/v1/...")``
-    in ``main.py``, the routes become doubly-prefixed.
+    Two distinct double-prefix patterns are handled:
 
-    This function detects that pattern and removes the ``prefix=`` argument from
-    the ``include_router()`` call in ``main.py`` so that the router's own prefix
-    is the single source of truth.  The operation is idempotent.
+    **Pattern A — exact duplicate** (original behaviour):
+        A router file declares ``APIRouter(prefix="/api/v1/orders")`` AND
+        ``main.py`` mounts it with ``app.include_router(router, prefix="/api/v1/orders")``.
+        Result without repair: ``/api/v1/orders/api/v1/orders/...``.
+        Fix: strip ``prefix=`` from the ``include_router()`` call so the router
+        file's prefix is the single source of truth.
+
+    **Pattern B — partial (suffix) overlap** (new):
+        The LLM generates ``APIRouter(prefix="/patients")`` in the router file
+        while ``_auto_wire_routers`` has already wired the router with
+        ``app.include_router(patients_router, prefix="/api/v1/patients")``.
+        The combined path becomes ``/api/v1/patients/patients/...``.
+        Fix: strip the redundant inner ``prefix="/patients"`` from the **router
+        file** so that the outer ``include_router`` prefix is the single source
+        of truth — preserving the ``/api/v1/`` version segment.
+
+    The operation is idempotent.
 
     Args:
         output_dir: Root directory of the generated project.
     """
-    # `re` is imported at module level.
+    # Pattern: APIRouter(..., prefix="<value>", ...)
     _APIROUTER_PREFIX_RE = re.compile(
         r'APIRouter\s*\([^)]*prefix\s*=\s*["\']([^"\']+)["\']'
     )
-    # Matches the prefix value inside include_router for comparison
-    _INCLUDE_ROUTER_PREFIX_VALUE_RE = re.compile(
-        r'include_router\s*\([^,)]+,\s*(?:[^,)]*,\s*)*prefix\s*=\s*["\']([^"\']+)["\']'
+    # Pattern: include_router(<var>, ..., prefix="<value>", ...)
+    # Group 1 = router variable name, Group 2 = prefix value
+    _INCLUDE_ROUTER_RE = re.compile(
+        r'include_router\s*\(\s*(\w+)\s*,\s*(?:[^,)]*,\s*)*prefix\s*=\s*["\']([^"\']+)["\']'
     )
 
     python_files = list(output_dir.rglob("*.py"))
 
-    # Collect all prefixes already defined on APIRouter instances
-    router_prefixes: Set[str] = set()
+    # ------------------------------------------------------------------
+    # Phase 1: Build a map of router-variable → include_router prefix
+    # from any file that calls include_router (typically main.py).
+    # ------------------------------------------------------------------
+    # router_var → outer prefix (e.g. "patients_router" → "/api/v1/patients")
+    outer_prefix_by_var: Dict[str, str] = {}
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             continue
-        for m in _APIROUTER_PREFIX_RE.finditer(content):
-            prefix = m.group(1).rstrip("/")
-            if prefix:
-                router_prefixes.add(prefix)
+        for m in _INCLUDE_ROUTER_RE.finditer(content):
+            var_name = m.group(1)
+            outer_prefix = m.group(2).rstrip("/")
+            if outer_prefix:
+                outer_prefix_by_var[var_name] = outer_prefix
 
-    if not router_prefixes:
+    if not outer_prefix_by_var:
         return
 
-    # For each file that calls include_router, remove duplicate prefix= args
+    # ------------------------------------------------------------------
+    # Phase 2: For each Python file, apply repairs.
+    # ------------------------------------------------------------------
     for py_file in python_files:
         try:
             content = py_file.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
-            continue
-        if "include_router" not in content:
             continue
 
         new_content = content
-        for m in _INCLUDE_ROUTER_PREFIX_VALUE_RE.finditer(content):
-            prefix_val = m.group(1).rstrip("/")
-            # Exact match: the include_router prefix equals a router's own prefix.
-            # Suffix match: e.g. include_router has "/api/v1/patients" and
-            # the router declares prefix="/patients" — the inner prefix is
-            # redundant because the outer one already covers it.
-            matching_prefix = None
-            if prefix_val in router_prefixes:
-                matching_prefix = prefix_val
-            else:
-                for rp in router_prefixes:
-                    if rp and prefix_val.endswith(rp):
-                        matching_prefix = prefix_val
-                        break
-            if matching_prefix is not None:
-                # Build a targeted pattern to remove only this specific prefix kwarg
-                escaped = re.escape(matching_prefix)
-                new_content = re.sub(
-                    r',\s*prefix\s*=\s*["\']' + escaped + r'["\']',
-                    "",
-                    new_content,
-                )
+
+        # --- Pattern A: file calls include_router with a prefix that exactly
+        #     matches a router's own APIRouter prefix in another file.
+        #     Collect inner (APIRouter) prefixes from ALL files for this check.
+        if "include_router" in new_content:
+            # Gather all APIRouter prefixes across the project for exact-match check.
+            all_inner_prefixes: Set[str] = set()
+            for other_file in python_files:
+                try:
+                    other_content = other_file.read_text(encoding="utf-8")
+                except (OSError, UnicodeDecodeError):
+                    continue
+                for m in _APIROUTER_PREFIX_RE.finditer(other_content):
+                    p = m.group(1).rstrip("/")
+                    if p:
+                        all_inner_prefixes.add(p)
+
+            for m in _INCLUDE_ROUTER_RE.finditer(content):
+                outer_prefix = m.group(2).rstrip("/")
+                if outer_prefix and outer_prefix in all_inner_prefixes:
+                    # Exact duplicate: remove the include_router prefix kwarg.
+                    escaped = re.escape(outer_prefix)
+                    new_content = re.sub(
+                        r',\s*prefix\s*=\s*["\']' + escaped + r'["\']',
+                        "",
+                        new_content,
+                    )
+
+        # --- Pattern B: this file defines an APIRouter with an inner prefix
+        #     that is already covered as a suffix of the outer include_router
+        #     prefix (e.g. inner="/patients", outer="/api/v1/patients").
+        #     Strip the inner prefix from THIS router file.
+        for m in _APIROUTER_PREFIX_RE.finditer(content):
+            inner_prefix = m.group(1).rstrip("/")
+            if not inner_prefix or not inner_prefix.startswith("/"):
+                # Only handle absolute path prefixes to avoid false matches.
+                continue
+            for var_name, outer_prefix in outer_prefix_by_var.items():
+                # The outer prefix must END with the inner prefix.
+                # Because every valid API prefix begins with "/", the leading
+                # slash acts as a path-segment boundary: e.g.
+                #   "/api/v1/patients".endswith("/patients") → True  ✓
+                #   "/api/v1/outpatients".endswith("/patients") → False ✓
+                #   "/api/v1/patients".endswith("/api/v1/patients") → True (exact dup, skip)
+                # No additional character check is needed.
+                if (
+                    outer_prefix != inner_prefix  # not an exact duplicate (handled above)
+                    and outer_prefix.endswith(inner_prefix)
+                    and len(outer_prefix) > len(inner_prefix)
+                ):
+                    # Confirm this file is the one imported as `var_name`.
+                    # The import typically looks like:
+                    #   from app.routers.<stem> import router as <var_name>
+                    # or the variable is declared in the file itself.
+                    file_stem = py_file.stem
+                    expected_var = f"{file_stem}_router"
+                    if var_name not in (expected_var, "router"):
+                        # Also accept if the variable name contains the file stem.
+                        if file_stem not in var_name:
+                            continue
+                    # Strip the redundant inner prefix from the APIRouter call.
+                    escaped = re.escape(inner_prefix)
+                    new_content = re.sub(
+                        r'(APIRouter\s*\([^)]*),\s*prefix\s*=\s*["\']' + escaped + r'["\']',
+                        r'\1',
+                        new_content,
+                    )
+                    # Also handle prefix as first kwarg:
+                    #   APIRouter(prefix="/patients", tags=[...])
+                    new_content = re.sub(
+                        r'(APIRouter\s*\(\s*)prefix\s*=\s*["\']' + escaped + r'["\'],?\s*',
+                        r'\1',
+                        new_content,
+                    )
+                    logger.info(
+                        "Repaired inner APIRouter prefix '%s' in %s "
+                        "(covered by outer include_router prefix '%s' for %s)",
+                        inner_prefix,
+                        str(py_file.relative_to(output_dir)),
+                        outer_prefix,
+                        var_name,
+                    )
+                    break  # Only one outer prefix can match per inner prefix
 
         if new_content != content:
             try:

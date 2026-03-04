@@ -10,9 +10,16 @@ handling, password hashing via passlib/bcrypt, and FastAPI OAuth2 support.
 Falls back to an HMAC-SHA256 implementation when python-jose is unavailable.
 
 Template Variables:
-- class_names: List of class names to generate (e.g. Role, Token)
+- class_names:   List of class names to generate (e.g. Role, Token)
 - function_names: List of additional authentication function names to generate
-- router_names: List of APIRouter variable names to register auth routes on
+- router_names:  List of APIRouter variable names to register auth routes on
+- router_prefix: URL prefix for the auth router (default: "/auth")
+                 Sourced from the spec's auth endpoint path; used both for
+                 the APIRouter prefix= argument and the OAuth2PasswordBearer
+                 tokenUrl so that Swagger UI shows the correct endpoint.
+- token_url:     Full token acquisition URL (default: router_prefix + "/token")
+                 When set, the path relative to router_prefix is derived
+                 automatically to avoid double-prefixing in route decorators.
 #}
 from __future__ import annotations
 
@@ -56,7 +63,8 @@ if not SECRET_KEY:
 ALGORITHM: str = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+{% set _oauth2_token_url = token_url if token_url is defined else "/auth/token" %}
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="{{ _oauth2_token_url }}")
 
 {% for cls in class_names %}
 {% if cls | lower == "role" %}

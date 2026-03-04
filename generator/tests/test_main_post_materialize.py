@@ -1,13 +1,20 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 # generator/tests/test_main_post_materialize.py
-"""Unit tests for generator/main/post_materialize.py — Phase 8: auto-wire routers."""
+"""Unit tests for generator/main/post_materialize.py — Phase 8: auto-wire routers,
+plus _ensure_initial_migration (Alembic initial migration generation)."""
 
+import ast
 from pathlib import Path
 
 import pytest
 
-from generator.main.post_materialize import _auto_wire_routers, PostMaterializeResult, post_materialize
+from generator.main.post_materialize import (
+    _auto_wire_routers,
+    _ensure_initial_migration,
+    PostMaterializeResult,
+    post_materialize,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -426,3 +433,111 @@ def test_auto_wire_does_not_duplicate_existing_prefix(tmp_path: Path) -> None:
         "Existing prefix must not be duplicated"
     )
     assert content == original, "File must not be changed when prefix already exists"
+
+
+# ---------------------------------------------------------------------------
+# _ensure_initial_migration
+# ---------------------------------------------------------------------------
+
+
+def _scaffold_alembic(tmp_path: Path) -> Path:
+    """Create the minimal alembic/versions/ directory structure."""
+    versions_dir = tmp_path / "alembic" / "versions"
+    versions_dir.mkdir(parents=True)
+    (versions_dir / ".gitkeep").write_text("# placeholder\n")
+    return versions_dir
+
+
+def test_initial_migration_created_when_versions_empty(tmp_path: Path) -> None:
+    """001_initial.py must be generated when alembic/versions/ has no .py files."""
+    _scaffold_alembic(tmp_path)
+
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)
+
+    migration_file = tmp_path / "alembic" / "versions" / "001_initial.py"
+    assert migration_file.exists(), "001_initial.py must be created"
+    content = migration_file.read_text()
+    assert 'revision: str = "001_initial"' in content
+    assert "def upgrade" in content
+    assert "def downgrade" in content
+    assert str(migration_file.relative_to(tmp_path)) in result.files_created
+
+
+def test_initial_migration_uses_module_imports_not_wildcards(tmp_path: Path) -> None:
+    """Generated migration must use explicit module imports, not wildcard 'import *'."""
+    _scaffold_alembic(tmp_path)
+    models_dir = tmp_path / "app" / "models"
+    models_dir.mkdir(parents=True)
+    (models_dir / "patient.py").write_text("x = 1\n")
+    (models_dir / "user.py").write_text("x = 1\n")
+
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)
+
+    content = (tmp_path / "alembic" / "versions" / "001_initial.py").read_text()
+    # Must use explicit module-level imports, not wildcard syntax.
+    assert "import *" not in content, "Wildcard imports must not be used"
+    assert "import app.models.patient" in content
+    assert "import app.models.user" in content
+    # Models must be imported inside the try: block (indented).
+    assert "    import app.models.patient" in content
+
+
+def test_initial_migration_skips_private_model_files(tmp_path: Path) -> None:
+    """Model files starting with '_' (e.g. __init__.py) must be excluded."""
+    _scaffold_alembic(tmp_path)
+    models_dir = tmp_path / "app" / "models"
+    models_dir.mkdir(parents=True)
+    (models_dir / "__init__.py").write_text("")
+    (models_dir / "_base.py").write_text("x = 1\n")
+    (models_dir / "order.py").write_text("x = 1\n")
+
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)
+
+    content = (tmp_path / "alembic" / "versions" / "001_initial.py").read_text()
+    assert "import app.models.order" in content
+    assert "import app.models.__init__" not in content
+    assert "import app.models._base" not in content
+
+
+def test_initial_migration_idempotent_when_migrations_exist(tmp_path: Path) -> None:
+    """_ensure_initial_migration must not overwrite existing migration files."""
+    versions_dir = _scaffold_alembic(tmp_path)
+    existing = versions_dir / "002_custom.py"
+    existing_content = "# custom migration\n"
+    existing.write_text(existing_content)
+
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)
+
+    # The existing file must not be touched.
+    assert existing.read_text() == existing_content
+    # 001_initial.py must NOT be created since migrations already exist.
+    assert not (versions_dir / "001_initial.py").exists()
+    assert result.files_created == []
+
+
+def test_initial_migration_skips_when_no_versions_dir(tmp_path: Path) -> None:
+    """_ensure_initial_migration must be a no-op when alembic/versions/ does not exist."""
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)  # Must not raise
+    assert result.files_created == []
+
+
+def test_initial_migration_no_model_dir_produces_placeholder(tmp_path: Path) -> None:
+    """When app/models/ does not exist the migration must include a placeholder comment."""
+    _scaffold_alembic(tmp_path)
+
+    result = _make_result()
+    _ensure_initial_migration(tmp_path, result)
+
+    content = (tmp_path / "alembic" / "versions" / "001_initial.py").read_text()
+    # Should have a fallback pass or placeholder, not broken syntax.
+    assert "pass" in content or "No model files" in content
+    # File must be syntactically valid Python.
+    try:
+        ast.parse(content)
+    except SyntaxError as exc:
+        pytest.fail(f"Generated migration is not valid Python: {exc}")
