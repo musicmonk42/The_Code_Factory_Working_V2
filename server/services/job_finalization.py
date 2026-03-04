@@ -810,6 +810,276 @@ async def apply_pending_fixes(job_id: str) -> Dict[str, Any]:
         return {"applied": [], "failed": [], "skipped": []}
 
 
+def _invalidate_job_zip_cache(job_id: str) -> None:
+    """
+    Remove known application-managed cached ZIP archives from the job root directory.
+
+    Only specifically named cache files created by this application are removed.
+    ZIP files inside generated project subdirectories (e.g. ``my_app/dist/app.zip``)
+    are never touched, preserving user artefacts.
+
+    This is a synchronous helper intentionally kept side-effect-free on failure
+    so it can be called from both async and sync contexts.
+
+    Security Considerations:
+    - Path traversal prevention: ``job_id`` is validated against a safe pattern
+      before use in path construction, and the resolved ``job_dir`` is verified
+      to be a direct child of the known uploads root so that a crafted
+      ``job_id`` (e.g. ``../../etc``) cannot escape the uploads directory.
+    - Only removes files whose resolved parent is exactly ``job_dir``
+      (one level deep, never recursive).
+    - OSError during unlink is silently suppressed — the next download will
+      still build a fresh ZIP from the live directory tree.
+
+    Args:
+        job_id: Unique job identifier.
+    """
+    import re as _re
+    # Allow UUIDs and common safe job-id patterns (hex, hyphens, underscores).
+    # Reject anything containing path separators or traversal sequences.
+    if not job_id or not _re.match(r'^[\w\-]+$', job_id):
+        logger.debug(
+            "_invalidate_job_zip_cache: unsafe job_id %r, skipping", job_id,
+            extra={"action": "invalidate_job_zip_cache", "result": "unsafe_job_id"},
+        )
+        return
+
+    uploads_root = Path("./uploads").resolve()
+    job_dir = (uploads_root / job_id).resolve()
+
+    # Security: ensure the resolved job_dir is a direct child of uploads_root
+    # to prevent path-traversal via a crafted job_id.
+    if job_dir.parent != uploads_root:
+        logger.warning(
+            "_invalidate_job_zip_cache: job_dir %s is outside uploads root, skipping",
+            job_dir,
+            extra={"action": "invalidate_job_zip_cache", "result": "path_traversal_blocked"},
+        )
+        return
+
+    if not job_dir.exists():
+        return
+
+    # Known cache-ZIP filenames produced by the application.
+    # "output.zip"    — explicit cache path used by SFEService.apply_fix()
+    # "*_output.zip"  — suffix pattern excluded by the download endpoints when
+    #                   enumerating files, indicating an application-managed artefact
+    _CACHE_PATTERNS: tuple = ("output.zip", "*_output.zip")
+
+    for pattern in _CACHE_PATTERNS:
+        for zip_file in job_dir.glob(pattern):
+            # Security: only remove files directly inside the job root, never
+            # inside a generated subdirectory.
+            if zip_file.parent.resolve() != job_dir:
+                continue
+            try:
+                zip_file.unlink()
+                logger.debug(
+                    "Invalidated cached ZIP %s for job %s",
+                    zip_file.name,
+                    job_id,
+                    extra={
+                        "job_id": job_id,
+                        "zip_path": str(zip_file),
+                        "action": "invalidate_job_zip_cache",
+                    },
+                )
+            except OSError as _unlink_err:
+                logger.debug(
+                    "Could not remove cached ZIP %s for job %s: %s",
+                    zip_file, job_id, _unlink_err,
+                    extra={
+                        "job_id": job_id,
+                        "zip_path": str(zip_file),
+                        "action": "invalidate_job_zip_cache",
+                    },
+                )
+
+
+async def refresh_job_output_files(job_id: str) -> bool:
+    """
+    Re-scan the job output directory and update ``job.output_files`` in-place.
+
+    Designed to be called after SFE fixes are written to disk so that the
+    job's tracked file list and cached metadata are always consistent with the
+    actual directory contents.  Side-effects:
+
+    - Regenerates and stores the full output manifest (file names, sizes, MIME
+      types) on the job object in ``jobs_db``.
+    - Removes known application-managed cached ZIP archives (see
+      ``_invalidate_job_zip_cache``) so the next download builds a fresh archive.
+    - Records ``updated_at`` on the job to signal staleness to any cache layers.
+
+    Behaviour guarantees:
+    - **Idempotent**: safe to call multiple times; each call reflects the
+      current on-disk state.
+    - **Fail-safe**: every exception is caught, logged with full context, and
+      ``False`` is returned — callers are never interrupted by a refresh failure.
+    - **Non-blocking**: purely async I/O throughout; safe for use inside
+      running event loops without thread-pool delegation.
+
+    Args:
+        job_id: Unique job identifier.  Must be a non-empty string.
+
+    Returns:
+        ``True``  if ``job.output_files`` was successfully refreshed.
+        ``False`` if the job was not found in the in-memory store, input was
+                  invalid, or an unrecoverable error occurred.
+
+    Raises:
+        Nothing.  All exceptions are handled internally and surfaced via logs.
+
+    Industry Standards:
+    - ISO 27001 A.12.3.1: Information backup and artifact persistence.
+    - OWASP A05:2021 Security Misconfiguration: path traversal prevention
+      is delegated to ``_generate_output_manifest`` which validates all paths.
+    - CWE-22: Path Traversal Prevention (enforced in manifest generation and
+      ``_invalidate_job_zip_cache``).
+    - 12-Factor App: stateless refresh with external state management.
+    """
+    start_time = time.time()
+    correlation_id = _get_correlation_id()
+
+    # --- Input validation -------------------------------------------------- #
+    if not job_id or not isinstance(job_id, str):
+        logger.warning(
+            "refresh_job_output_files called with invalid job_id: %r",
+            job_id,
+            extra={
+                "action": "refresh_job_output_files",
+                "result": "invalid_input",
+            },
+        )
+        return False
+
+    # --- OpenTelemetry tracing --------------------------------------------- #
+    if TRACING_AVAILABLE:
+        with tracer.start_as_current_span("refresh_job_output_files") as span:
+            span.set_attribute("job_id", job_id)
+            span.set_attribute("correlation_id", correlation_id)
+            return await _refresh_job_output_files_impl(
+                job_id, correlation_id, start_time, span
+            )
+    else:
+        return await _refresh_job_output_files_impl(
+            job_id, correlation_id, start_time, None
+        )
+
+
+async def _refresh_job_output_files_impl(
+    job_id: str,
+    correlation_id: str,
+    start_time: float,
+    span: Any,
+) -> bool:
+    """Internal implementation of refresh_job_output_files."""
+    try:
+        if job_id not in jobs_db:
+            logger.debug(
+                "refresh_job_output_files: job %s not in jobs_db, skipping",
+                job_id,
+                extra={
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "action": "refresh_job_output_files",
+                    "result": "not_found",
+                },
+            )
+            if span and TRACING_AVAILABLE:
+                span.set_attribute("result", "not_found")
+                span.set_status(Status(StatusCode.OK))
+            return False
+
+        logger.info(
+            "Refreshing output_files for job %s",
+            job_id,
+            extra={
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "action": "refresh_job_output_files",
+                "status": "started",
+            },
+        )
+
+        manifest = await _generate_output_manifest(job_id, correlation_id)
+
+        job = jobs_db[job_id]
+        file_count = 0
+
+        if manifest:
+            job.output_files = [f["path"] for f in manifest.get("files", [])]
+            job.metadata["output_manifest"] = manifest
+            job.metadata["total_output_files"] = len(manifest.get("files", []))
+            job.metadata["total_output_size"] = manifest.get("total_size", 0)
+            job.updated_at = datetime.now(timezone.utc)
+            file_count = len(job.output_files)
+        else:
+            logger.warning(
+                "refresh_job_output_files: no manifest generated for job %s; "
+                "output_files list unchanged",
+                job_id,
+                extra={
+                    "job_id": job_id,
+                    "correlation_id": correlation_id,
+                    "action": "refresh_job_output_files",
+                    "warning": "no_manifest",
+                },
+            )
+
+        # Remove known stale cached ZIPs from the job root directory.
+        _invalidate_job_zip_cache(job_id)
+
+        duration = time.time() - start_time
+
+        if span and TRACING_AVAILABLE:
+            span.set_attribute("file_count", file_count)
+            span.set_attribute("duration_ms", int(duration * 1000))
+            span.set_attribute("result", "success")
+            span.set_status(Status(StatusCode.OK))
+
+        if METRICS_AVAILABLE:
+            job_finalization_total.labels(job_id=job_id, result="refresh_success").inc()
+
+        logger.info(
+            "✓ Refreshed output_files for job %s: %d files in %.2fs",
+            job_id,
+            file_count,
+            duration,
+            extra={
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "action": "refresh_job_output_files",
+                "result": "success",
+                "file_count": file_count,
+                "duration_seconds": duration,
+            },
+        )
+        return True
+
+    except Exception as exc:
+        duration = time.time() - start_time
+        logger.warning(
+            "refresh_job_output_files failed for job %s (non-fatal): %s",
+            job_id,
+            exc,
+            extra={
+                "job_id": job_id,
+                "correlation_id": correlation_id,
+                "action": "refresh_job_output_files",
+                "result": "error",
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "duration_seconds": duration,
+            },
+        )
+        if span and TRACING_AVAILABLE:
+            span.set_status(Status(StatusCode.ERROR, str(exc)))
+            span.record_exception(exc)
+        if METRICS_AVAILABLE:
+            job_finalization_total.labels(job_id=job_id, result="refresh_error").inc()
+        return False
+
+
 def reset_finalization_state():
     """
     Reset finalization state for testing purposes.

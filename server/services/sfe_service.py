@@ -2167,7 +2167,7 @@ Example response:
 
         return fix
 
-    async def apply_fix(self, fix_id: str, dry_run: bool = False) -> Dict[str, Any]:
+    async def apply_fix(self, fix_id: str, dry_run: bool = False, _refresh: bool = True) -> Dict[str, Any]:
         """
         Apply a proposed fix to the filesystem.
 
@@ -2175,6 +2175,13 @@ Example response:
             fix_id: Fix identifier (must be present in fixes_db).
             dry_run: When True the fix is simulated — paths are resolved and
                      logged but no file is written or modified.
+            _refresh: When True (default), call ``refresh_job_output_files``
+                      after successfully writing changes so that
+                      ``job.output_files`` reflects the updated on-disk state.
+                      Pass ``False`` when this method is invoked in a batch
+                      loop (e.g. ``apply_all_pending_fixes``) to suppress
+                      redundant intermediate refreshes; the caller is
+                      responsible for triggering a single refresh at the end.
 
         Returns:
             Dict with keys:
@@ -2423,15 +2430,31 @@ Example response:
                 if fix.job_id:
                     self._invalidate_analysis_cache(fix.job_id)
 
-                # Invalidate any cached output ZIP so the next download
-                # reflects the updated files on disk.
-                if applied_count > 0 and fix.job_id:
-                    zip_cache_path = self._UPLOADS_BASE_DIR / fix.job_id / "output.zip"
-                    if zip_cache_path.exists():
-                        zip_cache_path.unlink()
-                        logger.info(
-                            "Invalidated cached ZIP for job %s after applying %s fix(es)",
-                            fix.job_id, applied_count,
+                # Refresh job output_files metadata and invalidate cached ZIPs so
+                # the next download reflects the updated files on disk.
+                # _invalidate_job_zip_cache (called internally) supersedes the
+                # previous per-fix output.zip unlink that was duplicated here.
+                #
+                # Deferred import: job_finalization ↔ sfe_service have a
+                # potential circular dependency when both are loaded in the
+                # same process via server.services.__init__.  Deferring the
+                # import to call time resolves the cycle while keeping the
+                # refresh fail-safe (ImportError is caught and logged below).
+                if applied_count > 0 and fix.job_id and _refresh:
+                    try:
+                        from server.services.job_finalization import refresh_job_output_files
+                        await refresh_job_output_files(fix.job_id)
+                    except Exception as _rf_err:
+                        logger.warning(
+                            "refresh_job_output_files skipped after apply_fix "
+                            "for job %s fix %s (non-fatal): %s",
+                            fix.job_id, fix_id, _rf_err,
+                            extra={
+                                "job_id": fix.job_id,
+                                "fix_id": fix_id,
+                                "action": "refresh_job_output_files",
+                                "error": str(_rf_err),
+                            },
                         )
 
                 # Update fix status to APPLIED when at least one change was written.
@@ -2561,7 +2584,10 @@ Example response:
                     f"Auto-applying PROPOSED (unreviewed) fix {fix_id} for job {job_id}"
                 )
             try:
-                result = await self.apply_fix(fix_id)
+                # Pass _refresh=False to suppress the per-fix directory rescan;
+                # apply_all_pending_fixes performs a single authoritative refresh
+                # after all fixes have been written (see below).
+                result = await self.apply_fix(fix_id, _refresh=False)
                 if result.get("applied"):
                     # Update fix status to APPLIED
                     fix.status = FixStatus.APPLIED
@@ -2586,6 +2612,25 @@ Example response:
             f"apply_all_pending_fixes for job {job_id}: "
             f"applied={len(applied)}, failed={len(failed)}, skipped={len(skipped)}"
         )
+
+        # Refresh job output_files once after all fixes are applied.
+        # Deferred import: see the comment in apply_fix() for the rationale.
+        if applied:
+            try:
+                from server.services.job_finalization import refresh_job_output_files
+                await refresh_job_output_files(job_id)
+            except Exception as _rf_err:
+                logger.warning(
+                    "refresh_job_output_files skipped after apply_all_pending_fixes "
+                    "for job %s (non-fatal): %s",
+                    job_id, _rf_err,
+                    extra={
+                        "job_id": job_id,
+                        "action": "refresh_job_output_files",
+                        "error": str(_rf_err),
+                    },
+                )
+
         return {"applied": applied, "failed": failed, "skipped": skipped}
 
     async def rollback_fix(self, fix_id: str) -> Dict[str, Any]:
