@@ -103,6 +103,16 @@ def _load_components():
         
         # Import config components
         try:
+            # Prevent double-loading: if intent_capture.config is already cached under
+            # the short path, reuse it so both sys.modules keys point to the same object.
+            # This avoids mock-patching mismatches when tests patch intent_capture.config.*
+            import sys as _sys
+            _short_key = "intent_capture.config"
+            _full_key = "self_fixing_engineer.intent_capture.config"
+            if _short_key in _sys.modules and _full_key not in _sys.modules:
+                _sys.modules[_full_key] = _sys.modules[_short_key]
+            elif _full_key in _sys.modules and _short_key not in _sys.modules:
+                _sys.modules[_short_key] = _sys.modules[_full_key]
             from .config import GlobalConfigManager as _GlobalConfigManager
             GlobalConfigManager = _GlobalConfigManager
         except ImportError as e:

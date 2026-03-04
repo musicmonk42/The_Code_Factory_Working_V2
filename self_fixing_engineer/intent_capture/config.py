@@ -62,6 +62,10 @@ try:
     PYBREAKER_AVAILABLE = True
 except ImportError:
     PYBREAKER_AVAILABLE = False
+
+    class CircuitBreakerError(Exception):
+        """Stub when pybreaker is not installed."""
+        pass
 try:
     import redis
 
@@ -309,14 +313,9 @@ def _fetch_config_from_service() -> Optional[Dict[str, Any]]:
         headers = {}
         if os.getenv("CONFIG_TOKEN"):
             headers["Authorization"] = f"Bearer {os.getenv('CONFIG_TOKEN')}"
-        if service_breaker:
-            response = service_breaker.call(
-                requests.get, service_url, headers=headers, timeout=10, verify=True
-            )
-        else:
-            response = requests.get(
-                service_url, headers=headers, timeout=10, verify=True
-            )
+        response = requests.get(
+            service_url, headers=headers, timeout=10, verify=True
+        )
         if response.status_code == 200:
             return response.json()
         else:

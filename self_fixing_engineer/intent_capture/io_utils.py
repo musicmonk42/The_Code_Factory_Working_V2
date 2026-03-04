@@ -610,7 +610,12 @@ def startup_validation():
         missing.append("PROVENANCE_SALT")
     if REDIS_AVAILABLE and not os.getenv("REDIS_URL"):
         missing.append("REDIS_URL")
-    if OTEL_AVAILABLE and not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
+    _telemetry_disabled = (
+        os.getenv("OTEL_SDK_DISABLED") == "1"
+        or os.getenv("DISABLE_TELEMETRY") == "1"
+        or os.getenv("NO_MONITORING") == "1"
+    )
+    if OTEL_AVAILABLE and not _telemetry_disabled and not os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT"):
         missing.append("OTEL_EXPORTER_OTLP_ENDPOINT")
     if missing:
         raise RuntimeError(f"Missing required configuration: {', '.join(missing)}")
