@@ -371,11 +371,14 @@ class SFEService:
                 subdir = job_base / subdir_name
                 if subdir.exists():
                     # Look for project subdirectories
-                    subdirs = [
-                        d
-                        for d in subdir.iterdir()
-                        if d.is_dir() and not d.name.startswith(".")
-                    ]
+                    subdirs = sorted(
+                        [
+                            d
+                            for d in subdir.iterdir()
+                            if d.is_dir() and not d.name.startswith(".")
+                        ],
+                        key=lambda d: d.name,
+                    )
                     if subdirs:
                         # Use the first non-hidden subdirectory (typically the project directory)
                         resolved_path = str(subdirs[0])
@@ -1248,55 +1251,14 @@ class SFEService:
                     f"Using direct SFE CodebaseAnalyzer to detect errors for job {job_id}"
                 )
 
-                # Resolve code path using improved path resolution
-                # First check job metadata, then standard locations
-                from server.storage import jobs_db
-
-                job_dir = None
-                job = jobs_db.get(job_id)
-                if job and job.metadata:
-                    # Check metadata for output paths
-                    for key in ("output_path", "code_path", "generated_path"):
-                        path = job.metadata.get(key)
-                        if path and Path(path).exists():
-                            job_dir = Path(path)
-                            logger.info(
-                                f"Found job path from metadata.{key}: {job_dir}"
-                            )
-                            break
-
-                # If not in metadata, check standard locations
-                if not job_dir:
-                    uploads_dir = Path("./uploads")
-                    job_base = uploads_dir / job_id
-
-                    # Try to find the generated code directory
-                    if job_base.exists():
-                        # Check standard subdirectories
-                        for subdir_name in ["generated", "output"]:
-                            subdir = job_base / subdir_name
-                            if subdir.exists():
-                                # Look for project subdirectories
-                                subdirs = [
-                                    d
-                                    for d in subdir.iterdir()
-                                    if d.is_dir() and not d.name.startswith(".")
-                                ]
-                                if subdirs:
-                                    # Use the first non-hidden subdirectory (typically the project directory)
-                                    job_dir = subdirs[0]
-                                    logger.info(f"Found generated project at {job_dir}")
-                                    break
-                                else:
-                                    # No subdirectories, use this directory directly
-                                    job_dir = subdir
-                                    break
-
-                        # If no generated/ or output/, use job_base directly
-                        if not job_dir:
-                            job_dir = job_base
-
-                if not job_dir or not job_dir.exists():
+                # Resolve code path via the shared helper (DRY: avoids duplicating
+                # the metadata-lookup + candidate-root scan already in that method).
+                resolved = self._resolve_job_code_path(job_id, "")
+                if not resolved:
+                    logger.warning(f"Job directory not found for {job_id}")
+                    return []
+                job_dir = Path(resolved)
+                if not job_dir.exists():
                     logger.warning(f"Job directory not found for {job_id}")
                     return []
 
@@ -1312,16 +1274,7 @@ class SFEService:
                     )
                     
                     # Populate errors cache for fix proposals
-                    for error in errors:
-                        self._errors_cache[error["error_id"]] = {
-                            "error_id": error["error_id"],
-                            "job_id": error["job_id"],
-                            "type": error["type"],
-                            "severity": error["severity"],
-                            "message": error["message"],
-                            "file": error["file"],
-                            "line": error["line"],
-                        }
+                    self._populate_errors_cache(errors, job_id)
                     
                     # Return cached errors list directly
                     return errors
@@ -1363,16 +1316,7 @@ class SFEService:
                 errors = transform_pipeline_issues_to_frontend_errors(all_issues, job_id)
 
                 # Populate errors cache for fix proposals
-                for error in errors:
-                    self._errors_cache[error["error_id"]] = {
-                        "error_id": error["error_id"],
-                        "job_id": error["job_id"],
-                        "type": error["type"],
-                        "severity": error["severity"],
-                        "message": error["message"],
-                        "file": error["file"],
-                        "line": error["line"],
-                    }
+                self._populate_errors_cache(errors, job_id)
 
                 logger.info(
                     f"Direct SFE error detection complete: {len(errors)} errors found"
@@ -1971,6 +1915,17 @@ class SFEService:
         # Resolve job base path for fix-target classification
         resolved_base = self._resolve_job_code_path(job_id, ".") if job_id else "."
 
+        # Normalise file_path_str to be relative to resolved_base so that
+        # proposed_changes always stores a relative path (never an absolute one
+        # that would break the double-join in apply_fix).
+        if job_id:
+            try:
+                file_path_str = str(
+                    Path(file_path_str).relative_to(Path(resolved_base).resolve())
+                )
+            except ValueError:
+                pass  # already relative or unrelated path — keep as-is
+
         # Classify whether the fix should target source or test file
         fix_target = self._classify_fix_target(error_data, resolved_base)
         if fix_target == "source" and file_path_str.startswith("tests/"):
@@ -2190,7 +2145,6 @@ Example response:
         # Store fix in fixes_db for later application
         from server.storage import fixes_db
         from server.schemas import Fix, FixStatus
-        from datetime import datetime, timezone
 
         try:
             now = datetime.now(timezone.utc)
@@ -2553,12 +2507,16 @@ Example response:
 
     async def apply_all_pending_fixes(self, job_id: str) -> Dict[str, Any]:
         """
-        Apply all pending (PROPOSED) fixes for a given job.
+        Apply all pending (PROPOSED or APPROVED) fixes for a given job.
 
         Retrieves every fix in fixes_db whose job_id matches and whose status
-        is PROPOSED, applies each one in turn via apply_fix(), and returns a
-        summary of the results.  Must be called BEFORE the output ZIP is
-        packaged so that fixed content is included in the archive.
+        is PROPOSED or APPROVED, applies each one in turn via apply_fix(), and
+        returns a summary of the results. Must be called BEFORE the output ZIP
+        is packaged so that fixed content is included in the archive.
+
+        PROPOSED (unreviewed) fixes are auto-applied with a prominent warning
+        log entry so that operators are aware they bypassed the review workflow.
+        APPROVED fixes are applied silently.
 
         Args:
             job_id: Unique job identifier
@@ -2567,7 +2525,7 @@ Example response:
             Summary dict with keys:
               - applied: list of fix_ids that were successfully applied
               - failed:  list of fix_ids that failed to apply
-              - skipped: list of fix_ids that were not in PROPOSED state
+              - skipped: list of fix_ids that were not in PROPOSED or APPROVED state
         """
         from server.storage import fixes_db
         from server.schemas import FixStatus
@@ -2576,7 +2534,7 @@ Example response:
             fix_id
             for fix_id, fix in fixes_db.items()
             if getattr(fix, "job_id", None) == job_id
-            and getattr(fix, "status", None) == FixStatus.PROPOSED
+            and getattr(fix, "status", None) in (FixStatus.PROPOSED, FixStatus.APPROVED)
         ]
 
         if not pending_fix_ids:
@@ -2594,14 +2552,18 @@ Example response:
 
         for fix_id in pending_fix_ids:
             fix = fixes_db.get(fix_id)
-            if fix is None or getattr(fix, "status", None) != FixStatus.PROPOSED:
+            fix_status = getattr(fix, "status", None)
+            if fix is None or fix_status not in (FixStatus.PROPOSED, FixStatus.APPROVED):
                 skipped.append(fix_id)
                 continue
+            if fix_status == FixStatus.PROPOSED:
+                logger.warning(
+                    f"Auto-applying PROPOSED (unreviewed) fix {fix_id} for job {job_id}"
+                )
             try:
                 result = await self.apply_fix(fix_id)
                 if result.get("applied"):
                     # Update fix status to APPLIED
-                    from datetime import datetime, timezone
                     fix.status = FixStatus.APPLIED
                     fix.applied_at = datetime.now(timezone.utc)
                     fix.updated_at = datetime.now(timezone.utc)
