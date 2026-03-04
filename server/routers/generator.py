@@ -67,6 +67,11 @@ router = APIRouter(prefix="/generator", tags=["Generator"])
 AGENT_WAIT_TIMEOUT = int(os.getenv("AGENT_WAIT_TIMEOUT", "90"))  # Maximum seconds to wait for agents
 AGENT_WAIT_INTERVAL = int(os.getenv("AGENT_WAIT_INTERVAL", "2"))  # Check interval in seconds
 
+# Minimum spec fidelity ratio (found_endpoints / required_endpoints) below which the
+# pipeline is considered a FAILURE rather than a soft-warning.  Default: 0.50 (50%).
+# Set MIN_SPEC_FIDELITY_THRESHOLD=0 to disable this gate entirely.
+MIN_SPEC_FIDELITY_THRESHOLD: float = float(os.getenv("MIN_SPEC_FIDELITY_THRESHOLD", "0.5"))
+
 
 def _stage_ran(stage: str, completed: list) -> bool:
     """Check if a stage ran (exact match or prefix match with colon-separated suffix).
@@ -628,6 +633,51 @@ async def _trigger_pipeline_background(
             return
         
         stages_completed = result.get("stages_completed", []) if result else []
+
+        # --- Spec fidelity blocking gate ---
+        # If the pipeline recorded spec fidelity metadata, check whether the
+        # found-endpoint ratio is above the configured minimum threshold.
+        # Below-threshold results are treated as a pipeline FAILURE rather than
+        # a soft warning, preventing low-coverage builds from being shipped.
+        _spec_meta = (result or {}).get("spec_fidelity_metadata", {})
+        if _spec_meta and MIN_SPEC_FIDELITY_THRESHOLD > 0:
+            _found = _spec_meta.get("found_endpoint_count", 0)
+            _required = _spec_meta.get("required_endpoint_count", 0)
+            if _required > 0:
+                _ratio = _found / _required
+                if _ratio < MIN_SPEC_FIDELITY_THRESHOLD:
+                    _pct = round(_ratio * 100, 1)
+                    _threshold_pct = round(MIN_SPEC_FIDELITY_THRESHOLD * 100, 1)
+                    logger.error(
+                        "[Pipeline] Job %s FAILED spec fidelity gate: %.1f%% < %.1f%% threshold "
+                        "(%d/%d endpoints found). Marking as FAILURE.",
+                        job_id, _pct, _threshold_pct, _found, _required,
+                    )
+                    error = Exception(
+                        f"Spec fidelity {_pct}% is below the minimum threshold of "
+                        f"{_threshold_pct}% ({_found}/{_required} endpoints implemented). "
+                        "Increase endpoint coverage or lower MIN_SPEC_FIDELITY_THRESHOLD."
+                    )
+                    await finalize_job_failure(job_id, error)
+                    return
+                else:
+                    logger.info(
+                        "[Pipeline] Job %s passed spec fidelity gate: %.1f%% >= %.1f%% (%d/%d endpoints)",
+                        job_id, round(_ratio * 100, 1), round(MIN_SPEC_FIDELITY_THRESHOLD * 100, 1),
+                        _found, _required,
+                    )
+        # Also check via stages_completed for the spec_fidelity_failed marker
+        elif "spec_fidelity_failed" in stages_completed and MIN_SPEC_FIDELITY_THRESHOLD > 0:
+            logger.error(
+                "[Pipeline] Job %s FAILED: spec_fidelity_failed stage recorded. Marking as FAILURE.",
+                job_id,
+            )
+            error = Exception(
+                "Spec fidelity validation failed: required endpoints are missing from generated output. "
+                "Check spec_fidelity_metadata in pipeline result for details."
+            )
+            await finalize_job_failure(job_id, error)
+            return
 
         # Distinguish between CRITICAL and AUXILIARY stages
         # CRITICAL stages: codegen (always), validate (if not skipped), testgen (if tests requested AND not intentionally skipped)

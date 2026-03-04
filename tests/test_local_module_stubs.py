@@ -993,7 +993,10 @@ class TestTemplateRendering:
         assert _valid_python(result)
 
     def test_schema_template_has_field(self, render):
-        result = render("schema", "app/schemas/user.py", {"UserCreate"})
+        # Use a root entity name (no suffix) — root entities get the full CRUD
+        # family with Field(...) constraints.  Intermediate schema names like
+        # "UserCreate" are now correctly emitted as simple stubs (see P2-1 fix).
+        result = render("schema", "app/schemas/user.py", {"User"})
         assert result is not None
         assert "Field(" in result
 
@@ -1107,3 +1110,138 @@ class TestNewStubBehavior:
         files = {"app/routes.py": "from app.auth import get_current_user, Role, create_access_token\n"}
         result = stub_fn(dict(files))
         assert _valid_python(result.get("app/auth.py", "")), "multi-symbol auth stub must be valid Python"
+
+
+# =============================================================================
+# P0-3: database.py stub must be SQLAlchemy async setup (not Pydantic BaseModel)
+# =============================================================================
+
+
+class TestDatabaseStubIsSQLAlchemy:
+    """ensure_local_module_stubs must generate a proper SQLAlchemy async database
+    module for app/database.py regardless of which symbols are imported from it."""
+
+    def test_database_stub_from_base_only(self, stub_fn):
+        """Importing only Base from app/database must generate an SQLAlchemy module."""
+        files = {"app/models/patient.py": "from app.database import Base\n"}
+        result = stub_fn(dict(files))
+        db_stub = result.get("app/database.py", "")
+        assert db_stub, "app/database.py stub must be generated when Base is imported from it"
+        assert "pydantic" not in db_stub.lower(), (
+            "app/database.py stub must NOT import pydantic — it must be a SQLAlchemy module"
+        )
+        assert "DeclarativeBase" in db_stub or "declarative_base" in db_stub, (
+            "app/database.py stub must define a SQLAlchemy Base class"
+        )
+        assert "create_async_engine" in db_stub or "AsyncSession" in db_stub, (
+            "app/database.py stub must include async SQLAlchemy setup"
+        )
+        assert _valid_python(db_stub), "app/database.py stub must be valid Python"
+
+    def test_database_stub_from_get_db(self, stub_fn):
+        """Importing get_db from app/database must also generate an SQLAlchemy module."""
+        files = {"app/routes.py": "from app.database import get_db\n"}
+        result = stub_fn(dict(files))
+        db_stub = result.get("app/database.py", "")
+        assert db_stub, "app/database.py stub must be generated when get_db is imported"
+        assert "get_db" in db_stub, "app/database.py stub must define get_db"
+        assert "pydantic" not in db_stub.lower(), (
+            "app/database.py stub must NOT use Pydantic"
+        )
+        assert _valid_python(db_stub), "app/database.py stub must be valid Python"
+
+    def test_database_stub_from_base_and_get_db(self, stub_fn):
+        """Importing both Base and get_db from app/database must produce a single proper module."""
+        files = {"app/models/user.py": "from app.database import Base, get_db\n"}
+        result = stub_fn(dict(files))
+        db_stub = result.get("app/database.py", "")
+        assert db_stub, "app/database.py must be generated"
+        assert "class Base" in db_stub, "app/database.py must define a Base class"
+        assert "get_db" in db_stub, "app/database.py must define get_db"
+        assert _valid_python(db_stub), "app/database.py with Base+get_db must be valid Python"
+
+    def test_database_stub_not_pydantic_basemodel(self, stub_fn):
+        """The database stub must not contain 'class Base(BaseModel)'."""
+        files = {"app/services/user_service.py": "from app.database import Base\n"}
+        result = stub_fn(dict(files))
+        db_stub = result.get("app/database.py", "")
+        assert "class Base(BaseModel)" not in db_stub, (
+            "app/database.py must NEVER stub Base as a Pydantic BaseModel — "
+            "this breaks all SQLAlchemy models that import Base from app.database"
+        )
+
+
+# =============================================================================
+# P0-2: parse_llm_response dict-with-files path
+# =============================================================================
+
+
+class TestParseResponseDictFiles:
+    """parse_llm_response must directly extract dict responses with 'files' key
+    without round-tripping through json.dumps, preventing auto-repair corruption."""
+
+    @pytest.fixture(scope="class")
+    def parse_fn(self, crh):
+        return crh.parse_llm_response
+
+    def test_dict_with_files_key_extracted_directly(self, parse_fn):
+        """A dict response with 'files' key must be processed without json.dumps."""
+        response = {
+            "files": {
+                "main.py": "print('hello')",
+                "utils.py": "x = 1",
+            }
+        }
+        result = parse_fn(response, lang="python")
+        assert "main.py" in result, "main.py must be extracted from dict response"
+        assert "utils.py" in result, "utils.py must be extracted from dict response"
+        assert result["main.py"] == "print('hello')", (
+            "main.py content must be preserved exactly"
+        )
+
+    def test_dict_with_files_key_no_corruption(self, parse_fn):
+        """Python code with embedded single-quoted strings must not be corrupted."""
+        py_code = "def greet(name: str) -> str:\n    return f'Hello, {name}!'\n"
+        response = {
+            "files": {
+                "greet.py": py_code,
+            }
+        }
+        result = parse_fn(response, lang="python")
+        assert "greet.py" in result, "greet.py must be in result"
+        # The extracted content must be valid Python — auto-repair must not corrupt it
+        import ast as _ast
+        try:
+            _ast.parse(result["greet.py"])
+        except SyntaxError as e:
+            raise AssertionError(
+                f"dict-extracted Python code must be syntactically valid (auto-repair corrupted it): {e}\n"
+                f"Content: {result['greet.py']!r}"
+            )
+
+    def test_dict_with_files_key_multiple_files_no_error_file(self, parse_fn):
+        """Valid multi-file dict response must not produce error.txt."""
+        response = {
+            "files": {
+                "app/main.py": "from fastapi import FastAPI\napp = FastAPI()\n",
+                "app/routes.py": "from fastapi import APIRouter\nrouter = APIRouter()\n",
+            }
+        }
+        result = parse_fn(response, lang="python")
+        assert "error.txt" not in result, (
+            "Valid dict-with-files response must not generate error.txt"
+        )
+        assert "app/main.py" in result
+        assert "app/routes.py" in result
+
+    def test_dict_without_files_key_still_works(self, parse_fn):
+        """Dict response with flat file map (no 'files' key) must also work."""
+        response = {
+            "files": {
+                "app/utils.py": "def helper(): return None\n",
+            }
+        }
+        result = parse_fn(response, lang="python")
+        assert "app/utils.py" in result, (
+            "Flat file map dict response must extract files correctly"
+        )

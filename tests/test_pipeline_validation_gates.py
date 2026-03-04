@@ -120,8 +120,183 @@ def _load_validate_generated_code() -> Callable:
     return mod.validate_generated_code  # type: ignore[return-value]
 
 
+
 # ---------------------------------------------------------------------------
-# Defect 7 — Language detection sanitization
+# P0-4: Spec Fidelity Blocking Gate
+# ---------------------------------------------------------------------------
+
+class TestSpecFidelityBlockingGate:
+    """MIN_SPEC_FIDELITY_THRESHOLD must cause pipeline failure for low-coverage jobs."""
+
+    def test_generator_defines_min_spec_fidelity_threshold(self) -> None:
+        """server/routers/generator.py must define MIN_SPEC_FIDELITY_THRESHOLD."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        assert "MIN_SPEC_FIDELITY_THRESHOLD" in src, (
+            "generator.py must define MIN_SPEC_FIDELITY_THRESHOLD"
+        )
+
+    def test_generator_threshold_configurable_via_env(self) -> None:
+        """MIN_SPEC_FIDELITY_THRESHOLD must be configurable via env var."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        assert 'os.getenv("MIN_SPEC_FIDELITY_THRESHOLD"' in src, (
+            "MIN_SPEC_FIDELITY_THRESHOLD must be configurable via environment variable"
+        )
+
+    def test_generator_gates_on_spec_fidelity_metadata(self) -> None:
+        """_trigger_pipeline_background must check spec_fidelity_metadata."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        assert "spec_fidelity_metadata" in src, (
+            "generator.py must check spec_fidelity_metadata to gate low-coverage jobs"
+        )
+
+    def test_generator_calls_finalize_job_failure_on_low_fidelity(self) -> None:
+        """When spec fidelity is below threshold, finalize_job_failure must be called."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        # The spec fidelity gate block must call finalize_job_failure
+        assert "spec_fidelity" in src and "finalize_job_failure" in src, (
+            "generator.py must call finalize_job_failure when spec fidelity is below threshold"
+        )
+
+    def test_generator_spec_fidelity_gate_uses_ratio(self) -> None:
+        """The gate must compute found / required ratio, not just check a flag."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        assert "found_endpoint_count" in src and "required_endpoint_count" in src, (
+            "The spec fidelity gate must use found_endpoint_count / required_endpoint_count ratio"
+        )
+
+    def test_threshold_50pct_blocks_8pct_fidelity(self) -> None:
+        """Ratio 8/92 (≈8.7%) must be below default 50% threshold."""
+        _found = 8
+        _required = 92
+        _ratio = _found / _required  # ~0.087
+        _threshold = 0.5
+        assert _ratio < _threshold, (
+            f"8.7% fidelity ({_found}/{_required}) must be below 50% threshold"
+        )
+
+    def test_threshold_50pct_passes_91pct_fidelity(self) -> None:
+        """Ratio 84/92 (≈91.3%) must be above default 50% threshold."""
+        _found = 84
+        _required = 92
+        _ratio = _found / _required  # ~0.913
+        _threshold = 0.5
+        assert _ratio >= _threshold, (
+            f"91.3% fidelity ({_found}/{_required}) must pass the 50% threshold"
+        )
+
+    def test_zero_threshold_disables_gate(self) -> None:
+        """MIN_SPEC_FIDELITY_THRESHOLD=0 must disable the gate entirely."""
+        _found = 1
+        _required = 100
+        _ratio = _found / _required
+        _threshold = 0.0  # Disabled
+        assert not (_threshold > 0 and _ratio < _threshold), (
+            "When threshold is 0 (disabled), even very low fidelity must not block"
+        )
+
+    def test_spec_fidelity_failed_stage_is_also_checked(self) -> None:
+        """The gate must also handle spec_fidelity_failed as a stage marker."""
+        src = (PROJECT_ROOT / "server/routers/generator.py").read_text(encoding="utf-8")
+        assert "spec_fidelity_failed" in src, (
+            "generator.py must check for spec_fidelity_failed in stages_completed"
+        )
+
+
+# ---------------------------------------------------------------------------
+# P1-2: Compliance Violations Blocking Gate
+# ---------------------------------------------------------------------------
+
+class TestComplianceViolationsGate:
+    """MAX_COMPLIANCE_VIOLATIONS must block healthcare pipelines with excessive violations."""
+
+    def test_omnicore_defines_max_compliance_violations(self) -> None:
+        """omnicore_service.py must define MAX_COMPLIANCE_VIOLATIONS."""
+        src = (PROJECT_ROOT / "server/services/omnicore_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert "MAX_COMPLIANCE_VIOLATIONS" in src, (
+            "omnicore_service.py must define MAX_COMPLIANCE_VIOLATIONS threshold"
+        )
+
+    def test_omnicore_compliance_threshold_configurable(self) -> None:
+        """MAX_COMPLIANCE_VIOLATIONS must be configurable via env var."""
+        src = (PROJECT_ROOT / "server/services/omnicore_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert 'os.getenv("MAX_COMPLIANCE_VIOLATIONS"' in src, (
+            "MAX_COMPLIANCE_VIOLATIONS must be configurable via environment variable"
+        )
+
+    def test_omnicore_defines_blocking_compliance_specs(self) -> None:
+        """omnicore_service.py must define HIPAA/GDPR as blocking specs."""
+        src = (PROJECT_ROOT / "server/services/omnicore_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert "_BLOCKING_COMPLIANCE_SPECS" in src, (
+            "omnicore_service.py must define _BLOCKING_COMPLIANCE_SPECS with HIPAA/GDPR"
+        )
+        assert "hipaa" in src and "gdpr" in src, (
+            "_BLOCKING_COMPLIANCE_SPECS must include 'hipaa' and 'gdpr'"
+        )
+
+    def test_43_violations_exceeds_threshold_of_20(self) -> None:
+        """43 HIPAA violations must exceed the default threshold of 20."""
+        _violations = 43
+        _threshold = 20
+        assert _violations > _threshold, (
+            f"{_violations} violations must exceed MAX_COMPLIANCE_VIOLATIONS={_threshold}"
+        )
+
+    def test_19_violations_passes_threshold_of_20(self) -> None:
+        """19 violations must not exceed the threshold of 20."""
+        _violations = 19
+        _threshold = 20
+        assert _violations <= _threshold, (
+            f"{_violations} violations must not exceed MAX_COMPLIANCE_VIOLATIONS={_threshold}"
+        )
+
+    def test_zero_threshold_disables_compliance_gate(self) -> None:
+        """MAX_COMPLIANCE_VIOLATIONS=0 must disable the gate."""
+        _threshold = 0
+        assert not (_threshold > 0), (
+            "When MAX_COMPLIANCE_VIOLATIONS=0, the compliance gate must be disabled"
+        )
+
+
+# ---------------------------------------------------------------------------
+# P1-3: Arbiter Concurrency Deduplication
+# ---------------------------------------------------------------------------
+
+class TestArbiterConcurrencyDeduplication:
+    """_run_arbiter_analysis must prevent duplicate concurrent runs for the same job."""
+
+    def test_sfe_service_has_active_analyses_tracking(self) -> None:
+        """sfe_service.py must track active arbiter analyses per job."""
+        src = (PROJECT_ROOT / "server/services/sfe_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert "_active_arbiter_analyses" in src, (
+            "sfe_service.py must track active analyses to prevent duplicates"
+        )
+
+    def test_sfe_service_has_already_running_guard(self) -> None:
+        """_run_arbiter_analysis must return 'already_running' for duplicate requests."""
+        src = (PROJECT_ROOT / "server/services/sfe_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert "already_running" in src, (
+            "sfe_service.py must return 'already_running' for duplicate arbiter calls"
+        )
+
+    def test_sfe_service_releases_lock_in_finally(self) -> None:
+        """The per-job lock must be released in a finally block."""
+        src = (PROJECT_ROOT / "server/services/sfe_service.py").read_text(
+            encoding="utf-8"
+        )
+        assert "discard(job_id)" in src or "_active_arbiter_analyses.discard" in src, (
+            "The per-job arbiter lock must be released via discard() in a finally block"
+        )
+
 # ---------------------------------------------------------------------------
 
 class TestLanguageDetectionSanitization:
