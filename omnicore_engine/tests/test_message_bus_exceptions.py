@@ -114,6 +114,7 @@ class TestRedisExceptions:
             raise RedisConnectionError("Test")
 
 
+@pytest.mark.usefixtures("fresh_event_loop")
 class TestKafkaExceptions:
     """Test Kafka-specific exceptions."""
 
