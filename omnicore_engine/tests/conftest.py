@@ -5,9 +5,20 @@ Test configuration for omnicore_engine tests.
 Provides fixtures and hooks to ensure proper test isolation.
 """
 
+import asyncio
 import gc
 import threading
 import pytest
+
+
+@pytest.fixture
+def fresh_event_loop():
+    """Provide a fresh event loop for each test and close it after use."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield loop
+    loop.close()
+    asyncio.set_event_loop(None)
 
 
 @pytest.fixture(scope="function", autouse=True)
