@@ -319,7 +319,20 @@ def is_toxic(text: str) -> bool:
 
 def add_to_history(line: str):
     # UPGRADE: Additive. History is anonymized, encrypted, and added for compliance.
-    state = asyncio.run(AutocompleteState.instance())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        # Called from within a running event loop (e.g. under pytest-asyncio).
+        # Use the existing singleton if available; fall back to unencrypted history
+        # since we cannot await initialization in a synchronous context.
+        state = AutocompleteState._instance
+        if state is None:
+            readline.add_history(anonymize_pii(line))
+            return
+    else:
+        state = asyncio.run(AutocompleteState.instance())
     try:
         if state.encryptor:
             state.encryptor.encrypt(anonymize_pii(line))
@@ -331,9 +344,19 @@ def add_to_history(line: str):
 
 
 def handle_command_not_found(line: str, state: AutocompleteState):
-    matches = asyncio.run(
-        fuzzy_matches(line, state.command_registry.all_commands, state)
-    )
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        # Called from within a running event loop (e.g. under pytest-asyncio).
+        # Fuzzy matching requires an await and cannot be performed synchronously
+        # here; skip suggestions to avoid blocking/crashing the caller.
+        matches = []
+    else:
+        matches = asyncio.run(
+            fuzzy_matches(line, state.command_registry.all_commands, state)
+        )
     print(
         f"Command not found: '{anonymize_pii(line)}'. Did you mean: {', '.join(matches[:3])}?"
     )

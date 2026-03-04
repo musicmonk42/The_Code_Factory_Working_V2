@@ -54,7 +54,9 @@ def mock_hvac():
     mock_client.secrets.kv.read_secret_version.return_value = {
         "data": {"data": {"TEST_SECRET": "vault_value"}}
     }
-    with patch("intent_capture.config.hvac.Client", return_value=mock_client):
+    mock_hvac_module = MagicMock()
+    mock_hvac_module.Client.return_value = mock_client
+    with patch.object(config_module, "hvac", mock_hvac_module):
         yield mock_client
 
 
@@ -69,18 +71,24 @@ def mock_boto3():
     mock_boto3_module = MagicMock()
     mock_boto3_module.client.return_value = mock_s3
 
-    with patch("intent_capture.config.boto3", mock_boto3_module):
+    with patch.object(config_module, "boto3", mock_boto3_module):
         yield mock_s3
 
 
 @pytest.fixture
 def mock_requests():
     """Mock requests for config service."""
+    import requests as real_requests
+
     mock_resp = MagicMock()
     mock_resp.status_code = 200
     mock_resp.json.return_value = {"INTENT_AGENT_REDIS_URL": "redis://test:6379/0"}
     mock_resp.raise_for_status = MagicMock()
-    with patch("intent_capture.config.requests.get", return_value=mock_resp):
+    mock_requests_module = MagicMock()
+    mock_requests_module.get.return_value = mock_resp
+    mock_requests_module.Timeout = real_requests.Timeout
+    mock_requests_module.ConnectionError = real_requests.ConnectionError
+    with patch.object(config_module, "requests", mock_requests_module):
         yield mock_resp
 
 
