@@ -27,6 +27,298 @@ from typing import Any, Dict, Generic, List, Optional, Tuple, TypeVar
 
 logger = logging.getLogger(__name__)
 
+# --- Mock Metric Implementation (always defined so tests can import without reload) ---
+
+
+class _MockRegistry:
+    """
+    Simulates Prometheus registry for testing.
+
+    Improvements:
+    - LRU eviction to prevent memory leaks from dynamic metrics
+    - Configurable max size with warning when limit is approached
+    - Memory usage tracking
+    """
+
+    def __init__(self, max_collectors: int = 1000):
+        """
+        Initialize mock registry with size limit.
+
+        Args:
+            max_collectors: Maximum number of metrics to track (default 1000)
+        """
+        self.collectors: List[Any] = []
+        self.max_collectors = max_collectors
+        self._warned_at_threshold = False
+
+    def register(self, collector: Any):
+        """Register a collector with LRU eviction if at capacity."""
+        # Check if we're approaching the limit
+        if (
+            len(self.collectors) >= self.max_collectors * 0.9
+            and not self._warned_at_threshold
+        ):
+            logger.warning(
+                f"Mock metric registry approaching capacity: "
+                f"{len(self.collectors)}/{self.max_collectors}. "
+                f"Consider using real Prometheus or reducing dynamic metric creation."
+            )
+            self._warned_at_threshold = True
+
+        # If at capacity, remove oldest collector (LRU eviction)
+        if len(self.collectors) >= self.max_collectors:
+            removed = self.collectors.pop(0)
+            logger.debug(
+                f"Mock metric registry at capacity. "
+                f"Evicting oldest metric: {getattr(removed, 'name', 'unknown')}"
+            )
+
+        self.collectors.append(collector)
+
+    def unregister(self, collector: Any):
+        if collector in self.collectors:
+            self.collectors.remove(collector)
+
+    def get_memory_usage(self) -> dict:
+        """
+        Return memory usage statistics for monitoring.
+
+        Returns:
+            Dict with collector count, capacity, and usage percentage
+        """
+        return {
+            "collector_count": len(self.collectors),
+            "max_collectors": self.max_collectors,
+            "usage_percent": (len(self.collectors) / self.max_collectors) * 100,
+        }
+
+
+T = TypeVar("T")
+
+
+class _ThreadSafeDict(Generic[T]):
+    """
+    Thread-safe dictionary for mock metric storage with LRU eviction.
+
+    Improvements:
+    - Configurable max size to prevent unbounded growth
+    - LRU eviction when capacity is reached
+    - Access time tracking for proper LRU behavior
+    """
+
+    def __init__(self, max_size: int = 10000):
+        """
+        Initialize thread-safe dict with size limit.
+
+        Args:
+            max_size: Maximum number of label combinations to track
+        """
+        self._data: Dict[Tuple, T] = {}
+        self._access_times: Dict[Tuple, float] = {}
+        self._lock = threading.RLock()
+        self.max_size = max_size
+        self._warned_at_threshold = False
+
+    def _evict_lru(self):
+        """Evict least recently used entry."""
+        if not self._access_times:
+            # Fallback: remove arbitrary item if access times aren't tracked
+            if self._data:
+                self._data.popitem()
+            return
+
+        # Find and remove least recently used key
+        lru_key = min(self._access_times, key=self._access_times.get)
+        self._data.pop(lru_key, None)
+        self._access_times.pop(lru_key, None)
+
+    def get(self, key: Tuple, default: T) -> T:
+        with self._lock:
+            # Only record access time if key exists to avoid ghost entries
+            if key in self._data:
+                self._access_times[key] = time.time()
+                return self._data[key]
+            return default
+
+    def set(self, key: Tuple, value: T):
+        with self._lock:
+            # Check capacity and evict if needed (only for new keys when at capacity)
+            if key not in self._data and len(self._data) >= self.max_size:
+                if (
+                    len(self._data) >= self.max_size * 0.9
+                    and not self._warned_at_threshold
+                ):
+                    logger.warning(
+                        f"Mock metric storage approaching capacity: "
+                        f"{len(self._data)}/{self.max_size}. "
+                        f"Using LRU eviction. Consider real Prometheus for production."
+                    )
+                    self._warned_at_threshold = True
+                self._evict_lru()
+
+            self._data[key] = value
+            self._access_times[key] = time.time()
+
+    def inc(self, key: Tuple, amount: float = 1.0):
+        with self._lock:
+            # Check capacity and evict if needed
+            if key not in self._data and len(self._data) >= self.max_size:
+                self._evict_lru()
+
+            self._data[key] = self._data.get(key, 0.0) + amount
+            self._access_times[key] = time.time()
+
+    def items(self):
+        with self._lock:
+            return list(self._data.items())
+
+    def clear(self):
+        """Clear all data and reset warning flag."""
+        with self._lock:
+            self._data.clear()
+            self._access_times.clear()
+            self._warned_at_threshold = False
+
+
+class MockMetric:
+    """A thread-safe, no-op placeholder for Prometheus metrics with in-memory tracking."""
+
+    def __init__(
+        self,
+        name: str,
+        documentation: str,
+        labelnames: Optional[List[str]] = None,
+        metric_type: str = "counter",
+    ):
+        self.name = name
+        self.documentation = documentation
+        self.labelnames = labelnames or []
+        self.metric_type = metric_type
+        self._lock = threading.RLock()
+        self._values: _ThreadSafeDict[float] = _ThreadSafeDict()
+        self._buckets: List[float] = []
+        self._bucket_values: _ThreadSafeDict[float] = (
+            _ThreadSafeDict() if metric_type == "histogram" else None
+        )
+        self._sum: float = 0.0
+        self._count: int = 0
+        if metric_type == "histogram":
+            self._buckets = [
+                0.005,
+                0.01,
+                0.05,
+                0.1,
+                0.5,
+                1.0,
+                5.0,
+                10.0,
+                float("inf"),
+            ]
+        REGISTRY.register(self)
+
+    def labels(self, **kwargs):
+        """Returns a labeled version of the metric."""
+        label_values = tuple(kwargs.get(label, "") for label in self.labelnames)
+        return _LabeledMockMetric(self, label_values)
+
+    def inc(self, amount: float = 1.0):
+        with self._lock:
+            if self.metric_type != "counter":
+                raise ValueError("inc() only valid for Counter")
+            self._values.inc((), amount)
+
+    def set(self, value: float):
+        with self._lock:
+            if self.metric_type != "gauge":
+                raise ValueError("set() only valid for Gauge")
+            self._values.set((), value)
+
+    def observe(self, value: float):
+        with self._lock:
+            if self.metric_type != "histogram":
+                raise ValueError("observe() only valid for Histogram")
+            self._sum += value
+            self._count += 1
+            for bucket in self._buckets:
+                key = (bucket,)
+                if value <= bucket:
+                    self._bucket_values.inc(key, 1.0)
+
+    def info(self, data: dict):
+        """Set info metric data (no-op in mock)."""
+        pass
+
+    @contextmanager
+    def time(self):
+        start = time.time()
+        try:
+            yield
+        finally:
+            if self.metric_type == "histogram":
+                self.observe(time.time() - start)
+
+    def _collect(self):
+        """For registry export in tests."""
+        yield self
+
+
+class _LabeledMockMetric:
+    def __init__(self, parent: MockMetric, label_values: Tuple):
+        self.parent = parent
+        self.label_values = label_values
+
+    def inc(self, amount: float = 1.0):
+        if self.parent.metric_type != "counter":
+            raise ValueError("inc() only valid for Counter")
+        self.parent._values.inc(self.label_values, amount)
+
+    def set(self, value: float):
+        if self.parent.metric_type != "gauge":
+            raise ValueError("set() only valid for Gauge")
+        self.parent._values.set(self.label_values, value)
+
+    def observe(self, value: float):
+        if self.parent.metric_type != "histogram":
+            raise ValueError("observe() only valid for Histogram")
+        self.parent._sum += value
+        self.parent._count += 1
+        for bucket in self.parent._buckets:
+            key = self.label_values + (bucket,)
+            if value <= bucket:
+                self.parent._bucket_values.inc(key, 1.0)
+
+    @contextmanager
+    def time(self):
+        start = time.time()
+        try:
+            yield
+        finally:
+            if self.parent.metric_type == "histogram":
+                self.observe(time.time() - start)
+
+
+def _MockCounter(name, doc, labelnames=None):
+    return MockMetric(name, doc, labelnames, "counter")
+
+
+def _MockGauge(name, doc, labelnames=None):
+    return MockMetric(name, doc, labelnames, "gauge")
+
+
+def _MockHistogram(name, doc, labelnames=None, buckets=None):
+    return MockMetric(
+        name, doc, labelnames, "histogram"
+    )  # buckets ignored in mock, use default
+
+
+def _MockInfo(name, doc):
+    """Create an Info metric (no-op in mock).
+
+    Note: PascalCase naming follows prometheus_client API conventions.
+    """
+    return MockMetric(name, doc, [], "info")
+
+
 # --- Optional Prometheus Metrics Import ---
 try:
     from prometheus_client import REGISTRY, Counter, Gauge, Histogram
@@ -35,294 +327,15 @@ try:
     _PROMETHEUS_AVAILABLE = True
     logger.info("Prometheus client loaded. Real metrics enabled.")
 except ImportError:
-    # --- Mock Metric Implementation ---
-    REGISTRY = None
     _PROMETHEUS_AVAILABLE = False
     logger.warning(
         "Prometheus client not found. Using thread-safe Mock Metrics with in-memory tracking."
     )
-
-    class _MockRegistry:
-        """
-        Simulates Prometheus registry for testing.
-
-        Improvements:
-        - LRU eviction to prevent memory leaks from dynamic metrics
-        - Configurable max size with warning when limit is approached
-        - Memory usage tracking
-        """
-
-        def __init__(self, max_collectors: int = 1000):
-            """
-            Initialize mock registry with size limit.
-
-            Args:
-                max_collectors: Maximum number of metrics to track (default 1000)
-            """
-            self.collectors: List[Any] = []
-            self.max_collectors = max_collectors
-            self._warned_at_threshold = False
-
-        def register(self, collector: Any):
-            """Register a collector with LRU eviction if at capacity."""
-            # Check if we're approaching the limit
-            if (
-                len(self.collectors) >= self.max_collectors * 0.9
-                and not self._warned_at_threshold
-            ):
-                logger.warning(
-                    f"Mock metric registry approaching capacity: "
-                    f"{len(self.collectors)}/{self.max_collectors}. "
-                    f"Consider using real Prometheus or reducing dynamic metric creation."
-                )
-                self._warned_at_threshold = True
-
-            # If at capacity, remove oldest collector (LRU eviction)
-            if len(self.collectors) >= self.max_collectors:
-                removed = self.collectors.pop(0)
-                logger.debug(
-                    f"Mock metric registry at capacity. "
-                    f"Evicting oldest metric: {getattr(removed, 'name', 'unknown')}"
-                )
-
-            self.collectors.append(collector)
-
-        def unregister(self, collector: Any):
-            if collector in self.collectors:
-                self.collectors.remove(collector)
-
-        def get_memory_usage(self) -> dict:
-            """
-            Return memory usage statistics for monitoring.
-
-            Returns:
-                Dict with collector count, capacity, and usage percentage
-            """
-            return {
-                "collector_count": len(self.collectors),
-                "max_collectors": self.max_collectors,
-                "usage_percent": (len(self.collectors) / self.max_collectors) * 100,
-            }
-
     REGISTRY = _MockRegistry()
-
-    T = TypeVar("T")
-
-    class _ThreadSafeDict(Generic[T]):
-        """
-        Thread-safe dictionary for mock metric storage with LRU eviction.
-
-        Improvements:
-        - Configurable max size to prevent unbounded growth
-        - LRU eviction when capacity is reached
-        - Access time tracking for proper LRU behavior
-        """
-
-        def __init__(self, max_size: int = 10000):
-            """
-            Initialize thread-safe dict with size limit.
-
-            Args:
-                max_size: Maximum number of label combinations to track
-            """
-            self._data: Dict[Tuple, T] = {}
-            self._access_times: Dict[Tuple, float] = {}
-            self._lock = threading.RLock()
-            self.max_size = max_size
-            self._warned_at_threshold = False
-
-        def _evict_lru(self):
-            """Evict least recently used entry."""
-            if not self._access_times:
-                # Fallback: remove arbitrary item if access times aren't tracked
-                if self._data:
-                    self._data.popitem()
-                return
-
-            # Find and remove least recently used key
-            lru_key = min(self._access_times, key=self._access_times.get)
-            self._data.pop(lru_key, None)
-            self._access_times.pop(lru_key, None)
-
-        def get(self, key: Tuple, default: T) -> T:
-            with self._lock:
-                # Only record access time if key exists to avoid ghost entries
-                if key in self._data:
-                    self._access_times[key] = time.time()
-                    return self._data[key]
-                return default
-
-        def set(self, key: Tuple, value: T):
-            with self._lock:
-                # Check capacity and evict if needed (only for new keys when at capacity)
-                if key not in self._data and len(self._data) >= self.max_size:
-                    if (
-                        len(self._data) >= self.max_size * 0.9
-                        and not self._warned_at_threshold
-                    ):
-                        logger.warning(
-                            f"Mock metric storage approaching capacity: "
-                            f"{len(self._data)}/{self.max_size}. "
-                            f"Using LRU eviction. Consider real Prometheus for production."
-                        )
-                        self._warned_at_threshold = True
-                    self._evict_lru()
-
-                self._data[key] = value
-                self._access_times[key] = time.time()
-
-        def inc(self, key: Tuple, amount: float = 1.0):
-            with self._lock:
-                # Check capacity and evict if needed
-                if key not in self._data and len(self._data) >= self.max_size:
-                    self._evict_lru()
-
-                self._data[key] = self._data.get(key, 0.0) + amount
-                self._access_times[key] = time.time()
-
-        def items(self):
-            with self._lock:
-                return list(self._data.items())
-
-        def clear(self):
-            """Clear all data and reset warning flag."""
-            with self._lock:
-                self._data.clear()
-                self._access_times.clear()
-                self._warned_at_threshold = False
-
-    class MockMetric:
-        """A thread-safe, no-op placeholder for Prometheus metrics with in-memory tracking."""
-
-        def __init__(
-            self,
-            name: str,
-            documentation: str,
-            labelnames: Optional[List[str]] = None,
-            metric_type: str = "counter",
-        ):
-            self.name = name
-            self.documentation = documentation
-            self.labelnames = labelnames or []
-            self.metric_type = metric_type
-            self._lock = threading.RLock()
-            self._values: _ThreadSafeDict[float] = _ThreadSafeDict()
-            self._buckets: List[float] = []
-            self._bucket_values: _ThreadSafeDict[float] = (
-                _ThreadSafeDict() if metric_type == "histogram" else None
-            )
-            self._sum: float = 0.0
-            self._count: int = 0
-            if metric_type == "histogram":
-                self._buckets = [
-                    0.005,
-                    0.01,
-                    0.05,
-                    0.1,
-                    0.5,
-                    1.0,
-                    5.0,
-                    10.0,
-                    float("inf"),
-                ]
-            REGISTRY.register(self)
-
-        def labels(self, **kwargs):
-            """Returns a labeled version of the metric."""
-            label_values = tuple(kwargs.get(label, "") for label in self.labelnames)
-            return _LabeledMockMetric(self, label_values)
-
-        def inc(self, amount: float = 1.0):
-            with self._lock:
-                if self.metric_type != "counter":
-                    raise ValueError("inc() only valid for Counter")
-                self._values.inc((), amount)
-
-        def set(self, value: float):
-            with self._lock:
-                if self.metric_type != "gauge":
-                    raise ValueError("set() only valid for Gauge")
-                self._values.set((), value)
-
-        def observe(self, value: float):
-            with self._lock:
-                if self.metric_type != "histogram":
-                    raise ValueError("observe() only valid for Histogram")
-                self._sum += value
-                self._count += 1
-                for bucket in self._buckets:
-                    key = (bucket,)
-                    if value <= bucket:
-                        self._bucket_values.inc(key, 1.0)
-        
-        def info(self, data: dict):
-            """Set info metric data (no-op in mock)."""
-            pass
-
-        @contextmanager
-        def time(self):
-            start = time.time()
-            try:
-                yield
-            finally:
-                if self.metric_type == "histogram":
-                    self.observe(time.time() - start)
-
-        def _collect(self):
-            """For registry export in tests."""
-            yield self
-
-    class _LabeledMockMetric:
-        def __init__(self, parent: MockMetric, label_values: Tuple):
-            self.parent = parent
-            self.label_values = label_values
-
-        def inc(self, amount: float = 1.0):
-            if self.parent.metric_type != "counter":
-                raise ValueError("inc() only valid for Counter")
-            self.parent._values.inc(self.label_values, amount)
-
-        def set(self, value: float):
-            if self.parent.metric_type != "gauge":
-                raise ValueError("set() only valid for Gauge")
-            self.parent._values.set(self.label_values, value)
-
-        def observe(self, value: float):
-            if self.parent.metric_type != "histogram":
-                raise ValueError("observe() only valid for Histogram")
-            self.parent._sum += value
-            self.parent._count += 1
-            for bucket in self.parent._buckets:
-                key = self.label_values + (bucket,)
-                if value <= bucket:
-                    self.parent._bucket_values.inc(key, 1.0)
-
-        @contextmanager
-        def time(self):
-            start = time.time()
-            try:
-                yield
-            finally:
-                if self.parent.metric_type == "histogram":
-                    self.observe(time.time() - start)
-
-    def Counter(name, doc, labelnames=None):
-        return MockMetric(name, doc, labelnames, "counter")
-
-    def Gauge(name, doc, labelnames=None):
-        return MockMetric(name, doc, labelnames, "gauge")
-
-    def Histogram(name, doc, labelnames=None, buckets=None):
-        return MockMetric(
-            name, doc, labelnames, "histogram"
-        )  # buckets ignored in mock, use default
-    
-    def Info(name, doc):
-        """Create an Info metric (no-op in mock).
-        
-        Note: PascalCase naming follows prometheus_client API conventions.
-        """
-        return MockMetric(name, doc, [], "info")
+    Counter = _MockCounter
+    Gauge = _MockGauge
+    Histogram = _MockHistogram
+    Info = _MockInfo
 
 
 # --- Metric Registry to Prevent Duplicates ---

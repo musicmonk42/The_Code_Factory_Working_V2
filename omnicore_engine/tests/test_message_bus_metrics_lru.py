@@ -11,9 +11,11 @@ Tests verify:
 - Warning thresholds
 - Memory usage tracking
 
-NOTE: This test module forces mock mode by mocking prometheus_client at module level.
-This is intentional as we're specifically testing the mock implementation.
-These tests should be run in isolation or with proper test collection ordering.
+NOTE: This test module forces mock mode by patching prometheus_client at module
+level via monkeypatch. importlib.reload() is intentionally avoided because it
+disrupts pytest-asyncio teardown ordering (causing "previous item was not torn
+down properly" errors). Direct monkeypatching of module attributes cleanly
+restores state after each test without touching the event-loop machinery.
 """
 
 import sys
@@ -23,26 +25,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-# Lazy import to avoid issues during test collection when dependencies may not be available.
-# The metrics module requires the message_bus package which has heavy dependencies.
-# Import is deferred to fixture/test execution time when pytest has fully initialized.
-_ThreadSafeDict = None
-get_mock_registry_stats = None
-reset_metrics = None
-
-
-def _lazy_import_metrics():
-    """Import metrics module lazily to avoid collection-time errors."""
-    global _ThreadSafeDict, get_mock_registry_stats, reset_metrics
-    if _ThreadSafeDict is None:
-        from omnicore_engine.message_bus.metrics import (
-            _ThreadSafeDict as _TSD,
-            get_mock_registry_stats as _gmrs,
-            reset_metrics as _rm,
-        )
-        _ThreadSafeDict = _TSD
-        get_mock_registry_stats = _gmrs
-        reset_metrics = _rm
+from omnicore_engine.message_bus import metrics as _metrics_module
+from omnicore_engine.message_bus.metrics import (
+    _MockCounter,
+    _MockGauge,
+    _MockHistogram,
+    _MockRegistry,
+    _ThreadSafeDict,
+    get_mock_registry_stats,
+    reset_metrics,
+)
 
 
 class _ImportBlocker:
@@ -51,68 +43,56 @@ class _ImportBlocker:
         raise ImportError("Mocked prometheus_client is not available")
 
 
-@pytest.fixture(scope="module", autouse=True)
-def mock_prometheus():
+@pytest.fixture(autouse=True)
+def mock_prometheus(monkeypatch):
     """
     Mock prometheus_client to force mock mode for testing.
-    This fixture automatically applies to all tests in this module.
-    """
-    import importlib
-    from omnicore_engine.message_bus import metrics
-    
-    # Save original modules if they exist
-    original_prometheus = sys.modules.get("prometheus_client")
-    original_registry = sys.modules.get("prometheus_client.registry")
-    
-    # Force mock mode by blocking imports - use a module that raises ImportError
-    # on attribute access rather than MagicMock which allows imports to succeed
-    sys.modules["prometheus_client"] = _ImportBlocker()
-    sys.modules["prometheus_client.registry"] = _ImportBlocker()
 
-    # Force reload to pick up blocked prometheus
-    importlib.reload(metrics)
-    
-    # Now perform the lazy import after metrics module is properly loaded
-    _lazy_import_metrics()
+    Uses monkeypatch to swap module-level attributes so that no importlib.reload()
+    is needed. This avoids disrupting pytest-asyncio teardown ordering.
+    monkeypatch automatically restores the original values after each test.
+    """
+    mock_registry = _MockRegistry()
+    monkeypatch.setattr(_metrics_module, '_PROMETHEUS_AVAILABLE', False)
+    monkeypatch.setattr(_metrics_module, 'REGISTRY', mock_registry)
+    monkeypatch.setattr(_metrics_module, 'Counter', _MockCounter)
+    monkeypatch.setattr(_metrics_module, 'Gauge', _MockGauge)
+    monkeypatch.setattr(_metrics_module, 'Histogram', _MockHistogram)
+    monkeypatch.setitem(sys.modules, 'prometheus_client', _ImportBlocker())
+    monkeypatch.setitem(sys.modules, 'prometheus_client.registry', _ImportBlocker())
+
+    # Clear any cached metrics left over from previous test state via the public API
+    reset_metrics()
 
     yield
 
-    # Cleanup: restore original modules
-    if original_prometheus is not None:
-        sys.modules["prometheus_client"] = original_prometheus
-    elif "prometheus_client" in sys.modules:
-        del sys.modules["prometheus_client"]
-    if original_registry is not None:
-        sys.modules["prometheus_client.registry"] = original_registry
-    elif "prometheus_client.registry" in sys.modules:
-        del sys.modules["prometheus_client.registry"]
-    
-    # Reload metrics with original prometheus if available
-    importlib.reload(metrics)
+    # Reset metric caches before monkeypatch restores the original attributes
+    try:
+        reset_metrics()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)
 def reset_registry_state():
     """Reset registry state after each test to ensure proper teardown."""
-    # Run test
     yield
 
     # After test: reset metrics to clean state
-    if reset_metrics is not None:
-        try:
-            reset_metrics()
-        except Exception:
-            pass  # Ignore errors during cleanup
-
-    # Also clear the REGISTRY if it exists
     try:
-        from omnicore_engine.message_bus.metrics import REGISTRY
-        if hasattr(REGISTRY, 'collectors'):
-            REGISTRY.collectors.clear()
-        if hasattr(REGISTRY, '_warned_at_threshold'):
-            REGISTRY._warned_at_threshold = False
+        reset_metrics()
     except Exception:
-        pass  # Ignore errors during cleanup
+        pass
+
+    # Also clear the REGISTRY if it is still the mock one
+    try:
+        registry = _metrics_module.REGISTRY
+        if hasattr(registry, 'collectors'):
+            registry.collectors.clear()
+        if hasattr(registry, '_warned_at_threshold'):
+            registry._warned_at_threshold = False
+    except Exception:
+        pass
 
 
 class TestThreadSafeDictLRU:
@@ -257,8 +237,6 @@ class TestMockRegistryLRU:
     def test_registry_eviction_at_capacity(self):
         """Test registry evicts oldest collector at capacity."""
         # Create a small registry for testing
-        from omnicore_engine.message_bus.metrics import _MockRegistry
-
         registry = _MockRegistry(max_collectors=5)
 
         # Create mock collectors
@@ -286,8 +264,6 @@ class TestMockRegistryLRU:
 
     def test_registry_memory_usage_stats(self):
         """Test get_memory_usage() returns correct stats."""
-        from omnicore_engine.message_bus.metrics import _MockRegistry
-
         registry = _MockRegistry(max_collectors=100)
 
         # Add some collectors
@@ -303,8 +279,6 @@ class TestMockRegistryLRU:
 
     def test_registry_warning_at_threshold(self):
         """Test that warning is logged at 90% capacity."""
-        from omnicore_engine.message_bus.metrics import _MockRegistry
-
         registry = _MockRegistry(max_collectors=10)
 
         # Add collectors up to 90% capacity
