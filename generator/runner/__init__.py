@@ -293,11 +293,22 @@ try:
 except ImportError as _llm_import_err:
     _logger.warning(
         "runner/__init__: call_llm_api could not be imported from llm_client "
-        "(%s).  LLM-based fix generation will be unavailable until the missing "
-        "dependency is installed.  See requirements.txt for the full dependency "
-        "list.",
+        "(%s).  Falling back to shared.stubs.llm_stubs stub so the package "
+        "remains importable.  LLM-based fix generation will raise "
+        "NotImplementedError at call time until the missing dependency is "
+        "installed.  See requirements.txt for the full dependency list.",
         _llm_import_err,
     )
+    try:
+        from shared.stubs.llm_stubs import call_llm_api  # noqa: F401 — fallback stub
+    except ImportError:
+        # Last-resort inline stub so that `from generator.runner import
+        # call_llm_api` never raises ImportError even in the most minimal env.
+        async def call_llm_api(*args, **kwargs):  # type: ignore[misc]
+            raise NotImplementedError(
+                "LLM API unavailable: generator.runner.llm_client could not "
+                "be imported and shared.stubs.llm_stubs is also missing."
+            )
 
 # Import tracer for OpenTelemetry support
 try:
