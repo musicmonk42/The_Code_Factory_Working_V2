@@ -63,7 +63,16 @@ class Fix(BaseModel):
     applied_at: Optional[datetime] = Field(None, description="Application timestamp")
     rolled_back_at: Optional[datetime] = Field(None, description="Rollback timestamp")
     validation_status: Optional[str] = Field(
-        None, description="Sandbox validation result: 'validated', 'rejected', or 'error'"
+        None,
+        description=(
+            "Sandbox validation outcome recorded at review/approve time.  "
+            "Possible values: "
+            "'validated' — sandbox confirmed the fix improves the codebase; "
+            "'rejected' — sandbox found no improvement (fix was auto-rejected); "
+            "'skipped' — validation was intentionally bypassed at review time "
+            "(info-only fix, low confidence, force-override, or no job context); "
+            "'error' — sandbox encountered an unexpected error."
+        ),
     )
     validation_result: Optional[Dict[str, Any]] = Field(
         None, description="Detailed sandbox validation outcome (test counts, logs)"

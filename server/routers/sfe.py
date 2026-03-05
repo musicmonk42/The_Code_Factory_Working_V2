@@ -392,32 +392,54 @@ async def review_fix(
     """
     Review a proposed fix (approve or reject).
 
-    When ``approved=True`` the fix is validated in a sandbox before approval,
-    unless any of the following conditions apply — in which case the human
-    decision is honoured directly:
+    Sandbox validation lifecycle
+    ----------------------------
+    When ``approved=True`` sandbox validation is run **here**, at review/approve
+    time, not at apply time.  This decouples the potentially slow validation step
+    from the fast "commit to disk" apply step so that:
 
-    - The fix was already validated (``validation_status == "validated"``)
-    - The reviewer included the word ``force`` in their comments
-    - Every proposed change has ``action == "info"`` (guidance-only fix)
-    - The fix has low confidence (``confidence < 0.6``)
-    - The fix has no associated job directory (``job_id`` is absent or blank)
+    * The user sees validation feedback immediately on clicking **Approve**.
+    * ``apply_fix`` is a pure write operation with no hidden blocking side-effects.
+    * The ``validation_status`` field on the fix is always populated before apply
+      is attempted, enabling audit and retry workflows.
 
-    When sandbox validation *does* run and the fix fails, it is rejected even
-    if the human reviewer requested approval.  Pass ``force=True`` in the
-    comments to override that behaviour (not recommended for production).
+    Sandbox validation is **skipped** (and ``validation_status`` set to
+    ``"skipped"``) when any of the following conditions hold — in which case the
+    human decision is honoured directly:
+
+    - ``validation_status`` is already ``"validated"`` or ``"skipped"``
+      (idempotent re-approval or re-review).
+    - The reviewer included the word ``force`` in their comments (explicit
+      override — not recommended for production).
+    - Every proposed change has ``action == "info"`` (guidance-only, no file
+      modifications).
+    - The fix has low confidence (``confidence < 0.6``); these are typically
+      informational suggestions.
+    - The fix has no associated job directory (``job_id`` is absent or blank);
+      without a codebase there is nothing to run tests against.
+
+    When validation runs and the fix **fails**, it is automatically rejected
+    even if the human reviewer requested approval.  The rejection reason is
+    recorded in ``validation_result``.
 
     **Path Parameters:**
-    - fix_id: Fix identifier
+
+    - ``fix_id``: Fix identifier (UUID format).
 
     **Request Body:**
-    - approved: Whether the fix is approved
-    - comments: Optional review comments
+
+    - ``approved`` (bool): ``true`` to approve, ``false`` to reject.
+    - ``comments`` (str | null): Optional reviewer comments.  Include the word
+      ``force`` to bypass sandbox validation (use with caution).
 
     **Returns:**
-    - Updated fix information
+
+    Updated :class:`~server.schemas.Fix` with ``status``, ``validation_status``,
+    and ``validation_result`` populated.
 
     **Errors:**
-    - 404: Fix not found
+
+    - ``404``: Fix not found.
     """
     if fix_id not in fixes_db:
         raise HTTPException(status_code=404, detail=f"Fix {fix_id} not found")
@@ -425,51 +447,106 @@ async def review_fix(
     fix = fixes_db[fix_id]
 
     if request.approved:
-        # Run sandbox validation unless the fix was already explicitly validated
-        already_validated = fix.validation_status == "validated"
+        # ------------------------------------------------------------------
+        # Determine whether sandbox validation is required.
+        # ------------------------------------------------------------------
+        already_handled = fix.validation_status in ("validated", "skipped")
         force_override = "force" in (request.comments or "").lower()
 
-        # Skip sandbox validation for low-confidence or informational fixes:
-        # these are guidance-based and not meant to modify test outcomes.
+        # Guidance-only fix: all proposed changes are informational (no file
+        # modifications).  Sandbox validation is meaningless for these.
+        # The `isinstance(c, dict)` guard is intentional: proposed_changes is
+        # declared as List[Dict[str, Any]] in the schema but may arrive as a
+        # deserialised list from storage where each element is a plain dict.
+        # Checking isinstance makes the detection robust to any serialisation
+        # quirk (e.g. list of Pydantic models vs raw dicts) without relying on
+        # attribute access that would raise on non-dict elements.
         is_info_fix = bool(fix.proposed_changes) and all(
-            c.get("action") == "info"
+            isinstance(c, dict) and c.get("action") == "info"
             for c in (fix.proposed_changes or [])
         )
+        # Low-confidence fix: below threshold, treat as informational.
         low_confidence = (fix.confidence or 0.0) < 0.6
 
-        job_id = fix.job_id or ""
-        no_job_context = not job_id.strip()
-        if no_job_context:
-            logger.debug(f"Fix {fix_id}: no job_id — skipping sandbox validation")
-        if not already_validated and not force_override and not is_info_fix and not low_confidence and not no_job_context:
+        job_id: str = (fix.job_id or "").strip()
+        no_job_context = not job_id
+
+        should_validate = (
+            not already_handled
+            and not force_override
+            and not is_info_fix
+            and not low_confidence
+            and not no_job_context
+        )
+
+        if should_validate:
+            # ------------------------------------------------------------------
+            # Run sandbox validation synchronously.  On failure, reject the fix
+            # so that the apply step is never reached with a bad fix.
+            # ------------------------------------------------------------------
             try:
                 validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
                 fix.validation_status = validation.get("status")
                 fix.validation_result = validation.get("result")
 
                 if fix.validation_status != "validated":
-                    # Validation says fix doesn't improve things — reject it
                     fix.status = FixStatus.REJECTED
                     fix.updated_at = datetime.now(timezone.utc)
                     logger.warning(
-                        f"Fix {fix_id} rejected: sandbox validation failed "
-                        f"({validation.get('reason', 'no improvement')})"
+                        "Fix %s rejected at review: sandbox validation failed "
+                        "(status=%r, reason=%r)",
+                        fix_id,
+                        fix.validation_status,
+                        validation.get("reason", "no improvement"),
                     )
                     return fix
+
             except Exception as exc:
+                # Sandbox error must not block a human approval decision.
+                # Log at WARNING and proceed — the fix will be applied without
+                # automated validation (audit trail preserved in logs).
                 logger.warning(
-                    f"Fix {fix_id}: sandbox validation error ({exc}); "
-                    "proceeding with human-only approval"
+                    "Fix %s: sandbox validation raised an exception (%s); "
+                    "proceeding with human-only approval.  Consider investigating "
+                    "the sandbox environment.",
+                    fix_id,
+                    exc,
                 )
 
+        elif not already_handled:
+            # ------------------------------------------------------------------
+            # Validation intentionally skipped.  Record the reason so that
+            # apply_fix treats this fix as already-handled and does not
+            # trigger a surprise re-validation at apply time.
+            # ------------------------------------------------------------------
+            skip_reason: str = (
+                "force_override" if force_override
+                else "info_only" if is_info_fix
+                else "low_confidence" if low_confidence
+                else "no_job_context"
+            )
+            fix.validation_status = "skipped"
+            fix.validation_result = {"skipped": True, "reason": skip_reason}
+            logger.debug(
+                "Fix %s: sandbox validation intentionally skipped at review "
+                "time (reason=%r); validation_status='skipped' prevents "
+                "apply_fix from re-running validation",
+                fix_id,
+                skip_reason,
+            )
+
         fix.status = FixStatus.APPROVED
+
     else:
         fix.status = FixStatus.REJECTED
 
     fix.updated_at = datetime.now(timezone.utc)
-
-    logger.info(f"Fix {fix_id} {'approved' if request.approved else 'rejected'}")
-
+    logger.info(
+        "Fix %s %s (validation_status=%r)",
+        fix_id,
+        "approved" if request.approved else "rejected",
+        fix.validation_status,
+    )
     return fix
 
 
@@ -484,28 +561,49 @@ async def apply_fix(
 
     Applies the fix to the codebase, optionally in dry-run mode.
 
+    Sandbox validation
+    ------------------
+    Sandbox validation is intentionally performed at **approve** time (via
+    ``review_fix``), not here.  ``apply_fix`` checks ``validation_status``
+    and only runs validation if no prior result exists — this provides backward
+    compatibility for fixes approved before the new workflow was deployed.
+
+    Accepted ``validation_status`` values that suppress re-validation:
+
+    * ``"validated"`` — sandbox confirmed the fix improves the codebase.
+    * ``"skipped"`` — validation was intentionally bypassed during review
+      (info-only fix, low confidence, force override, or no job context).
+
+    Any other value (including ``None``) causes validation to run here for
+    backward compatibility.
+
     **Path Parameters:**
-    - fix_id: Fix identifier
+
+    - ``fix_id``: Fix identifier.
 
     **Request Body:**
-    - force: Force application even if conditions aren't met
-    - dry_run: Simulate application without making changes
-    - skip_validation: Skip sandbox validation (not recommended for production)
+
+    - ``force`` (bool): Force application even if the fix is not ``APPROVED``.
+    - ``dry_run`` (bool): Simulate application without writing to disk.
+    - ``skip_validation`` (bool): Skip sandbox validation entirely (not
+      recommended for production — use only for emergency hotfixes).
 
     **Returns:**
-    - Application result including:
-      - applied (bool): True when file changes were written to disk
-      - files_modified (list[str]): Paths of files that were modified
-      - changes_applied (int): Number of changes written to disk
-      - changes_failed (int): Number of changes that could not be applied
-      - output_refreshed (bool): True when job.output_files was re-scanned
-        after the fix was applied; callers should invalidate any client-side
-        file-count caches when this flag is True
+
+    :class:`~server.schemas.SuccessResponse` with ``data`` containing:
+
+    - ``applied`` (bool): ``true`` when file changes were written to disk.
+    - ``files_modified`` (list[str]): Paths of files that were modified.
+    - ``changes_applied`` (int): Number of changes written to disk.
+    - ``changes_failed`` (int): Number of changes that could not be applied.
+    - ``output_refreshed`` (bool): ``true`` when ``job.output_files`` was
+      re-scanned; callers should invalidate any client-side file-count caches.
 
     **Errors:**
-    - 404: Fix not found
-    - 400: Fix not approved or already applied
-    - 422: Sandbox validation failed (fix not applied)
+
+    - ``404``: Fix not found.
+    - ``400``: Fix is not approved (or already applied).
+    - ``422``: Sandbox validation failed — fix was not applied.
     """
     if fix_id not in fixes_db:
         raise HTTPException(status_code=404, detail=f"Fix {fix_id} not found")
@@ -524,14 +622,32 @@ async def apply_fix(
             detail=f"Fix {fix_id} is already applied",
         )
 
-    # Sandbox validation gate: validate before applying unless explicitly skipped
+    # ------------------------------------------------------------------
+    # Sandbox validation gate
+    # ------------------------------------------------------------------
+    # Validation is expected to have already run at approve/review time.
+    # We check validation_status and only run it here for backward
+    # compatibility (e.g. fixes approved before this workflow existed)
+    # or when the caller explicitly requests it by not setting
+    # skip_validation=true.
+    #
+    # Accepted prior statuses that suppress re-validation:
+    #   "validated" — sandbox confirmed the fix improves the codebase.
+    #   "skipped"   — validation was intentionally bypassed at review
+    #                 time (info-only / low-confidence / force-override /
+    #                 no-job-context fix).
     if not request.dry_run and not request.skip_validation:
-        job_id = fix.job_id or ""
-        # Skip validation when the fix was already validated during the review step
-        already_validated = getattr(fix, "validation_status", None) == "validated"
-        if not already_validated:
+        prior_status: Optional[str] = getattr(fix, "validation_status", None)
+        already_handled = prior_status in ("validated", "skipped")
+
+        if not already_handled:
+            # job_id is only needed when we actually run sandbox validation;
+            # computing it here avoids a redundant attribute access in the
+            # already-handled fast path.
+            job_id: str = (fix.job_id or "").strip()
             logger.info(
-                "Running sandbox validation before applying fix %s (job=%s)",
+                "apply_fix: no prior validation recorded for fix %s (job=%s); "
+                "running sandbox validation for backward compatibility",
                 fix_id,
                 job_id,
             )
@@ -539,27 +655,36 @@ async def apply_fix(
             validation_status = validation.get("status")
             if validation_status != "validated":
                 logger.warning(
-                    "Fix %s failed sandbox validation (status=%s); not applying",
+                    "apply_fix: fix %s failed sandbox validation "
+                    "(status=%r); not applying",
                     fix_id,
                     validation_status,
                 )
-                # Encode structured validation failure as a plain-string detail so the
-                # response remains a standard RFC 7807 Problem Detail and is handled
-                # correctly by all FastAPI exception handlers / OpenAPI clients.
+                # Encode as a plain-string detail so the response is a valid
+                # RFC 7807 Problem Detail handled correctly by all FastAPI
+                # exception handlers and OpenAPI clients.
                 _val_detail = (
                     f"Fix {fix_id} did not pass sandbox validation "
                     f"(status: {validation_status!r}). "
-                    "Pass skip_validation=true to bypass (not recommended). "
+                    "Pass skip_validation=true to bypass (not recommended for production). "
                     f"Validation result: {validation.get('result')}"
                 )
                 raise HTTPException(status_code=422, detail=_val_detail)
-            # Persist the validated status so it is not re-validated on retry
+            # Persist so this fix is not re-validated on an idempotent retry.
             fix.validation_status = validation_status
             fix.validation_result = validation.get("result")
+        else:
+            logger.debug(
+                "apply_fix: fix %s validation_status=%r — skipping sandbox "
+                "(already handled at review time)",
+                fix_id,
+                prior_status,
+            )
+
     elif not request.dry_run and request.skip_validation:
         logger.warning(
-            "Sandbox validation SKIPPED for fix %s at explicit user request "
-            "(skip_validation=true). This is not recommended for production.",
+            "apply_fix: sandbox validation explicitly skipped for fix %s "
+            "(skip_validation=true).  This is not recommended for production.",
             fix_id,
         )
 
