@@ -723,11 +723,13 @@ jobs:
             #   subsequent tests to hang on asyncio.Event.wait() indefinitely.
             #   TODO: Fix LLMClient thread lifecycle management and re-enable (see conftest TODO).
             IGNORE_ARGS="--ignore=generator/tests/test_audit_log_proto.py --ignore=generator/tests/test_runner_llm_client.py"
+            WALL_CLOCK_TIMEOUT="75m"  # 75-minute wall-clock limit (job timeout is 80m)
 
             echo "✓ Memory optimizations applied"
             echo "  - Coverage: DISABLED"
             echo "  - Timeout: ${TIMEOUT_VALUE}s"
             echo "  - Parallel workers: 1 (limited to prevent OOM/process exhaustion in CI)"
+            echo "  - Wall-clock timeout: ${WALL_CLOCK_TIMEOUT}"
             echo "  - Ignoring: test_audit_log_proto.py (protobuf resource issues)"
             echo "  - Ignoring: test_runner_llm_client.py (leaked background threads cause hangs)"
           elif [ "${{ matrix.module }}" = "server" ]; then
