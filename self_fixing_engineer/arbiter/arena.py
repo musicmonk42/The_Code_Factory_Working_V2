@@ -1268,12 +1268,19 @@ class ArbiterArena:
     ) -> list:
         """Run the full SFE fix pipeline for a list of defects.
 
+        For each defect this method attempts up to ``SFE_FIX_MAX_ATTEMPTS``
+        fix proposals (default 3).  Each retry passes the previous sandbox
+        validation result as *feedback* to ``propose_fix`` so the fix
+        generator can avoid repeating the same mistake.
+
         For each defect this method:
-        1. Calls ``sfe_service.propose_fix()`` to generate a candidate fix.
+        1. Calls ``sfe_service.propose_fix()`` to generate a candidate fix
+           (passing feedback from the previous attempt on retries).
         2. Calls ``sfe_service.validate_fix_in_sandbox()`` to test it in a
            sandboxed copy of the codebase before touching any real files.
         3. Only calls ``sfe_service.apply_fix()`` when sandbox validation
            confirms the fix improves test outcomes.
+        4. Retries up to ``SFE_FIX_MAX_ATTEMPTS`` times if validation fails.
 
         Args:
             defects: List of defect/issue dicts from the codebase analyzer.
@@ -1281,18 +1288,27 @@ class ArbiterArena:
                      codebase on disk.
 
         Returns:
-            List of result dicts (one per defect) with keys
-            ``defect``, ``status``, and ``details``.
+            List of result dicts (one per defect).  Each dict contains at
+            minimum the keys ``defect``, ``status``, and ``attempt_history``.
+            Successful results additionally carry ``fix_id`` and ``details``.
+            Possible ``status`` values: ``applied``, ``validation_failed``,
+            ``no_fix_proposed``, ``error``.
         """
         try:
             from server.services.sfe_service import SFEService
-            from server.storage import fixes_db
-            from server.schemas import Fix, FixStatus
         except ImportError as exc:
             logger.warning(
                 f"[Arena] SFE service not available, skipping fix pipeline: {exc}"
             )
             return []
+
+        try:
+            max_attempts = max(1, int(os.environ.get("SFE_FIX_MAX_ATTEMPTS", "3")))
+        except (TypeError, ValueError):
+            logger.warning(
+                "[Arena] Invalid SFE_FIX_MAX_ATTEMPTS value; defaulting to 3"
+            )
+            max_attempts = 3
 
         results = []
         for defect in defects:
@@ -1315,47 +1331,83 @@ class ArbiterArena:
                 # so without this step propose_fix would always raise 404.
                 sfe.register_defect(error_id, defect, job_id)
 
-                # 1. Propose fix
-                proposal = await sfe.propose_fix(error_id)
-                fix_id = proposal.get("fix_id")
-                if not fix_id:
-                    results.append({
-                        "defect": defect_type,
-                        "status": "no_fix_proposed",
-                        "details": proposal,
+                last_validation = None
+                attempt_history = []
+
+                for attempt in range(max_attempts):
+                    logger.info(
+                        f"[Arena] Attempt {attempt + 1}/{max_attempts} for defect '{defect_type}'"
+                    )
+
+                    # 1. Propose fix (pass feedback from previous failed attempt)
+                    proposal = await sfe.propose_fix(error_id, feedback=last_validation)
+                    fix_id = proposal.get("fix_id")
+                    if not fix_id:
+                        logger.warning(
+                            f"[Arena] No fix proposed for defect '{defect_type}' "
+                            f"on attempt {attempt + 1}; stopping retries"
+                        )
+                        results.append({
+                            "defect": defect_type,
+                            "status": "no_fix_proposed",
+                            "details": proposal,
+                            "attempt_history": attempt_history,
+                        })
+                        break
+
+                    logger.info(
+                        f"[Arena] Proposed fix {fix_id} for defect '{defect_type}' "
+                        f"(attempt {attempt + 1})"
+                    )
+
+                    # 2. Validate in sandbox before touching real files
+                    validation = await sfe.validate_fix_in_sandbox(fix_id, job_id)
+                    attempt_history.append({
+                        "attempt": attempt + 1,
+                        "fix_id": fix_id,
+                        "validation": validation,
                     })
-                    continue
 
-                logger.info(
-                    f"[Arena] Proposed fix {fix_id} for defect '{defect_type}'"
-                )
+                    if validation.get("status") == "validated":
+                        # 3. Apply only after successful sandbox validation
+                        apply_result = await sfe.apply_fix(fix_id, dry_run=False)
+                        logger.info(
+                            f"[Arena] Applied fix {fix_id} for defect '{defect_type}' "
+                            f"after {attempt + 1} attempt(s)"
+                        )
+                        results.append({
+                            "defect": defect_type,
+                            "fix_id": fix_id,
+                            "status": "applied",
+                            "details": apply_result,
+                            "attempt_history": attempt_history,
+                        })
+                        break
 
-                # 2. Validate in sandbox before touching real files
-                validation = await sfe.validate_fix_in_sandbox(fix_id, job_id)
-                if validation.get("status") != "validated":
                     logger.warning(
                         f"[Arena] Fix {fix_id} failed sandbox validation "
-                        f"({validation.get('reason', 'no improvement')}); skipping apply"
+                        f"({validation.get('reason', 'no improvement')}) "
+                        f"on attempt {attempt + 1}/{max_attempts}"
                     )
+                    last_validation = validation
+                else:
+                    # Exhausted all attempts without a validated fix
+                    logger.warning(
+                        f"[Arena] Exhausted {max_attempts} attempt(s) for defect "
+                        f"'{defect_type}'; giving up"
+                    )
+                    # attempt_history is guaranteed non-empty here: the for-else
+                    # clause only executes when range(max_attempts) runs to
+                    # completion, and max_attempts >= 1 is enforced above.
+                    # Every iteration that reaches this point has already
+                    # appended a record (fix_id without one causes a break).
                     results.append({
                         "defect": defect_type,
-                        "fix_id": fix_id,
+                        "fix_id": attempt_history[-1]["fix_id"],
                         "status": "validation_failed",
-                        "details": validation,
+                        "details": last_validation,
+                        "attempt_history": attempt_history,
                     })
-                    continue
-
-                # 3. Apply only after successful sandbox validation
-                apply_result = await sfe.apply_fix(fix_id, dry_run=False)
-                logger.info(
-                    f"[Arena] Applied fix {fix_id} for defect '{defect_type}'"
-                )
-                results.append({
-                    "defect": defect_type,
-                    "fix_id": fix_id,
-                    "status": "applied",
-                    "details": apply_result,
-                })
 
             except Exception as exc:
                 logger.error(
