@@ -192,19 +192,19 @@ def test_display_onboarding_wizard_config_generation(
 
 
 @pytest.mark.asyncio
-async def test_run_health_checks_gui_success(mock_onboarding_backends):
+async def test_run_health_checks_gui_success(mock_streamlit, mock_onboarding_backends):
     """Test that health checks pass successfully."""
     mock_config = {
         "notification_backend": {"type": "redis", "url": "redis://localhost:6379/0"},
         "checkpoint_backend": {"type": "fs", "dir": "./checkpoints"},
     }
 
-    # The async function is called via run_async_streamlit
-    with patch("self_fixing_engineer.simulation.dashboard.st_dash") as mock_st_dash:
-        mock_st_dash.session_state.plugin_manager_instance = MagicMock()
-        await _dashboard._run_health_checks_gui(mock_config)
+    # Use the autouse mock_streamlit fixture directly instead of double-patching
+    # st_dash, which can cause the function and assertion to reference different
+    # mock objects when module aliasing is in play.
+    await _dashboard._run_health_checks_gui(mock_config)
 
-        assert mock_st_dash.success.call_count == 2
+    assert mock_streamlit.success.call_count == 2
 
 
 def test_sanitize_plugin_name():
