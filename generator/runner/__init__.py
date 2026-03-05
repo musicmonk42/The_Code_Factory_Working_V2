@@ -259,24 +259,43 @@ __all__ = [
     "DECRYPTORS",
     "register_decryptor",
     "SUMMARIZERS",
-    "register_summarizer",  # Added summarizer registration function
-    "run_tests_in_sandbox",  # NEW: Export for testgen_validator
-    "run_stress_tests",  # NEW: Export for testgen_validator
-    "run_tests",  # NEW: Export for critique_agent
-    "mutation_test",  # NEW: Export for mutation testing
-    "property_based_test",  # NEW: Export for property-based testing
-    "runner_metrics",  # NEW: Export for metrics module access
-    "call_llm_api",  # Re-export for backward-compatible `from generator.runner import call_llm_api`
+    "register_summarizer",
+    "run_tests_in_sandbox",    # Export for testgen_validator
+    "run_stress_tests",        # Export for testgen_validator
+    "run_tests",               # Export for critique_agent
+    "mutation_test",           # Export for mutation testing
+    "property_based_test",     # Export for property-based testing
+    "runner_metrics",          # Export for metrics module access
+    "call_llm_api",            # Re-export: backward compat for `from generator.runner import call_llm_api`
 ]
 
-# Re-export call_llm_api from llm_client so that legacy callers using
-# `from generator.runner import call_llm_api` continue to work.
+# ---------------------------------------------------------------------------
+# Re-export call_llm_api for backward compatibility
+# ---------------------------------------------------------------------------
+# The canonical location of call_llm_api is generator.runner.llm_client.
+# This re-export ensures that legacy call-sites using the shorter path
+#
+#     from generator.runner import call_llm_api
+#
+# continue to work without modification.  New code should prefer the
+# canonical import:
+#
+#     from generator.runner.llm_client import call_llm_api
+#
+# When llm_client cannot be imported (missing optional dependencies such as
+# ``redis`` or ``opentelemetry``), we log a warning at WARNING level so that
+# operators are informed, but we do NOT raise — the package must still be
+# importable in environments that do not use the LLM client (e.g. lightweight
+# CI, unit-test runners, or read-only analysis tools).
 try:
-    from .llm_client import call_llm_api  # noqa: F401
+    from .llm_client import call_llm_api  # noqa: F401 — re-export
+    _logger.debug("runner/__init__: call_llm_api re-exported from llm_client")
 except ImportError as _llm_import_err:
     _logger.warning(
-        "runner/__init__: call_llm_api not importable from llm_client (%s); "
-        "LLM-based fix generation will be unavailable.",
+        "runner/__init__: call_llm_api could not be imported from llm_client "
+        "(%s).  LLM-based fix generation will be unavailable until the missing "
+        "dependency is installed.  See requirements.txt for the full dependency "
+        "list.",
         _llm_import_err,
     )
 

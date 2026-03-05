@@ -100,33 +100,65 @@ PRIORITY_LEVEL_MEDIUM_THRESHOLD = 40
 # ---------------------------------------------------------------------------
 # Lint-only error type detection
 # ---------------------------------------------------------------------------
-# Patterns that identify lint/style issues whose fixes should be validated
-# by checking lint improvement rather than pytest improvement.  These tools
-# (pylint, ruff, flake8, pycodestyle) emit codes that match these patterns.
+# These regex patterns identify error/issue *types* that are emitted by lint
+# and static-analysis tools (pylint, ruff, flake8, pycodestyle, pydocstyle).
+# Such issues do not affect runtime behaviour; their fixes must therefore be
+# validated using a **lint non-regression** criterion rather than requiring
+# ``pytest`` improvement — which would produce systematic false rejections for
+# every missing-docstring, import-order, or line-length fix.
 #
-# Configurable: set the environment variable SFE_LINT_ONLY_PATTERNS to a
-# comma-separated list of regex patterns to override the built-in defaults.
-# Example: SFE_LINT_ONLY_PATTERNS="^C\d+,^W\d+,mypy.*"
-_DEFAULT_LINT_ONLY_PATTERNS = [
-    r"^C\d+",           # pylint convention codes: C0116, C0115, C0114, C0301, …
-    r"^W\d+",           # pylint warning codes: W0611 (unused-import), W0401, …
-    r"^R\d+",           # pylint refactoring codes: R0201, R0903, …
-    r"^E\d{3}",         # flake8/pycodestyle style codes: E501, E302, E303, …
-    r"^W\d{3}",         # pycodestyle warning codes: W291, W293, W503, …
-    r"^ANN\d+",         # flake8-annotations codes
-    r"^D\d+",           # pydocstyle codes
-    r"(?i)pylint",      # any type containing the word "pylint"
-    r"(?i)ruff",        # any type containing "ruff"
-    r"(?i)flake8",      # any type containing "flake8"
-    r"(?i)pycodestyle", # any type containing "pycodestyle"
-    r"(?i)missing.docstring",
-    r"(?i)missing.module.docstring",
-    r"(?i)import.order",
-    r"(?i)ungrouped.import",
-    r"(?i)unused.import",
-    r"(?i)line.too.long",
-]
+# Pattern taxonomy:
+#   ^C\d+        — pylint convention codes (any 1+ digits): C0114, C0301 …
+#   ^W\d+        — pylint/pycodestyle W codes (any 1+ digits):
+#                  4-digit pylint W0611, W0401 AND 3-digit pycodestyle W291, W503
+#   ^R\d+        — pylint refactoring (any 1+ digits): R0201, R0903 …
+#   ^E\d{3}(?!\d)— flake8/pycodestyle exactly-3-digit E codes: E501, E302
+#                  (negative-lookahead prevents matching 4-digit codes)
+#   ^ANN\d+      — flake8-annotations: ANN001, ANN201 …
+#   ^D\d+        — pydocstyle: D100, D101 …
+#   (?i)pylint   — substring match covering "pylint:C0116", "pylint_warning", …
+#   (?i)ruff     — substring match covering "ruff:E501", "ruff_lint", …
+#   (?i)flake8   — substring match covering "flake8:E501", "flake8_lint", …
+#   (?i)…        — other tool-name and descriptive-name substrings
+#
+# Typed as Tuple[str, ...] (immutable) since the defaults must never be
+# mutated; env-override extensions are merged into a new tuple at call time.
 
+
+#
+# Configurable at runtime via the SFE_LINT_ONLY_PATTERNS environment variable
+# (comma-separated regex patterns appended to the defaults).  Example:
+#   SFE_LINT_ONLY_PATTERNS="(?i)mypy,(?i)bandit"
+_DEFAULT_LINT_ONLY_PATTERNS: Tuple[str, ...] = (
+    r"^C\d+",               # pylint convention codes (any number of digits): C0114, C0301 …
+    r"^W\d+",               # pylint/pycodestyle W codes (any number of digits):
+                            #   4-digit pylint W0611, W0401 and 3-digit pycodestyle W291, W503
+    r"^R\d+",               # pylint refactoring: R0201, R0903 …
+    r"^E\d{3}(?!\d)",       # flake8/pycodestyle exactly-3-digit E codes: E501, E302, E303
+                            # (negative-lookahead prevents matching hypothetical 4-digit codes)
+    r"^ANN\d+",             # flake8-annotations: ANN001, ANN201 …
+    r"^D\d+",               # pydocstyle: D100, D101, D102 …
+    r"(?i)pylint",          # any type containing "pylint" (e.g. "pylint:C0116", "pylint_warning")
+    r"(?i)ruff",            # any type containing "ruff"   (e.g. "ruff:E501", "ruff_lint")
+    r"(?i)flake8",          # any type containing "flake8" (e.g. "flake8:E501", "flake8_lint")
+    r"(?i)pycodestyle",     # any type containing "pycodestyle"
+    r"(?i)missing[_.-]?docstring",
+    r"(?i)missing[_.-]?module[_.-]?docstring",
+    r"(?i)import[_.-]?order",
+    r"(?i)ungrouped[_.-]?import",
+    r"(?i)unused[_.-]?import",
+    r"(?i)line[_.-]?too[_.-]?long",
+)
+
+# Immutable tuple of lint-tool command candidates for _count_lint_issues,
+# defined at module level to avoid re-allocating the sequence on every call.
+# Preference order: ruff (JSON) → ruff (text) → flake8 (module) → flake8 (executable).
+_LINT_TOOL_CANDIDATES: Tuple[Tuple[str, ...], ...] = (
+    ("python", "-m", "ruff", "check", "--output-format=json", "."),
+    ("ruff", "check", "--output-format=json", "."),
+    ("python", "-m", "flake8", "--format=default", "."),
+    ("flake8", "--format=default", "."),
+)
 
 def _stable_hash(text: str, length: int = 8) -> str:
     """
@@ -895,41 +927,100 @@ class SFEService:
 
     @staticmethod
     def _is_lint_only_error_type(error_type: str) -> bool:
-        """Return True when *error_type* identifies a lint/style issue.
+        """Return ``True`` when *error_type* identifies a lint/style-only issue.
 
-        Lint-only issues (pylint, ruff, flake8, pycodestyle, pydocstyle) do
-        not change runtime behaviour, so their fixes should be validated by
-        checking lint non-regression rather than requiring pytest improvement.
+        Lint-only issues (pylint, ruff, flake8, pycodestyle, pydocstyle, etc.)
+        do not change runtime behaviour.  Their fixes should therefore be
+        validated by checking **lint non-regression** rather than requiring
+        ``pytest`` to improve — otherwise every missing-docstring fix would be
+        falsely rejected because tests are unaffected.
 
+        Pattern matching is case-insensitive for tool-name patterns and uses
+        anchored prefixes for numeric lint codes so that runtime error names
+        such as ``TypeError`` or ``E501InternalError`` are not mis-classified.
+
+        Configuration
+        -------------
         The list of patterns is seeded from the module-level
-        ``_DEFAULT_LINT_ONLY_PATTERNS`` list and can be extended at runtime
-        via the ``SFE_LINT_ONLY_PATTERNS`` environment variable (comma-separated
-        regex patterns).
+        :data:`_DEFAULT_LINT_ONLY_PATTERNS` tuple and can be extended at runtime
+        via the ``SFE_LINT_ONLY_PATTERNS`` environment variable
+        (comma-separated regex patterns).
+
+        Example::
+
+            SFE_LINT_ONLY_PATTERNS="^mypy.*,(?i)bandit"
+
+        Args:
+            error_type: Error / issue type string as produced by the linter
+                        (e.g. ``"C0116"``, ``"pylint:W0611"``, ``"ruff:E501"``).
+                        A non-string or empty value always returns ``False``.
+
+        Returns:
+            ``True`` if *error_type* matches any known lint-only pattern.
         """
-        _patterns = list(_DEFAULT_LINT_ONLY_PATTERNS)
+        # Strict type guard — non-strings (including mock objects) can never
+        # be lint-only codes and must not be passed to re.search.
+        if not isinstance(error_type, str) or not error_type:
+            return False
+
+        # Avoid allocating a new list in the common case (no env override).
+        # When an override exists, extend into a new list to leave the module-
+        # level tuple unmodified.
         env_extra = os.environ.get("SFE_LINT_ONLY_PATTERNS", "").strip()
         if env_extra:
-            _patterns.extend(p.strip() for p in env_extra.split(",") if p.strip())
-        return any(re.search(p, error_type or "") for p in _patterns)
+            _patterns: Tuple[str, ...] = tuple(
+                list(_DEFAULT_LINT_ONLY_PATTERNS)
+                + [p.strip() for p in env_extra.split(",") if p.strip()]
+            )
+        else:
+            _patterns = _DEFAULT_LINT_ONLY_PATTERNS
+
+        return any(re.search(p, error_type) is not None for p in _patterns)
 
     def _is_lint_only_fix(self, fix: Any) -> bool:
-        """Return True when the fix targets a lint/style issue.
+        """Return ``True`` when *fix* targets a lint/style-only issue.
 
-        Detection order:
-        1. Look up the originating error record in ``_errors_cache`` using
-           ``fix.error_id`` and check its ``type`` field.
-        2. Fall back to parsing ``fix.description`` (which is formatted as
-           ``"Fix <error_type> in <file>"`` by ``propose_fix``).
+        Detection is performed in priority order to maximise accuracy:
+
+        1. **Errors-cache lookup** (most reliable): resolve the originating
+           error record via ``fix.error_id`` and check its ``type`` field.
+        2. **Description parsing** (fallback): parse the ``fix.description``
+           field, which ``propose_fix()`` formats as
+           ``"Fix <error_type> in <file_path>"``.
+
+        Both lookups are fully type-safe: non-string or mock attributes are
+        treated as absent and the method falls back gracefully.
+
+        Args:
+            fix: A :class:`~server.schemas.Fix` instance (or duck-type
+                 equivalent) with ``error_id`` and ``description`` attributes.
+
+        Returns:
+            ``True`` if the fix was generated to address a lint/style issue.
         """
-        # Try the errors cache first — the most reliable source.
-        error_data = self._errors_cache.get(getattr(fix, "error_id", None) or "")
-        if error_data:
-            return self._is_lint_only_error_type(error_data.get("type", ""))
+        # ------------------------------------------------------------------
+        # Path 1: errors cache — authoritative type information stored at
+        # detection time.  Use isinstance guards so that mock/None attributes
+        # from test doubles are handled without raising TypeError.
+        # ------------------------------------------------------------------
+        error_id = getattr(fix, "error_id", None)
+        if isinstance(error_id, str) and error_id:
+            error_data = self._errors_cache.get(error_id)
+            if isinstance(error_data, dict):
+                error_type = error_data.get("type", "")
+                # Delegate to the authoritative classifier.
+                return self._is_lint_only_error_type(error_type)
 
-        # Fall back to parsing the fix description.
-        description = getattr(fix, "description", "") or ""
-        # Description format: "Fix <error_type> in <file_path>"
-        m = re.match(r"Fix\s+(\S+)\s+in\s+", description)
+        # ------------------------------------------------------------------
+        # Path 2: parse description — available when the fix was generated by
+        # propose_fix() but the errors cache was not populated (e.g. the fix
+        # was loaded from a serialised snapshot without a live cache).
+        # Format: "Fix <error_type> in <file_path>"
+        # ------------------------------------------------------------------
+        raw_description = getattr(fix, "description", None)
+        if not isinstance(raw_description, str):
+            return False
+        m = re.match(r"Fix\s+(\S+)\s+in\s+", raw_description)
         if m:
             return self._is_lint_only_error_type(m.group(1))
 
@@ -937,22 +1028,39 @@ class SFEService:
 
     @staticmethod
     def _count_lint_issues(directory: "Path") -> int:
-        """Count lint issues in *directory* using ruff (preferred) or flake8.
+        """Count lint violations in *directory* using the best available linter.
 
-        Returns the number of violations reported, or -1 when no lint tool is
-        available.  Used for lint-only fix validation so that we can accept
-        fixes that improve (or at least do not worsen) the lint score even
-        when pytest results are unchanged.
+        Tool preference (fastest-first): ``ruff`` → ``flake8``.  Both are
+        tried as module invocations (``python -m <tool>``) and then as
+        standalone executables in case only the executable is on ``$PATH``.
+
+        Return value semantics
+        ~~~~~~~~~~~~~~~~~~~~~~
+        * **≥ 0** – number of lint violations found.
+        * **-1**  – no supported lint tool is available in this environment;
+          the caller should treat this as "unknown" and not penalise the fix.
+
+        Parsing strategy
+        ~~~~~~~~~~~~~~~~
+        * ``ruff`` with ``--output-format=json`` returns a JSON array of
+          violation objects; we deserialise and count the elements.
+        * ``flake8`` (and ``ruff`` in text mode) emit one violation per line;
+          we count non-empty output lines.
+
+        A :class:`subprocess.TimeoutExpired` causes the current candidate to
+        be skipped (rather than raising), so that a slow environment does not
+        block the validation pipeline indefinitely.
+
+        Args:
+            directory: Root directory to lint (passed as ``cwd``).
+
+        Returns:
+            Number of lint violations, or ``-1`` when no linter is available.
         """
+        import json as _json
         import subprocess
 
-        # Try ruff first (faster and more widely available in modern projects).
-        for cmd in (
-            ["python", "-m", "ruff", "check", "--output-format=json", "."],
-            ["ruff", "check", "--output-format=json", "."],
-            ["python", "-m", "flake8", "--format=default", "."],
-            ["flake8", "--format=default", "."],
-        ):
+        for cmd in _LINT_TOOL_CANDIDATES:
             try:
                 proc = subprocess.run(
                     cmd,
@@ -961,43 +1069,99 @@ class SFEService:
                     text=True,
                     timeout=60,
                 )
-                output = proc.stdout + proc.stderr
-                # ruff json output: list of violation objects
+                # ruff JSON mode: stdout is a JSON array of violation objects.
                 if "--output-format=json" in cmd:
-                    import json as _json
                     try:
                         violations = _json.loads(proc.stdout)
-                        return len(violations) if isinstance(violations, list) else -1
-                    except Exception:
+                        if isinstance(violations, list):
+                            return len(violations)
+                        # Malformed JSON — fall through to text counting.
+                    except (_json.JSONDecodeError, ValueError):
                         pass
-                # flake8 / ruff text output: one violation per non-empty line
-                count = sum(1 for ln in output.splitlines() if ln.strip())
-                return count
-            except (FileNotFoundError, subprocess.TimeoutExpired):
+
+                # Text mode (flake8 or ruff default): one violation per line.
+                # Merge stdout + stderr in case the tool writes to stderr.
+                combined = (proc.stdout or "") + (proc.stderr or "")
+                return sum(1 for ln in combined.splitlines() if ln.strip())
+
+            except FileNotFoundError:
+                # Tool not found — try the next candidate.
+                continue
+            except subprocess.TimeoutExpired:
+                logger.warning(
+                    "[SFE] Lint tool timed out while counting issues in %s (%s); "
+                    "skipping this candidate",
+                    directory,
+                    " ".join(cmd),
+                )
+                continue
+            except Exception as exc:  # pragma: no cover
+                logger.debug(
+                    "[SFE] Unexpected error running lint tool %s: %s",
+                    " ".join(cmd),
+                    exc,
+                )
                 continue
 
-        return -1  # No lint tool found
+        return -1  # No supported lint tool found in this environment.
 
     async def validate_fix_in_sandbox(
         self, fix_id: str, job_id: str
     ) -> Dict[str, Any]:
-        """Validate a proposed fix by running tests in a sandbox before approval.
+        """Validate a proposed fix in an isolated sandbox environment.
 
-        Copies the job codebase to a temp directory, runs a baseline collection
-        check (``pytest --collect-only``) to detect pre-existing import/bootability
-        errors, applies the fix, then runs the full test suite.
+        Creates a temporary copy of the job codebase, applies the proposed
+        fix, then evaluates whether the fix is an improvement under the
+        criterion appropriate for the fix type.
 
-        A fix is accepted when any of the following are true after it is applied:
+        Acceptance criteria
+        -------------------
+        A fix is **accepted** (``status == "validated"``) when any of the
+        following is true after applying it:
 
-        * ``pytest`` exits with return-code 0 (all tests pass).
-        * At least one test passes.
-        * The baseline had collection/import errors **and** the post-fix run has
-          fewer such errors — i.e. the fix improved bootability even if some
-          unrelated tests still fail.
-        * The fix targets a **lint-only** issue (pylint, ruff, flake8, etc.) and
-          the lint issue count did not increase after applying the fix (non-
-          regression criterion).  Lint-only fixes do not change runtime behaviour,
-          so requiring pytest improvement would produce false rejections.
+        1. **Tests pass** – ``pytest`` exits with return-code 0, OR at least
+           one test passed.
+        2. **Bootability improved** – the baseline run had collection/import
+           errors and the post-fix run has fewer such errors.  This accepts
+           fixes that restore the ability to *collect* tests even when some
+           unrelated tests still fail.
+        3. **Lint non-regression** *(lint-only fixes only)* – the fix targets a
+           lint/style issue (pylint, ruff, flake8, etc.) and the lint violation
+           count did not increase after applying the fix.  Requiring test
+           improvement for lint-only fixes would produce systematic false
+           rejections because style changes never affect ``pytest`` outcomes.
+
+        Early-exit cases
+        ----------------
+        * When the job directory cannot be resolved (cleaned-up job, first-run
+          without code yet), the fix is **auto-accepted** and the result
+          includes ``{"skipped": True, "reason": "job_path_missing"}``.
+
+        Return value
+        ------------
+        Always returns a dict with at minimum:
+
+        .. code-block:: python
+
+            {
+                "status": "validated" | "rejected" | "error",
+                "reason": "<str>",        # present on rejection / error
+                "result": { ... },        # present on validated / rejected
+            }
+
+        The ``result`` dict includes:
+        ``tests_passed``, ``tests_failed``, ``returncode``, ``stdout``
+        (last 2 000 chars), ``baseline_collection_errors``,
+        ``post_fix_collection_errors``, ``is_lint_only``,
+        ``baseline_lint_count``, ``post_fix_lint_count``.
+
+        Args:
+            fix_id: Identifier of the fix to validate (must be in
+                    ``server.storage.fixes_db``).
+            job_id: Job whose codebase the fix applies to.
+
+        Raises:
+            ValueError: When *fix_id* is not found in ``fixes_db``.
         """
         import shutil
         import subprocess
@@ -2657,17 +2821,22 @@ class SFEService:
             description = f"Fix security vulnerability in {file_path_str}"
 
         elif fix_result is None:
-            # Unknown error type - use LLM to generate a real code fix.
-            # `call_llm_api` is imported here rather than at module level to
-            # avoid a circular import between the server package and the
-            # generator package (which is also imported by other server modules).
+            # Unknown error type — use the LLM to generate a concrete code fix.
+            #
+            # Import strategy
+            # ---------------
+            # call_llm_api lives in generator.runner.llm_client (canonical).
+            # We try that path first, then fall back to the re-export in
+            # generator.runner.__init__ for callers that registered only the
+            # package-level alias.  Both imports are lazy (deferred to this
+            # branch) to avoid a circular import between the server package and
+            # the generator package at module load time.
             description = f"Fix {error_type} in {file_path_str}"
             try:
-                # Import from the canonical module path; fall back to the
-                # re-export in generator.runner.__init__ for backward compat.
                 try:
                     from generator.runner.llm_client import call_llm_api
                 except ImportError:
+                    # Fallback to the re-export registered in __init__.py.
                     from generator.runner import call_llm_api  # type: ignore[no-redef]
 
                 # Guard against sending excessively large files to the LLM.

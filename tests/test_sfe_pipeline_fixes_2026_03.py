@@ -309,28 +309,26 @@ class TestIsLintOnlyErrorType:
     """Unit tests for SFEService._is_lint_only_error_type."""
 
     @pytest.mark.parametrize("error_type,expected", [
-        # pylint convention codes
+        # pylint convention codes (matched by ^C\d+)
         ("C0116", True),
         ("C0115", True),
         ("C0114", True),
         ("C0301", True),
-        # pylint warning codes
+        # pylint warning codes — 4-digit (matched by ^W\d+)
         ("W0611", True),
         ("W0401", True),
-        # pylint refactoring codes
-        ("R0201", True),
-        # flake8 style codes
-        ("E501", True),
-        ("E302", True),
-        # pycodestyle warning codes
+        # pycodestyle 3-digit W codes — also matched by ^W\d+ (not a separate pattern)
         ("W291", True),
         ("W503", True),
-        # string contains "pylint"
+        # pylint refactoring codes (matched by ^R\d+)
+        ("R0201", True),
+        # flake8/pycodestyle 3-digit E codes (matched by ^E\d{3}(?!\d))
+        ("E501", True),
+        ("E302", True),
+        # tool-name substrings
         ("pylint:C0116", True),
         ("pylint_warning", True),
-        # string contains "ruff"
         ("ruff:E501", True),
-        # string contains "flake8"
         ("flake8_lint", True),
         # descriptive names
         ("missing-docstring", True),
@@ -338,13 +336,14 @@ class TestIsLintOnlyErrorType:
         ("unused-import", True),
         ("import-order", True),
         ("line-too-long", True),
-        # NOT lint-only
+        # Non-string / empty — must return False (type safety)
+        ("", False),
+        # NOT lint-only — runtime exception names must not match
         ("ImportError", False),
         ("TypeError", False),
         ("NameError", False),
         ("security", False),
         ("COMPLEXITY", False),
-        ("", False),
     ])
     def test_detection(self, error_type, expected):
         svc = _make_sfe_service()
@@ -353,13 +352,45 @@ class TestIsLintOnlyErrorType:
             f"_is_lint_only_error_type({error_type!r}) returned {result}, expected {expected}"
         )
 
-    def test_env_override_adds_custom_pattern(self, monkeypatch):
-        """SFE_LINT_ONLY_PATTERNS env var adds extra patterns."""
+    def test_3_digit_W_codes_covered_by_W_plus_pattern(self):
+        """W291 / W503 (3-digit pycodestyle) are matched by ^W\\d+, not a separate pattern.
+
+        This test ensures that removing the redundant ``^W\\d{3}(?!\\d)`` pattern
+        did not break detection of 3-digit pycodestyle warning codes.
+        """
         svc = _make_sfe_service()
-        monkeypatch.setenv("SFE_LINT_ONLY_PATTERNS", "mypy.*")
+        for code in ("W291", "W293", "W503", "W191"):
+            assert svc._is_lint_only_error_type(code), (
+                f"{code!r} should be detected as lint-only via ^W\\d+"
+            )
+
+    def test_non_string_input_returns_false(self):
+        """Non-string values (including mocks) must always return False."""
+        svc = _make_sfe_service()
+        for non_string in (None, 42, [], MagicMock()):
+            assert svc._is_lint_only_error_type(non_string) is False, (  # type: ignore[arg-type]
+                f"Non-string input {non_string!r} should return False"
+            )
+
+    def test_env_override_adds_custom_pattern(self, monkeypatch):
+        """SFE_LINT_ONLY_PATTERNS env var appends extra patterns without copying
+        the default list when no override is configured.
+        """
+        svc = _make_sfe_service()
+        monkeypatch.setenv("SFE_LINT_ONLY_PATTERNS", r"(?i)mypy")
         assert svc._is_lint_only_error_type("mypy:error")
-        # Built-in patterns still work
+        assert svc._is_lint_only_error_type("MYPY123")
+        # Built-in patterns still work alongside the override.
         assert svc._is_lint_only_error_type("C0116")
+        # Non-matching custom pattern should not false-positive.
+        assert not svc._is_lint_only_error_type("ImportError")
+
+    def test_env_override_empty_string_uses_defaults_only(self, monkeypatch):
+        """Empty SFE_LINT_ONLY_PATTERNS must not raise or break detection."""
+        svc = _make_sfe_service()
+        monkeypatch.setenv("SFE_LINT_ONLY_PATTERNS", "")
+        assert svc._is_lint_only_error_type("C0116")
+        assert not svc._is_lint_only_error_type("TypeError")
 
 
 class TestIsLintOnlyFix:
