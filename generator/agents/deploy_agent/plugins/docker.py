@@ -759,10 +759,10 @@ yarn-error.log*
 
         1. ``pip install --user`` in a builder stage without any corresponding
            ``COPY --from=<stage> /root/.local`` (or ``/home/.../.local``) in the
-           final stage.  The ``.local`` path match uses a regex so variations in
+           final stage. The ``.local`` path match uses a regex so variations in
            home-dir are captured.
         2. A ``COPY --from=<stage>`` that copies only ``/app`` (or equivalent
-           source-tree root) but omits ``site-packages``.  This is detected via
+           source-tree root) but omits ``site-packages``. This is detected via
            a regex that matches any COPY instruction whose *source* is ``/app``
            (possibly with a trailing slash) regardless of builder stage name or
            surrounding whitespace.

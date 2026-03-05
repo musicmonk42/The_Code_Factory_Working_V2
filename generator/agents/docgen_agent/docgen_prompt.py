@@ -907,7 +907,7 @@ class DocGenPromptAgent:
         If the total collected context exceeds ``DOCGEN_MAX_CONTEXT_CHARS`` (default
         30 000 characters, overridable via the environment variable of the same name),
         each file's content is pre-summarised to its first 100 lines.  This prevents
-        the >150 s prompt latency observed in production when large codebases are
+        the >150s prompt latency observed in production when large codebases are
         included verbatim.
         """
         context: Dict[str, Any] = {"files_content": {}}
