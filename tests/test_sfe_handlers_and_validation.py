@@ -697,7 +697,7 @@ class TestCountPytestCollectionErrors:
 
     def test_error_line_with_no_summary(self):
         output = "ERROR tests/test_baz.py - ImportError: oops\n"
-        assert self._count(output) >= 1
+        assert self._count(output) == 1
 
 
 # ===========================================================================

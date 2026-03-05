@@ -911,7 +911,7 @@ class SFEService:
             # tests still fail.
             # ------------------------------------------------------------------
             baseline_proc = subprocess.run(
-                ["python", "-m", "pytest", "--collect-only", "-q", "--tb=line"],
+                ["python", "-m", "pytest", "--collect-only", "-q"],
                 cwd=str(sandbox_code_dir),
                 capture_output=True,
                 text=True,
