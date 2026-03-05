@@ -22,6 +22,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import yaml
@@ -9014,10 +9016,8 @@ class OmniCoreService:
                 _output_dir_for_cold_start = Path(codegen_result.get("output_path", ""))
                 if _output_dir_for_cold_start.exists():
                     try:
-                        import subprocess as _subprocess
-                        import sys as _sys
-                        _cold_start_proc = _subprocess.run(
-                            [_sys.executable, "-c", "import app.main"],
+                        _cold_start_proc = subprocess.run(
+                            [sys.executable, "-c", "import app.main"],
                             cwd=str(_output_dir_for_cold_start),
                             timeout=30,
                             capture_output=True,

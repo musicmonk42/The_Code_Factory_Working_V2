@@ -47,7 +47,11 @@ from server.schemas import (
     TestgenRequest,
 )
 from server.services import GeneratorService
-from server.services.job_finalization import finalize_job_success, finalize_job_failure
+from server.services.job_finalization import (
+    finalize_job_success,
+    finalize_job_failure,
+    pipeline_result_has_cold_start_failure,
+)
 from server.services.dispatch_service import dispatch_job_completion
 from server.storage import jobs_db, add_job
 from server.persistence import load_job_from_database, save_job_to_database
@@ -759,21 +763,10 @@ async def _trigger_pipeline_background(
                     error = Exception("No output files generated - code generation produced no files")
                     await finalize_job_failure(job_id, error)
                 else:
-                    # Guard: if the pipeline result contains a cold-start failure indicator,
-                    # call finalize_job_failure instead of finalize_job_success so the job
-                    # is not incorrectly recorded as COMPLETED when cold-start import fails.
-                    _cold_start_hard_failed = False
-                    if result:
-                        _vr = result.get("validation_report", {})
-                        if "Cold-start Import Test" in _vr.get("failed_checks", []):
-                            _cold_start_hard_failed = True
-                        if result.get("cold_start_failed") or result.get("import_test_failed"):
-                            _cold_start_hard_failed = True
-                        _sf = result.get("stages_failed", [])
-                        if any("import" in str(s).lower() or "cold" in str(s).lower() for s in _sf):
-                            _cold_start_hard_failed = True
-
-                    if _cold_start_hard_failed:
+                    # Guard: if the pipeline result carries a cold-start failure signal,
+                    # call finalize_job_failure so the job is not recorded as COMPLETED
+                    # when the generated app cannot import at cold-start.
+                    if pipeline_result_has_cold_start_failure(result):
                         logger.error(
                             f"[Pipeline] Job {job_id} cold-start import FAILED — "
                             "calling finalize_job_failure instead of finalize_job_success"
@@ -969,20 +962,9 @@ async def _resume_pipeline_after_clarification(
                 )
 
             logger.info(f"[Pipeline] Finalizing successful job {job_id} after clarification")
-            # Guard: if the pipeline result contains a cold-start failure indicator,
+            # Guard: if the pipeline result carries a cold-start failure signal,
             # call finalize_job_failure instead of finalize_job_success.
-            _cold_start_hard_failed = False
-            if result:
-                _vr = result.get("validation_report", {})
-                if "Cold-start Import Test" in _vr.get("failed_checks", []):
-                    _cold_start_hard_failed = True
-                if result.get("cold_start_failed") or result.get("import_test_failed"):
-                    _cold_start_hard_failed = True
-                _sf = result.get("stages_failed", [])
-                if any("import" in str(s).lower() or "cold" in str(s).lower() for s in _sf):
-                    _cold_start_hard_failed = True
-
-            if _cold_start_hard_failed:
+            if pipeline_result_has_cold_start_failure(result):
                 logger.error(
                     f"[Pipeline] Job {job_id} cold-start import FAILED after clarification — "
                     "calling finalize_job_failure instead of finalize_job_success"

@@ -212,6 +212,13 @@ DOC_TYPE_CANONICAL = {
     "user": "README",
 }
 
+# Pre-summarisation thresholds for docgen context.
+# When total collected context exceeds DOCGEN_MAX_CONTEXT_CHARS each file is
+# truncated to its first DOCGEN_TRUNCATION_LINES lines.  Both values can be
+# overridden via environment variables of the same name.
+DOCGEN_MAX_CONTEXT_CHARS: int = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", "30000"))
+DOCGEN_TRUNCATION_LINES: int = int(os.environ.get("DOCGEN_TRUNCATION_LINES", "100"))
+
 
 def scrub_text(text: str) -> str:
     """
@@ -922,15 +929,18 @@ class DocGenPromptAgent:
                 context["files_content"][file_name] = content
 
         # Pre-summarise oversized contexts to reduce prompt latency.
-        _max_chars = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", "30000"))
+        # Re-read constants at call time so tests / env overrides applied after module
+        # load are respected (the module-level defaults are used when unset).
+        _max_chars = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", str(DOCGEN_MAX_CONTEXT_CHARS)))
+        _truncation_lines = int(os.environ.get("DOCGEN_TRUNCATION_LINES", str(DOCGEN_TRUNCATION_LINES)))
         _total_chars = sum(len(v) for v in context["files_content"].values())
         if _total_chars > _max_chars:
             logger.info(
                 f"[DOCGEN] Context size {_total_chars} chars exceeds threshold "
-                f"{_max_chars} — truncating each file to first 100 lines"
+                f"{_max_chars} — truncating each file to first {_truncation_lines} lines"
             )
             context["files_content"] = {
-                fname: "\n".join(fcontent.splitlines()[:100])
+                fname: "\n".join(fcontent.splitlines()[:_truncation_lines])
                 for fname, fcontent in context["files_content"].items()
             }
             context["context_truncated"] = True

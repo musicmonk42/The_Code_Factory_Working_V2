@@ -752,52 +752,89 @@ yarn-error.log*
         return errors, warnings
 
     @staticmethod
-    def _validate_dockerfile_deps_copy(dockerfile_content: str) -> Tuple[List[str], List[str]]:
+    def _validate_dockerfile_deps_copy(dockerfile_content: str) -> Tuple[str, List[str]]:
         """Ensure multi-stage Dockerfiles correctly copy Python dependencies.
 
         Detects two common patterns that lead to missing dependencies at runtime:
-        1. ``--user`` install into builder stage without copying ``/root/.local``
-           (or the appropriate home dir) into the final stage.
-        2. ``COPY --from=builder /app /app`` that copies application code but
-           omits the system site-packages installed by ``pip install`` (not
-           ``--user``).
+
+        1. ``pip install --user`` in a builder stage without any corresponding
+           ``COPY --from=<stage> /root/.local`` (or ``/home/.../.local``) in the
+           final stage.  The ``.local`` path match uses a regex so variations in
+           home-dir are captured.
+        2. A ``COPY --from=<stage>`` that copies only ``/app`` (or equivalent
+           source-tree root) but omits ``site-packages``.  This is detected via
+           a regex that matches any COPY instruction whose *source* is ``/app``
+           (possibly with a trailing slash) regardless of builder stage name or
+           surrounding whitespace.
+
+        Args:
+            dockerfile_content: Raw Dockerfile text.
 
         Returns:
-            Tuple of (fixed_content, warnings) where fixed_content has the
-            corrections applied and warnings lists what was changed.
+            Tuple of ``(dockerfile_content, warnings)`` where *warnings* is a
+            list of human-readable diagnostic strings (empty when no issues are
+            found).  The content is returned unchanged; callers should act on
+            the warnings rather than modify the Dockerfile automatically (to
+            avoid corrupting generated output).
         """
-        errors: List[str] = []
         warnings: List[str] = []
 
         if not isinstance(dockerfile_content, str):
             return dockerfile_content, warnings
 
-        from_count = len(re.findall(r'^\s*FROM\s+', dockerfile_content, re.MULTILINE | re.IGNORECASE))
+        from_count = len(
+            re.findall(r'^\s*FROM\s+', dockerfile_content, re.MULTILINE | re.IGNORECASE)
+        )
         if from_count < 2:
-            # Single-stage build — nothing to check here
+            # Single-stage build — nothing to check here.
             return dockerfile_content, warnings
 
-        if "pip install" in dockerfile_content:
-            if "--user" in dockerfile_content:
-                # Using --user install — verify .local is copied to final stage
-                if "/root/.local" not in dockerfile_content and ".local" not in dockerfile_content:
-                    logger.warning(
-                        "[DOCKER] Multi-stage build with pip install --user is missing "
-                        ".local copy in final stage"
-                    )
-                    warnings.append(
-                        "Multi-stage Dockerfile uses 'pip install --user' but does not copy "
-                        ".local to the final stage — runtime dependencies will be missing"
-                    )
-            elif "COPY --from=builder /app /app" in dockerfile_content:
-                # Copying /app but pip installs go into site-packages, not /app
+        if "pip install" not in dockerfile_content:
+            return dockerfile_content, warnings
+
+        # ------------------------------------------------------------------ #
+        # Pattern 1: --user install without .local copy                       #
+        # ------------------------------------------------------------------ #
+        if "--user" in dockerfile_content:
+            # Check whether any COPY --from=... instruction copies a .local dir.
+            _has_local_copy = bool(
+                re.search(r'COPY\s+--from=\S+\s+\S*\.local\b', dockerfile_content, re.IGNORECASE)
+            )
+            if not _has_local_copy:
                 logger.warning(
-                    "[DOCKER] Multi-stage build copies /app but may miss pip site-packages"
+                    "[DOCKER] Multi-stage build with pip install --user is missing "
+                    ".local copy in final stage"
                 )
                 warnings.append(
-                    "Multi-stage Dockerfile copies /app from builder but pip packages are in "
-                    "site-packages — consider copying site-packages or using --user install"
+                    "Multi-stage Dockerfile uses 'pip install --user' but does not copy "
+                    ".local to the final stage — runtime dependencies will be missing"
                 )
+
+        # ------------------------------------------------------------------ #
+        # Pattern 2: COPY --from=<stage> /app <dest> without site-packages   #
+        # ------------------------------------------------------------------ #
+        else:
+            # Match any COPY --from=... whose source path is /app (with optional
+            # trailing slash).  Using a regex avoids false negatives on stage
+            # names other than "builder" or extra whitespace.
+            _app_copy_re = re.compile(
+                r'^\s*COPY\s+--from=\S+\s+/app/?(\s|$)',
+                re.MULTILINE | re.IGNORECASE,
+            )
+            if _app_copy_re.search(dockerfile_content):
+                # Only warn if there is no explicit site-packages copy alongside it.
+                _has_site_packages_copy = bool(
+                    re.search(r'COPY\s+--from=\S+\s+\S*site-packages', dockerfile_content, re.IGNORECASE)
+                )
+                if not _has_site_packages_copy:
+                    logger.warning(
+                        "[DOCKER] Multi-stage build copies /app but may miss pip site-packages"
+                    )
+                    warnings.append(
+                        "Multi-stage Dockerfile copies /app from a builder stage but pip packages "
+                        "are in site-packages — consider also copying site-packages or using "
+                        "'pip install --user'"
+                    )
 
         return dockerfile_content, warnings
     

@@ -794,7 +794,8 @@ class PostgresClient:
                             try:
                                 # Check if migrations are actually needed before running them.
                                 # `alembic current` returns the current revision; `alembic heads`
-                                # returns the target(s).  If they match we can skip the ~39s upgrade.
+                                # returns the target revision(s).  If they match we can skip the
+                                # ~39s upgrade.
                                 _current_proc = subprocess.run(
                                     ["alembic", "current"],
                                     capture_output=True,
@@ -807,11 +808,20 @@ class PostgresClient:
                                 )
                                 _current_out = _current_proc.stdout.strip()
                                 _heads_out = _heads_proc.stdout.strip()
-                                # If the head revision appears in the current output the DB is
-                                # already at HEAD — skip the upgrade to save ~39s.
-                                _head_rev = _heads_out.split()[0] if _heads_out else None
+
+                                # Extract the head revision from `alembic heads` output.
+                                # The command prints one revision hash per line (possibly with
+                                # trailing annotations such as "(head)").  We parse the first
+                                # whitespace-delimited token of the first non-empty line.
+                                _head_rev: Optional[str] = None
+                                for _line in _heads_out.splitlines():
+                                    _parts = _line.strip().split()
+                                    if _parts:
+                                        _head_rev = _parts[0]
+                                        break
+
                                 _already_at_head = (
-                                    _head_rev
+                                    _head_rev is not None
                                     and _head_rev in _current_out
                                     and "(head)" in _current_out
                                 )
@@ -819,6 +829,21 @@ class PostgresClient:
                                     logger.info(
                                         f"Alembic migrations already at head ({_head_rev}), skipping."
                                     )
+                                elif _head_rev is None:
+                                    # `alembic heads` returned no output — cannot determine state;
+                                    # fall through to run the upgrade unconditionally so we don't
+                                    # silently skip required migrations.
+                                    logger.warning(
+                                        "Could not determine Alembic head revision from 'alembic heads' "
+                                        "output — running 'alembic upgrade head' unconditionally."
+                                    )
+                                    subprocess.run(
+                                        ["alembic", "upgrade", "head"],
+                                        check=True,
+                                        capture_output=True,
+                                        text=True,
+                                    )
+                                    logger.info("Alembic migrations applied successfully.")
                                 else:
                                     logger.info(
                                         f"Running Alembic migrations: current='{_current_out}' → head='{_heads_out}'"

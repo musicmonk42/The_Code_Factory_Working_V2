@@ -1115,14 +1115,20 @@ def _fix_schema_import_mismatches(files: Dict[str, str]) -> Dict[str, str]:
             if not _replacement_map:
                 continue
 
-            # Rewrite the import line
+            # Rewrite the import line atomically.
+            # All replacements are applied in a single re.sub pass using a
+            # dispatch dict so that overlapping symbol names (e.g. "User" and
+            # "UserCreate") cannot corrupt each other.  Sorting by descending
+            # length ensures longer names are tried first in the pattern
+            # alternation, preventing "User" from matching inside "UserCreate".
             _old_line = _m.group(0)
-            _new_imports_raw = _imports_raw
-            for _old_sym, _new_sym in _replacement_map.items():
-                # Replace whole-word occurrences only
-                _new_imports_raw = re.sub(
-                    rf'\b{re.escape(_old_sym)}\b', _new_sym, _new_imports_raw
-                )
+            _sorted_syms = sorted(_replacement_map.keys(), key=len, reverse=True)
+            _pattern = re.compile(
+                r'\b(' + '|'.join(re.escape(s) for s in _sorted_syms) + r')\b'
+            )
+            _new_imports_raw = _pattern.sub(
+                lambda m: _replacement_map[m.group(0)], _imports_raw
+            )
             _new_line = _prefix + _new_imports_raw
             _new_content = _new_content.replace(_old_line, _new_line, 1)
 
