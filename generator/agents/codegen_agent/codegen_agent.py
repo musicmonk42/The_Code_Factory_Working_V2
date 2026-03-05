@@ -1009,6 +1009,129 @@ def _validate_wiring(files: Dict[str, str]) -> Dict[str, Any]:
     }
 
 
+def _fix_schema_import_mismatches(files: Dict[str, str]) -> Dict[str, str]:
+    """Fix cross-agent schema contract mismatches in router files.
+
+    The codegen agent may generate router code importing bare schema names
+    (e.g. ``PrescriptionUpdateStatus``) while the schema generator only
+    produces suffixed variants (``PrescriptionUpdateStatusCreate``,
+    ``PrescriptionUpdateStatusRead``, etc.).  This function:
+
+    1. Parses ``app/schemas.py`` (or all files under ``app/schemas/``) to
+       collect every class name that is actually defined there.
+    2. For each router file, finds every ``from app.schemas import ...``
+       statement.
+    3. For each imported symbol that is *not* defined in the schemas module,
+       attempts a suffix-match fix: if ``Foo`` is missing but ``FooRead``
+       (or ``FooCreate`` / ``FooUpdate``) exists, the import is rewritten to
+       use the suffixed name.
+    4. Logs every fix applied.
+
+    Args:
+        files: Mapping of relative file paths to their string contents.
+
+    Returns:
+        Updated files mapping with fixed router import lines.
+    """
+    # ------------------------------------------------------------------ #
+    # Step 1: Collect all class names defined in the schemas module(s)    #
+    # ------------------------------------------------------------------ #
+    _defined_schema_names: set = set()
+
+    def _collect_names_from_source(src: str) -> None:
+        try:
+            _tree = ast.parse(src)
+            for _node in ast.walk(_tree):
+                if isinstance(_node, ast.ClassDef):
+                    _defined_schema_names.add(_node.name)
+                elif isinstance(_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    _defined_schema_names.add(_node.name)
+                elif isinstance(_node, ast.Assign):
+                    for _t in _node.targets:
+                        if isinstance(_t, ast.Name):
+                            _defined_schema_names.add(_t.id)
+        except SyntaxError:
+            pass
+
+    # Flat schemas.py
+    _schemas_flat = files.get("app/schemas.py", "")
+    if _schemas_flat:
+        _collect_names_from_source(_schemas_flat)
+
+    # Package layout: app/schemas/*.py
+    for _path, _content in files.items():
+        if _path.startswith("app/schemas/") and _path.endswith(".py"):
+            _collect_names_from_source(_content)
+
+    if not _defined_schema_names:
+        # No schemas module found — nothing to validate against
+        return files
+
+    # ------------------------------------------------------------------ #
+    # Step 2: Scan router files for "from app.schemas import ..." lines   #
+    # ------------------------------------------------------------------ #
+    _from_schema_re = re.compile(
+        r'^([ \t]*from\s+app\.schemas\s+import\s+)(\([\s\S]*?\)|[^\n]+)',
+        re.MULTILINE,
+    )
+    _CANDIDATE_SUFFIXES = ("Read", "Create", "Update", "List", "Response", "Base")
+
+    updated = dict(files)
+    for _path, _content in files.items():
+        # Only check router files (or any Python file)
+        if not _path.endswith(".py"):
+            continue
+        if "from app.schemas import" not in _content:
+            continue
+
+        _new_content = _content
+        for _m in _from_schema_re.finditer(_content):
+            _prefix = _m.group(1)
+            _imports_raw = _m.group(2).strip().strip("()")
+            _symbols = [
+                p.split(" as ")[0].strip()
+                for p in _imports_raw.split(",")
+                if p.split(" as ")[0].strip() and p.split(" as ")[0].strip().isidentifier()
+            ]
+            _missing = [s for s in _symbols if s not in _defined_schema_names]
+            if not _missing:
+                continue
+
+            _replacement_map: Dict[str, str] = {}
+            for _sym in _missing:
+                # Try each candidate suffix
+                for _sfx in _CANDIDATE_SUFFIXES:
+                    _candidate = f"{_sym}{_sfx}"
+                    if _candidate in _defined_schema_names:
+                        _replacement_map[_sym] = _candidate
+                        logger.info(
+                            "[CODEGEN] Schema import fix in %s: %s → %s",
+                            _path,
+                            _sym,
+                            _candidate,
+                        )
+                        break
+
+            if not _replacement_map:
+                continue
+
+            # Rewrite the import line
+            _old_line = _m.group(0)
+            _new_imports_raw = _imports_raw
+            for _old_sym, _new_sym in _replacement_map.items():
+                # Replace whole-word occurrences only
+                _new_imports_raw = re.sub(
+                    rf'\b{re.escape(_old_sym)}\b', _new_sym, _new_imports_raw
+                )
+            _new_line = _prefix + _new_imports_raw
+            _new_content = _new_content.replace(_old_line, _new_line, 1)
+
+        if _new_content != _content:
+            updated[_path] = _new_content
+
+    return updated
+
+
 async def _repair_stub_services(
     merged_files: Dict[str, str],
     config: Any,
@@ -4761,6 +4884,18 @@ if PLUGIN_AVAILABLE:
                             except Exception as _recon_err:
                                 logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
                             # ------------------------------------------------------------------
+                            # Schema import contract fix: rewrite mismatched schema imports in
+                            # router files (e.g. PrescriptionUpdateStatus → PrescriptionUpdateStatusRead)
+                            # ------------------------------------------------------------------
+                            try:
+                                _merged_files = _fix_schema_import_mismatches(_merged_files)
+                                response = {"files": _merged_files}
+                            except Exception as _schema_fix_err:
+                                logger.warning(
+                                    "[CODEGEN] Schema import mismatch fix failed (non-fatal): %s",
+                                    _schema_fix_err,
+                                )
+                            # ------------------------------------------------------------------
                             # Stub replacement pass: delegate to _retry_stub_files helper.
                             # Runs up to _STUB_RETRY_MAX_ATTEMPTS targeted LLM calls to
                             # replace any remaining auto-generated stub modules.
@@ -5371,6 +5506,18 @@ else:
                                 logger.info("[CODEGEN] Post-ensemble reconciliation completed")
                             except Exception as _recon_err:
                                 logger.warning(f"[CODEGEN] Post-ensemble reconciliation failed (non-fatal): {_recon_err}")
+                            # ------------------------------------------------------------------
+                            # Schema import contract fix: rewrite mismatched schema imports in
+                            # router files (e.g. PrescriptionUpdateStatus → PrescriptionUpdateStatusRead)
+                            # ------------------------------------------------------------------
+                            try:
+                                _merged_files = _fix_schema_import_mismatches(_merged_files)
+                                response = {"files": _merged_files}
+                            except Exception as _schema_fix_err:
+                                logger.warning(
+                                    "[CODEGEN] Schema import mismatch fix failed (non-fatal): %s",
+                                    _schema_fix_err,
+                                )
                             # ------------------------------------------------------------------
                             # Stub replacement pass: delegate to _retry_stub_files helper.
                             # Runs up to _STUB_RETRY_MAX_ATTEMPTS targeted LLM calls to

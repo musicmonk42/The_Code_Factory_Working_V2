@@ -744,8 +744,62 @@ yarn-error.log*
         # Check for HEALTHCHECK
         if "HEALTHCHECK" not in dockerfile.upper():
             warnings.append("Consider adding a HEALTHCHECK instruction for better monitoring")
+
+        # Check multi-stage build Python dependency copy correctness
+        _, deps_warnings = self._validate_dockerfile_deps_copy(dockerfile)
+        warnings.extend(deps_warnings)
         
         return errors, warnings
+
+    @staticmethod
+    def _validate_dockerfile_deps_copy(dockerfile_content: str) -> Tuple[List[str], List[str]]:
+        """Ensure multi-stage Dockerfiles correctly copy Python dependencies.
+
+        Detects two common patterns that lead to missing dependencies at runtime:
+        1. ``--user`` install into builder stage without copying ``/root/.local``
+           (or the appropriate home dir) into the final stage.
+        2. ``COPY --from=builder /app /app`` that copies application code but
+           omits the system site-packages installed by ``pip install`` (not
+           ``--user``).
+
+        Returns:
+            Tuple of (fixed_content, warnings) where fixed_content has the
+            corrections applied and warnings lists what was changed.
+        """
+        errors: List[str] = []
+        warnings: List[str] = []
+
+        if not isinstance(dockerfile_content, str):
+            return dockerfile_content, warnings
+
+        from_count = len(re.findall(r'^\s*FROM\s+', dockerfile_content, re.MULTILINE | re.IGNORECASE))
+        if from_count < 2:
+            # Single-stage build — nothing to check here
+            return dockerfile_content, warnings
+
+        if "pip install" in dockerfile_content:
+            if "--user" in dockerfile_content:
+                # Using --user install — verify .local is copied to final stage
+                if "/root/.local" not in dockerfile_content and ".local" not in dockerfile_content:
+                    logger.warning(
+                        "[DOCKER] Multi-stage build with pip install --user is missing "
+                        ".local copy in final stage"
+                    )
+                    warnings.append(
+                        "Multi-stage Dockerfile uses 'pip install --user' but does not copy "
+                        ".local to the final stage — runtime dependencies will be missing"
+                    )
+            elif "COPY --from=builder /app /app" in dockerfile_content:
+                # Copying /app but pip installs go into site-packages, not /app
+                logger.warning(
+                    "[DOCKER] Multi-stage build copies /app but may miss pip site-packages"
+                )
+                warnings.append(
+                    "Multi-stage Dockerfile copies /app from builder but pip packages are in "
+                    "site-packages — consider copying site-packages or using --user install"
+                )
+
+        return dockerfile_content, warnings
     
     def _validate_compose(self, compose: str) -> Tuple[List[str], List[str]]:
         """

@@ -1564,6 +1564,25 @@ class CritiqueAgent:
             state_summary=state_summary,
             config=config or self.config,
         )
+
+        # Surface a prominent RAG/vector DB not-configured warning so the pipeline
+        # can surface it to operators.  This information is currently only logged at
+        # DEBUG level inside the RAG subsystem and gets lost in production logs.
+        import os as _os
+        _rag_enabled = _os.environ.get("RAG_ENABLED", "false").lower() in ("true", "1", "yes")
+        _vector_db_url = _os.environ.get("VECTOR_DB_URL", "").strip()
+        _rag_configured = _rag_enabled and bool(_vector_db_url)
+        if not _rag_configured:
+            _rag_warning = (
+                "[CRITIQUE] RAG/vector DB not configured — critique quality will be "
+                "significantly degraded. Set RAG_ENABLED=true and configure "
+                "VECTOR_DB_PROVIDER/VECTOR_DB_URL."
+            )
+            logging.getLogger(__name__).warning(_rag_warning)
+            # Attach to result so callers can surface the warning in reports
+            result.setdefault("warnings", [])
+            if isinstance(result["warnings"], list):
+                result["warnings"].append(_rag_warning)
         
         # [ARBITER] Publish critique results event including security scan results
         if self.arbiter_bridge:

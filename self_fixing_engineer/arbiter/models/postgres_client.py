@@ -777,29 +777,71 @@ class PostgresClient:
                     )
 
                     if os.getenv("AUTO_MIGRATE", "0") == "1":
-                        logger.info(
-                            "AUTO_MIGRATE is enabled. Running Alembic migrations."
+                        # Skip migrations during analysis-only runs to avoid the ~39s overhead.
+                        _skip_for_analysis = (
+                            os.getenv("SFE_SKIP_MIGRATE_ON_ANALYSIS", "false").lower()
+                            in ("true", "1", "yes")
                         )
-                        try:
-                            subprocess.run(
-                                ["alembic", "upgrade", "head"],
-                                check=True,
-                                capture_output=True,
-                                text=True,
+                        if _skip_for_analysis:
+                            logger.info(
+                                "AUTO_MIGRATE enabled but SFE_SKIP_MIGRATE_ON_ANALYSIS=true — "
+                                "skipping Alembic migrations for this analysis-only run."
                             )
-                            logger.info("Alembic migrations applied successfully.")
-                        except FileNotFoundError:
-                            logger.error(
-                                "Alembic command not found. Please ensure it is installed and in your PATH."
+                        else:
+                            logger.info(
+                                "AUTO_MIGRATE is enabled. Checking Alembic migration status."
                             )
-                            raise
-                        except subprocess.CalledProcessError as e:
-                            logger.error(
-                                f"Alembic migration failed: {e.stderr}", exc_info=True
-                            )
-                            raise RuntimeError(
-                                f"Failed to apply migrations: {e.stderr}"
-                            ) from e
+                            try:
+                                # Check if migrations are actually needed before running them.
+                                # `alembic current` returns the current revision; `alembic heads`
+                                # returns the target(s).  If they match we can skip the ~39s upgrade.
+                                _current_proc = subprocess.run(
+                                    ["alembic", "current"],
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                _heads_proc = subprocess.run(
+                                    ["alembic", "heads"],
+                                    capture_output=True,
+                                    text=True,
+                                )
+                                _current_out = _current_proc.stdout.strip()
+                                _heads_out = _heads_proc.stdout.strip()
+                                # If the head revision appears in the current output the DB is
+                                # already at HEAD — skip the upgrade to save ~39s.
+                                _head_rev = _heads_out.split()[0] if _heads_out else None
+                                _already_at_head = (
+                                    _head_rev
+                                    and _head_rev in _current_out
+                                    and "(head)" in _current_out
+                                )
+                                if _already_at_head:
+                                    logger.info(
+                                        f"Alembic migrations already at head ({_head_rev}), skipping."
+                                    )
+                                else:
+                                    logger.info(
+                                        f"Running Alembic migrations: current='{_current_out}' → head='{_heads_out}'"
+                                    )
+                                    subprocess.run(
+                                        ["alembic", "upgrade", "head"],
+                                        check=True,
+                                        capture_output=True,
+                                        text=True,
+                                    )
+                                    logger.info("Alembic migrations applied successfully.")
+                            except FileNotFoundError:
+                                logger.error(
+                                    "Alembic command not found. Please ensure it is installed and in your PATH."
+                                )
+                                raise
+                            except subprocess.CalledProcessError as e:
+                                logger.error(
+                                    f"Alembic migration failed: {e.stderr}", exc_info=True
+                                )
+                                raise RuntimeError(
+                                    f"Failed to apply migrations: {e.stderr}"
+                                ) from e
 
                     # Always ensure SFE tables exist (idempotent CREATE TABLE IF NOT EXISTS).
                     # Alembic migrations don't include these tables, so we create them
@@ -981,6 +1023,16 @@ class PostgresClient:
         if os.getenv("AUTO_MIGRATE", "0") == "1":
             import subprocess
 
+            # Skip migrations during analysis-only runs.
+            _skip_for_analysis = (
+                os.getenv("SFE_SKIP_MIGRATE_ON_ANALYSIS", "false").lower()
+                in ("true", "1", "yes")
+            )
+            if _skip_for_analysis:
+                logger.info(
+                    f"SFE_SKIP_MIGRATE_ON_ANALYSIS=true — skipping Alembic migrations for '{table_name}'."
+                )
+                return
             logger.info(f"Running Alembic migrations for table '{table_name}'.")
             try:
                 subprocess.run(

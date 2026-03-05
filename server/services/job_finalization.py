@@ -233,6 +233,38 @@ async def _finalize_job_success_impl(
         # 2. Update job with final status - ATOMIC operation
         # This is the critical state transition that makes artifacts visible.
         # Honour completed_with_warnings from the pipeline result when present.
+
+        # Check for cold-start import failure — this is a hard failure that should
+        # NOT be overridden to COMPLETED even if the pipeline "completed" its stages.
+        _cold_start_failed = False
+        if result:
+            _validation_report = result.get("validation_report", {})
+            _failed_checks = _validation_report.get("failed_checks", [])
+            if "Cold-start Import Test" in _failed_checks:
+                _cold_start_failed = True
+            # Also check if the job was already marked FAILED by the pipeline
+            if result.get("cold_start_failed") or result.get("import_test_failed"):
+                _cold_start_failed = True
+            # Check stages_failed for import or cold-start markers
+            _stages_failed = result.get("stages_failed", [])
+            if any("import" in str(s).lower() or "cold" in str(s).lower() for s in _stages_failed):
+                _cold_start_failed = True
+
+        if _cold_start_failed:
+            job.status = JobStatus.FAILED
+            job.current_stage = JobStage.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(timezone.utc)
+            job.metadata["failure_reason"] = "cold_start_import_test_failed"
+            logger.error(
+                f"Job {job_id} cold-start import test FAILED — finalizing as FAILED, not COMPLETED",
+                extra={"job_id": job_id, "correlation_id": correlation_id},
+            )
+            _finalized_jobs.add(job_id)
+            if METRICS_AVAILABLE:
+                job_finalization_total.labels(job_id=job_id, result="cold_start_failed").inc()
+            return True
+
         _pipeline_status = result.get("status") if result else None
         if _pipeline_status == "completed_with_warnings":
             job.status = JobStatus.COMPLETED_WITH_WARNINGS

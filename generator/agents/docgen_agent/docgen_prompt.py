@@ -896,6 +896,12 @@ class DocGenPromptAgent:
     ) -> Dict[str, Any]:  # Added repo_path param
         """
         Gathers raw file contents from the repository for use in the prompt context.
+
+        If the total collected context exceeds ``DOCGEN_MAX_CONTEXT_CHARS`` (default
+        30 000 characters, overridable via the environment variable of the same name),
+        each file's content is pre-summarised to its first 100 lines.  This prevents
+        the >150 s prompt latency observed in production when large codebases are
+        included verbatim.
         """
         context: Dict[str, Any] = {"files_content": {}}
         read_tasks = []
@@ -914,6 +920,22 @@ class DocGenPromptAgent:
         for file_name, content in results:
             if content is not None:
                 context["files_content"][file_name] = content
+
+        # Pre-summarise oversized contexts to reduce prompt latency.
+        _max_chars = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", "30000"))
+        _total_chars = sum(len(v) for v in context["files_content"].values())
+        if _total_chars > _max_chars:
+            logger.info(
+                f"[DOCGEN] Context size {_total_chars} chars exceeds threshold "
+                f"{_max_chars} — truncating each file to first 100 lines"
+            )
+            context["files_content"] = {
+                fname: "\n".join(fcontent.splitlines()[:100])
+                for fname, fcontent in context["files_content"].items()
+            }
+            context["context_truncated"] = True
+            context["original_total_chars"] = _total_chars
+
         return context
 
     async def _read_single_file_for_context(

@@ -759,20 +759,42 @@ async def _trigger_pipeline_background(
                     error = Exception("No output files generated - code generation produced no files")
                     await finalize_job_failure(job_id, error)
                 else:
-                    # Call finalization service to persist status and manifest
-                    finalized = await finalize_job_success(job_id, result)
+                    # Guard: if the pipeline result contains a cold-start failure indicator,
+                    # call finalize_job_failure instead of finalize_job_success so the job
+                    # is not incorrectly recorded as COMPLETED when cold-start import fails.
+                    _cold_start_hard_failed = False
+                    if result:
+                        _vr = result.get("validation_report", {})
+                        if "Cold-start Import Test" in _vr.get("failed_checks", []):
+                            _cold_start_hard_failed = True
+                        if result.get("cold_start_failed") or result.get("import_test_failed"):
+                            _cold_start_hard_failed = True
+                        _sf = result.get("stages_failed", [])
+                        if any("import" in str(s).lower() or "cold" in str(s).lower() for s in _sf):
+                            _cold_start_hard_failed = True
 
-                    if finalized:
-                        # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
-                        # Users must explicitly click "Send to SFE" button in UI
-                        # This prevents unwanted automatic processing and gives users control
-                        # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
-                        logger.info(
-                            f"[Pipeline] Job {job_id} finalized successfully. "
-                            f"Ready for manual dispatch to Self-Fixing Engineer."
+                    if _cold_start_hard_failed:
+                        logger.error(
+                            f"[Pipeline] Job {job_id} cold-start import FAILED — "
+                            "calling finalize_job_failure instead of finalize_job_success"
                         )
+                        error = Exception("Cold-start import test failed: app cannot start")
+                        await finalize_job_failure(job_id, error)
                     else:
-                        logger.error(f"[Pipeline] Failed to finalize job {job_id}")
+                        # Call finalization service to persist status and manifest
+                        finalized = await finalize_job_success(job_id, result)
+
+                        if finalized:
+                            # NOTE: Dispatch to Self-Fixing Engineer is now MANUAL ONLY
+                            # Users must explicitly click "Send to SFE" button in UI
+                            # This prevents unwanted automatic processing and gives users control
+                            # See endpoint: POST /generator/{job_id}/dispatch-to-sfe
+                            logger.info(
+                                f"[Pipeline] Job {job_id} finalized successfully. "
+                                f"Ready for manual dispatch to Self-Fixing Engineer."
+                            )
+                        else:
+                            logger.error(f"[Pipeline] Failed to finalize job {job_id}")
 
         elif codegen_succeeded and not all_critical_completed:
             # FAILURE: Codegen succeeded but some CRITICAL stages failed
@@ -947,14 +969,35 @@ async def _resume_pipeline_after_clarification(
                 )
 
             logger.info(f"[Pipeline] Finalizing successful job {job_id} after clarification")
-            finalized = await finalize_job_success(job_id, result)
-            if finalized:
-                logger.info(
-                    f"[Pipeline] Job {job_id} finalized successfully after clarification. "
-                    f"Ready for manual dispatch to Self-Fixing Engineer."
+            # Guard: if the pipeline result contains a cold-start failure indicator,
+            # call finalize_job_failure instead of finalize_job_success.
+            _cold_start_hard_failed = False
+            if result:
+                _vr = result.get("validation_report", {})
+                if "Cold-start Import Test" in _vr.get("failed_checks", []):
+                    _cold_start_hard_failed = True
+                if result.get("cold_start_failed") or result.get("import_test_failed"):
+                    _cold_start_hard_failed = True
+                _sf = result.get("stages_failed", [])
+                if any("import" in str(s).lower() or "cold" in str(s).lower() for s in _sf):
+                    _cold_start_hard_failed = True
+
+            if _cold_start_hard_failed:
+                logger.error(
+                    f"[Pipeline] Job {job_id} cold-start import FAILED after clarification — "
+                    "calling finalize_job_failure instead of finalize_job_success"
                 )
+                error = Exception("Cold-start import test failed: app cannot start")
+                await finalize_job_failure(job_id, error)
             else:
-                logger.error(f"[Pipeline] Failed to finalize job {job_id}")
+                finalized = await finalize_job_success(job_id, result)
+                if finalized:
+                    logger.info(
+                        f"[Pipeline] Job {job_id} finalized successfully after clarification. "
+                        f"Ready for manual dispatch to Self-Fixing Engineer."
+                    )
+                else:
+                    logger.error(f"[Pipeline] Failed to finalize job {job_id}")
         elif codegen_succeeded and not all_critical_completed:
             # FAILURE: Some CRITICAL stages failed
             failed_critical = [stage for stage in critical_stages if not _stage_ran(stage, stages_completed)]

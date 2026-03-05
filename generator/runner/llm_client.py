@@ -417,6 +417,23 @@ class LLMClient:
             [p for p in ["openai", "gemini", "grok", "claude", "local"] if p not in available_providers]
         )
 
+        # Warn when only a single LLM provider is healthy so operators know that
+        # ensemble voting is effectively disabled.
+        if len(available_providers) == 1:
+            logger.warning(
+                "[ENSEMBLE] Only 1 LLM provider healthy (%s). "
+                "Ensemble voting disabled. Configure additional providers for redundancy: "
+                "GROK_API_KEY, ANTHROPIC_API_KEY, GOOGLE_API_KEY",
+                available_providers[0],
+            )
+        elif not available_providers:
+            logger.error(
+                "[ENSEMBLE] No LLM providers are healthy. "
+                "The platform will not be able to generate code. "
+                "Please configure at least one provider: OPENAI_API_KEY, GROK_API_KEY, "
+                "ANTHROPIC_API_KEY, or GOOGLE_API_KEY"
+            )
+
     async def count_tokens(self, text: str, model: str) -> int:
         if not HAS_TIKTOKEN:
             return int(len(text.split()) * 1.3)
