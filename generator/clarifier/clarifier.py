@@ -793,7 +793,8 @@ class SQLiteContextManager(ContextManager):
                     conn.row_factory = sqlite3.Row
                     conn.execute("PRAGMA journal_mode=WAL;")
                     conn.execute("PRAGMA foreign_keys=ON;")
-                    conn.execute("PRAGMA busy_timeout=5000;")
+                    conn.execute("PRAGMA synchronous=NORMAL;")
+                    conn.execute("PRAGMA busy_timeout=30000;")
                     conn.execute(
                         "CREATE TABLE IF NOT EXISTS db_info (key TEXT PRIMARY KEY, value TEXT)"
                     )
@@ -949,31 +950,79 @@ class SQLiteContextManager(ContextManager):
             self.logger.error("SQLiteContextManager not connected.")
             await log_action("context_add", status="fail", reason="not_connected")
             raise RuntimeError("SQLiteContextManager not connected.")
+
         entry_id = str(uuid.uuid4())
-        try:
-            json_data = json.dumps(data, ensure_ascii=False).encode("utf-8")
-            encrypted_data_blob = self.fernet.encrypt(json_data)
-            async with self._write_lock:
-                await asyncio.to_thread(
-                    self.conn.execute,
-                    "INSERT INTO context (entry_id, encrypted_data) VALUES (?, ?)",
-                    (entry_id, encrypted_data_blob),
+        last_exc: Optional[Exception] = None
+        _MAX_RETRIES = 3
+        # Retry schedule: attempt 0 → sleep 0.1 s; attempt 1 → sleep 0.2 s.
+        # Attempt 2 (_MAX_RETRIES − 1) raises immediately without sleeping,
+        # so only _MAX_RETRIES − 1 sleeps ever occur.
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                json_data = json.dumps(data, ensure_ascii=False).encode("utf-8")
+                encrypted_data_blob = self.fernet.encrypt(json_data)
+                async with self._write_lock:
+                    await asyncio.to_thread(
+                        self.conn.execute,
+                        "INSERT INTO context (entry_id, encrypted_data) VALUES (?, ?)",
+                        (entry_id, encrypted_data_blob),
+                    )
+                    await asyncio.to_thread(self.conn.commit)
+                await log_action(
+                    "context_add", entry_id=entry_id, source="sqlite", status="success"
                 )
-                await asyncio.to_thread(self.conn.commit)
-            await log_action(
-                "context_add", entry_id=entry_id, source="sqlite", status="success"
-            )
-        except Exception as e:
-            self.logger.error(f"Context add failed to SQLite: {e}", exc_info=True)
-            CLARIFIER_ERRORS.labels("context_add_failed").inc()
-            await log_action(
-                "context_add",
-                entry_id=entry_id,
-                source="sqlite",
-                status="fail",
-                error=str(e),
-            )
-            raise
+                return  # success — exit retry loop immediately
+
+            except sqlite3.OperationalError as e:
+                if "database is locked" in str(e) and attempt < _MAX_RETRIES - 1:
+                    last_exc = e  # captured for the defensive guard below
+                    delay = 0.1 * (2 ** attempt)
+                    self.logger.warning(
+                        "SQLite write contention (attempt %d/%d), retrying in %.2fs: %s",
+                        attempt + 1,
+                        _MAX_RETRIES,
+                        delay,
+                        e,
+                    )
+                    await asyncio.sleep(delay)
+                    continue
+                # Non-retryable OperationalError, or final attempt exhausted.
+                self.logger.error(
+                    "Context add failed to SQLite: %s", e, exc_info=True
+                )
+                CLARIFIER_ERRORS.labels("context_add_failed").inc()
+                await log_action(
+                    "context_add",
+                    entry_id=entry_id,
+                    source="sqlite",
+                    status="fail",
+                    error=str(e),
+                )
+                raise
+
+            except Exception as e:
+                self.logger.error(
+                    "Context add failed to SQLite: %s", e, exc_info=True
+                )
+                CLARIFIER_ERRORS.labels("context_add_failed").inc()
+                await log_action(
+                    "context_add",
+                    entry_id=entry_id,
+                    source="sqlite",
+                    status="fail",
+                    error=str(e),
+                )
+                raise
+
+        # Defensive guard: this line is unreachable in normal execution because
+        # the loop body always either returns on success or raises on failure.
+        # It exists to satisfy static analysers and make the invariant explicit.
+        raise RuntimeError(  # pragma: no cover
+            f"add_to_context: retry loop exited without returning or raising "
+            f"(entry_id={entry_id!r}, attempts={_MAX_RETRIES}). "
+            f"Last exception: {last_exc!r}"
+        )
 
     # Backward compatibility aliases for tests
     async def store(self, data: Dict[str, Any]):

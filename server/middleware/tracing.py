@@ -29,7 +29,7 @@ try:
     from opentelemetry.sdk.resources import Resource, SERVICE_NAME, SERVICE_VERSION
     from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
     from opentelemetry.instrumentation.logging import LoggingInstrumentor
-    
+
     OTEL_AVAILABLE = True
 except ImportError:
     OTEL_AVAILABLE = False
@@ -39,6 +39,14 @@ except ImportError:
         "opentelemetry-exporter-otlp-proto-grpc "
         "opentelemetry-instrumentation-logging"
     )
+
+# Sampling classes were added in opentelemetry-sdk 1.x; guard separately so
+# that a missing sampling module never prevents basic tracing from working.
+try:
+    from opentelemetry.sdk.trace.sampling import TraceIdRatioBased, ParentBased
+    OTEL_SAMPLING_AVAILABLE = True
+except ImportError:
+    OTEL_SAMPLING_AVAILABLE = False
 
 
 def setup_tracing(
@@ -110,9 +118,55 @@ def setup_tracing(
                     resource_attributes[key.strip()] = value.strip()
         
         resource = Resource(attributes=resource_attributes)
-        
-        # Create tracer provider with resource
-        provider = TracerProvider(resource=resource)
+
+        # Create tracer provider with optional TraceIdRatioBased sampling to
+        # reduce span volume in production.  The rate is read from
+        # OTEL_TRACES_SAMPLE_RATE and clamped to [0.0, 1.0].
+        #   1.0  → all traces sampled (default, no overhead)
+        #   0.5  → 50 % of root spans sampled; child spans follow parent decision
+        #   0.0  → no traces sampled
+        _raw_rate = os.getenv("OTEL_TRACES_SAMPLE_RATE", "1.0")
+        try:
+            sample_rate = float(_raw_rate)
+        except (ValueError, TypeError):
+            logger.warning(
+                "Invalid OTEL_TRACES_SAMPLE_RATE value %r — expected a float in [0.0, 1.0]. "
+                "Defaulting to 1.0 (sample all traces).",
+                _raw_rate,
+            )
+            sample_rate = 1.0
+
+        if not (0.0 <= sample_rate <= 1.0):
+            logger.warning(
+                "OTEL_TRACES_SAMPLE_RATE=%r is outside the valid range [0.0, 1.0]; "
+                "clamping to nearest bound.",
+                sample_rate,
+            )
+            sample_rate = max(0.0, min(1.0, sample_rate))
+
+        if sample_rate < 1.0:
+            # ParentBased wrapper ensures that child spans honour the sampling
+            # decision of their parent rather than being sampled independently,
+            # which prevents broken/partial traces in distributed systems.
+            if OTEL_SAMPLING_AVAILABLE:
+                provider = TracerProvider(
+                    resource=resource,
+                    sampler=ParentBased(root=TraceIdRatioBased(sample_rate)),
+                )
+                logger.info(
+                    "Trace sampling enabled: rate=%.4f (OTEL_TRACES_SAMPLE_RATE)",
+                    sample_rate,
+                )
+            else:
+                logger.warning(
+                    "OTEL_TRACES_SAMPLE_RATE=%.4f requested but "
+                    "opentelemetry.sdk.trace.sampling is unavailable — "
+                    "sampling disabled; all traces will be collected.",
+                    sample_rate,
+                )
+                provider = TracerProvider(resource=resource)
+        else:
+            provider = TracerProvider(resource=resource)
         
         # Configure OTLP exporter if endpoint is provided
         otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -150,16 +204,16 @@ def setup_tracing(
                 
                 # Add batch processor for OTLP export.
                 # Defaults are tuned to stay under Railway's 500 logs/sec limit:
-                #   OTEL_BSP_MAX_EXPORT_BATCH_SIZE  – batch ceiling   (default 100, SDK default 512)
-                #   OTEL_BSP_SCHEDULE_DELAY         – export interval in ms (default 5000)
+                #   OTEL_BSP_MAX_EXPORT_BATCH_SIZE  – batch ceiling   (default 64, SDK default 512)
+                #   OTEL_BSP_SCHEDULE_DELAY         – export interval in ms (default 10000)
                 #   OTEL_BSP_MAX_QUEUE_SIZE         – in-memory span queue (default 2048)
                 # All three respect the corresponding standard OTel env vars so operators
                 # can tune them without rebuilding the image.
                 processor = BatchSpanProcessor(
                     otlp_exporter,
                     max_queue_size=int(os.getenv("OTEL_BSP_MAX_QUEUE_SIZE", "2048")),
-                    max_export_batch_size=int(os.getenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "100")),
-                    schedule_delay_millis=int(os.getenv("OTEL_BSP_SCHEDULE_DELAY", "5000")),
+                    max_export_batch_size=int(os.getenv("OTEL_BSP_MAX_EXPORT_BATCH_SIZE", "64")),
+                    schedule_delay_millis=int(os.getenv("OTEL_BSP_SCHEDULE_DELAY", "10000")),
                 )
                 provider.add_span_processor(processor)
                 

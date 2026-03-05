@@ -217,9 +217,11 @@ services:
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       # OpenTelemetry Batch Span Processor tuning — keeps export bursts well under
       # Railway's 500 logs/sec rate limit.
-      - OTEL_BSP_MAX_EXPORT_BATCH_SIZE=${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-100}
-      - OTEL_BSP_SCHEDULE_DELAY=${OTEL_BSP_SCHEDULE_DELAY:-5000}
+      - OTEL_BSP_MAX_EXPORT_BATCH_SIZE=${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-64}
+      - OTEL_BSP_SCHEDULE_DELAY=${OTEL_BSP_SCHEDULE_DELAY:-10000}
       - OTEL_BSP_MAX_QUEUE_SIZE=${OTEL_BSP_MAX_QUEUE_SIZE:-2048}
+      # Set below 1.0 to sample traces (e.g. 0.5 = 50 %); 1.0 = sample all (default).
+      - OTEL_TRACES_SAMPLE_RATE=${OTEL_TRACES_SAMPLE_RATE:-1.0}
 
       # ============================================
       # Application Paths
@@ -234,6 +236,9 @@ services:
       # SFE Arbiter analysis tuning
       # Wall-clock budget for one full codebase scan (default 300 s = 5 min).
       - SFE_ANALYSIS_TIMEOUT_SECONDS=${SFE_ANALYSIS_TIMEOUT_SECONDS:-300}
+      # Critique pipeline outer budget: security scanning (bandit/semgrep) can take
+      # longer than linting alone.  180 s covers large repos (≥ 46 files).
+      - PIPELINE_CRITIQUE_TIMEOUT_SECONDS=${PIPELINE_CRITIQUE_TIMEOUT_SECONDS:-180}
       # Skip individual linters when running in resource-constrained environments.
       - SFE_SKIP_MYPY=${SFE_SKIP_MYPY:-false}
       - SFE_SKIP_PYLINT=${SFE_SKIP_PYLINT:-false}

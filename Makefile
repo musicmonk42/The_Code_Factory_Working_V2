@@ -806,6 +806,7 @@ codegen-multipass-status: ## Show current multi-pass code-generation thresholds 
 	@echo ""
 	@echo "$(YELLOW)Active timeout budgets:$(NC)"
 	@echo "  PIPELINE_CODEGEN_TIMEOUT_SECONDS     = $${PIPELINE_CODEGEN_TIMEOUT_SECONDS:-900}  (outer per-job budget; 15 min default)"
+	@echo "  PIPELINE_CRITIQUE_TIMEOUT_SECONDS    = $${PIPELINE_CRITIQUE_TIMEOUT_SECONDS:-180}  (critique/security scan budget; 3 min default)"
 	@echo "  ENSEMBLE_PROVIDER_TIMEOUT_SECONDS    = $${ENSEMBLE_PROVIDER_TIMEOUT_SECONDS:-300}  (per-provider LLM call; 5 min default)"
 	@echo ""
 	@echo "$(YELLOW)Behaviour:$(NC)"

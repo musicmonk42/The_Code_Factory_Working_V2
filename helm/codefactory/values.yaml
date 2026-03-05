@@ -295,6 +295,10 @@ env:
   # code-generation job (3 sequential ensemble passes).  900 s = 15 minutes.
   # Override: helm upgrade --set env.PIPELINE_CODEGEN_TIMEOUT_SECONDS=1200 ...
   PIPELINE_CODEGEN_TIMEOUT_SECONDS: "900"
+  # Critique pipeline outer budget: security scanning (bandit/semgrep) takes longer
+  # than linting alone.  180 s covers large repos (≥ 46 files).
+  # Override: helm upgrade --set env.PIPELINE_CRITIQUE_TIMEOUT_SECONDS=240 ...
+  PIPELINE_CRITIQUE_TIMEOUT_SECONDS: "180"
   # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
   # Override: helm upgrade --set env.ENSEMBLE_PROVIDER_TIMEOUT_SECONDS=360 ...
   ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
@@ -502,9 +506,12 @@ env:
   # Railway's 500 logs/sec rate limit.  Defaults are more conservative than the
   # OTel SDK defaults (512 batch / 5 s delay) to avoid log-rate spikes.
   # Override per release: helm upgrade --set env.OTEL_BSP_MAX_EXPORT_BATCH_SIZE=200 ...
-  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "100"
-  OTEL_BSP_SCHEDULE_DELAY: "5000"
+  OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "64"
+  OTEL_BSP_SCHEDULE_DELAY: "10000"
   OTEL_BSP_MAX_QUEUE_SIZE: "2048"
+  # Set below 1.0 to sample traces (e.g. "0.5" = 50 %); "1.0" = sample all (default).
+  # Override: helm upgrade --set env.OTEL_TRACES_SAMPLE_RATE=0.5 ...
+  OTEL_TRACES_SAMPLE_RATE: "1.0"
 
   # Application Paths
   CREW_CONFIG_PATH: "/app/self_fixing_engineer/crew_config.yaml"

@@ -1319,6 +1319,182 @@ def fix_depends_ellipsis(code_files: Dict[str, str]) -> Dict[str, str]:
     return result
 
 
+# ---------------------------------------------------------------------------
+# fix_bare_datetime_module_annotations — module-level compiled constants
+# ---------------------------------------------------------------------------
+# Canonical ordered sub-types of the ``datetime`` module that can appear as
+# bare Pydantic field annotations.  Tuple keeps insertion order for
+# deterministic import-statement generation.
+_DATETIME_BARE_SUBTYPES: Tuple[str, ...] = ("datetime", "date", "time", "timedelta")
+
+# Matches a standalone `import datetime` line — the exact pattern that triggers
+# Pydantic V2's PydanticSchemaGenerationError when the bare name is used as a
+# field type.  A multi-import like `import datetime, os` is intentionally NOT
+# matched because rewriting it would require more invasive surgery.
+_DATETIME_MODULE_IMPORT_RE = re.compile(r'^import datetime[ \t]*$', re.MULTILINE)
+
+# Matches `from datetime import …` — used to detect files that are already
+# using the class-level import and need no change.
+_DATETIME_FROM_IMPORT_RE = re.compile(r'^from datetime import', re.MULTILINE)
+
+# Per-subtype bare-name patterns compiled once at import time.
+# The lookbehind ``(?<![.\w])`` rejects matches immediately preceded by a
+# *dot* (qualified names like ``datetime.datetime``) **or** a word character
+# (identifiers like ``my_datetime``).  The lookahead ``(?![\w.])`` likewise
+# rejects qualified names and longer identifiers.  A plain ``\b`` word boundary
+# would not exclude leading dots, which is why the explicit ``[.\w]`` class is
+# used in both assertions.
+_DATETIME_BARE_NAME_RES: Dict[str, re.Pattern[str]] = {
+    sub: re.compile(r'(?<![.\w])' + re.escape(sub) + r'(?![\w.])')
+    for sub in _DATETIME_BARE_SUBTYPES
+}
+
+# Matches bare `import <name>` lines used to strip import statements from the
+# source before regex-scanning for bare annotation usage in the fallback path.
+_BARE_IMPORT_LINE_RE = re.compile(r'^import[ \t]+[\w, \t]+[ \t]*$', re.MULTILINE)
+
+
+def fix_bare_datetime_module_annotations(files: Dict[str, str]) -> Dict[str, str]:
+    """Fix bare ``datetime`` module used as a Pydantic field type hint.
+
+    When the LLM generates ``import datetime`` (module import) and then uses
+    bare ``datetime`` as a type annotation inside a Pydantic ``BaseModel``
+    subclass, Pydantic V2 raises ``PydanticSchemaGenerationError`` because it
+    interprets the bare name as the *module* object rather than the
+    ``datetime.datetime`` *class*.
+
+    This function detects that pattern and converts::
+
+        import datetime          →   from datetime import datetime[, date, time, timedelta]
+
+    Only the ``datetime`` sub-types that are **actually used as bare
+    annotations** in the file are added to the replacement import, so no
+    spurious names are introduced.  The detection uses the Python AST for
+    precision.  A regex fallback covers files that already contain syntax
+    errors; in that case, import lines are excluded from the scan to prevent
+    the ``import datetime`` statement itself from being counted as a bare usage.
+
+    Args:
+        files: Mapping of relative file path → file content.
+
+    Returns:
+        Updated mapping with the import rewritten only where necessary.
+        Files that do not require a change are returned unchanged.
+    """
+
+    def _collect_used_subtypes_via_ast(source: str) -> Optional[List[str]]:
+        """Return bare datetime sub-types used as annotations, or None on parse error."""
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return None
+
+        # Bail out early when no BaseModel subclass is present — nothing to fix.
+        has_basemodel = any(
+            isinstance(node, ast.ClassDef)
+            and any(
+                (isinstance(b, ast.Name) and b.id == "BaseModel")
+                or (isinstance(b, ast.Attribute) and b.attr == "BaseModel")
+                for b in node.bases
+            )
+            for node in ast.walk(tree)
+        )
+        if not has_basemodel:
+            return []
+
+        # Gather all annotation AST nodes: variable annotations (class fields,
+        # module-level, local) and function parameter / return annotations.
+        annotation_nodes: List[ast.expr] = []
+        for node in ast.walk(tree):
+            if isinstance(node, ast.AnnAssign) and node.annotation is not None:
+                annotation_nodes.append(node.annotation)
+            elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for arg in (
+                    node.args.args
+                    + node.args.posonlyargs
+                    + node.args.kwonlyargs
+                ):
+                    if arg.annotation is not None:
+                        annotation_nodes.append(arg.annotation)
+                if node.args.vararg and node.args.vararg.annotation is not None:
+                    annotation_nodes.append(node.args.vararg.annotation)
+                if node.args.kwarg and node.args.kwarg.annotation is not None:
+                    annotation_nodes.append(node.args.kwarg.annotation)
+                if node.returns is not None:
+                    annotation_nodes.append(node.returns)
+
+        found: List[str] = []
+        for ann_node in annotation_nodes:
+            try:
+                ann_str = ast.unparse(ann_node)
+            except (ValueError, RecursionError):
+                # ast.unparse raises ValueError for unknown/unsupported AST nodes
+                # and may recurse into deeply nested generics (RecursionError).
+                # Either way the node cannot be inspected; skip it.
+                continue
+            for sub in _DATETIME_BARE_SUBTYPES:
+                if sub not in found and _DATETIME_BARE_NAME_RES[sub].search(ann_str):
+                    found.append(sub)
+
+        return found
+
+    def _collect_used_subtypes_via_regex(source: str) -> List[str]:
+        """Regex fallback for files with syntax errors.
+
+        Import lines are stripped before scanning so that the ``import
+        datetime`` statement itself does not falsely register as a bare usage
+        of the ``datetime`` name.
+        """
+        non_import = _BARE_IMPORT_LINE_RE.sub('', source)
+        return [
+            sub for sub in _DATETIME_BARE_SUBTYPES
+            if _DATETIME_BARE_NAME_RES[sub].search(non_import)
+        ]
+
+    result = dict(files)
+    for filename, content in files.items():
+        if not filename.endswith(".py"):
+            continue
+
+        # Fast path: skip files that don't have the problematic module import.
+        if not _DATETIME_MODULE_IMPORT_RE.search(content):
+            continue
+
+        # Skip files that already perform a `from datetime import …` — they
+        # either never had the problem or were already fixed upstream.
+        if _DATETIME_FROM_IMPORT_RE.search(content):
+            continue
+
+        # Determine which sub-types are used as bare annotations.
+        used_types = _collect_used_subtypes_via_ast(content)
+        if used_types is None:
+            # AST parse failed — use the regex fallback.
+            used_types = _collect_used_subtypes_via_regex(content)
+            logger.debug(
+                "fix_bare_datetime_module_annotations: AST parse failed for %s; "
+                "used regex fallback (found: %s)",
+                filename,
+                used_types or "none",
+            )
+
+        if not used_types:
+            continue
+
+        # Rewrite `import datetime` → `from datetime import <used_types>`.
+        # Preserve _DATETIME_BARE_SUBTYPES order for deterministic output.
+        ordered = [s for s in _DATETIME_BARE_SUBTYPES if s in used_types]
+        new_import = "from datetime import " + ", ".join(ordered)
+        new_content = _DATETIME_MODULE_IMPORT_RE.sub(new_import, content)
+        result[filename] = new_content
+        logger.info(
+            "fix_bare_datetime_module_annotations: rewrote 'import datetime' → '%s' in %s",
+            new_import,
+            filename,
+        )
+
+    return result
+
+
 def reconcile_schema_model_fields(files: Dict[str, str]) -> Dict[str, str]:
     """Ensure SQLAlchemy model columns cover every field referenced in Pydantic schemas.
 
@@ -1644,6 +1820,8 @@ def parse_llm_response(response: Union[str, Dict[str, Any]], lang: str = "python
             patched[fname] = content
 
         fixed_files = auto_fix_pydantic_v1_imports(patched)
+        # Fix bare datetime module used as Pydantic type hint
+        fixed_files = fix_bare_datetime_module_annotations(fixed_files)
         fixed_files = auto_fix_settings_instantiation(fixed_files)
         pydantic_errors = validate_pydantic_v2_compatibility(fixed_files)
         if pydantic_errors:
