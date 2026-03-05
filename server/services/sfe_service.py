@@ -785,16 +785,39 @@ class SFEService:
             )
 
     def _invalidate_analysis_cache(self, job_id: str) -> None:
-        """Delete cached SFE analysis report so the next detection re-analyzes."""
+        """Mark the cached SFE analysis report as stale so the next detection re-analyzes.
+
+        Instead of deleting the file (which would cause it to disappear from ZIP exports
+        between fix application and the next detect_errors call), this method adds a
+        ``"stale": true`` marker and updates ``generated_at``.  The report remains on disk
+        so that a subsequent ZIP download still includes it.  The next call to
+        ``detect_errors`` will overwrite the file with fresh analysis results.
+        """
         job_path = self._resolve_job_code_path(job_id, ".")
         report_path = Path(job_path) / "reports" / "sfe_analysis_report.json"
         if report_path.exists():
             try:
-                os.remove(report_path)
-                logger.info(f"[SFE] Invalidated cached analysis report for job {job_id}")
-            except OSError as e:
+                import json as _json
+                existing = _json.loads(report_path.read_text(encoding="utf-8"))
+                existing["stale"] = True
+                existing["generated_at"] = datetime.now(timezone.utc).isoformat()
+                existing["stale_reason"] = "fix_applied"
+                report_path.write_text(
+                    _stable_json_dumps(existing), encoding="utf-8"
+                )
+                logger.info(
+                    "[SFE] Marked analysis report as stale for job %s (file preserved for ZIP export)",
+                    job_id,
+                )
+            except Exception as e:
+                # Last resort: delete the file so stale data is not served
+                try:
+                    os.remove(report_path)
+                except OSError:
+                    pass
                 logger.warning(
-                    f"[SFE] Could not delete cached analysis report for job {job_id}: {e}"
+                    "[SFE] Could not mark analysis report as stale for job %s (deleted instead): %s",
+                    job_id, e,
                 )
 
     def _classify_fix_target(
@@ -1645,11 +1668,11 @@ class SFEService:
         """
         if not source_context.get("success"):
             return {
-                "success": True,
+                "success": False,
                 "content": "# TODO: Consider refactoring to reduce complexity",
-                "action": "insert",
+                "action": "info",
                 "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}",
-                "confidence": 0.60,
+                "confidence": 0.0,
             }
 
         # Extract complexity score from message
@@ -1675,15 +1698,15 @@ class SFEService:
         ]
         guidance_comment = "\n".join(f"# {gl}" for gl in guidance_lines)
         logger.info(
-            "Generating complexity TODO comment for %s:%s",
+            "Complexity guidance (info-only) generated for %s:%s",
             file_path, line_num,
         )
         return {
-            "success": True,
+            "success": False,
             "content": guidance_comment,
-            "action": "insert",
+            "action": "info",
             "reasoning": f"High complexity detected (score: {complexity}) in {function_name}. Refactoring recommended but requires careful analysis.",
-            "confidence": 0.60,
+            "confidence": 0.0,
         }
 
     # Maximum number of rglob candidates to check during prefix-stripped path search
@@ -2031,12 +2054,19 @@ class SFEService:
         has_read = read_variant in existing_names
         has_create = create_variant in existing_names
 
-        # Rule 1: When only a <Name>Read variant exists (no <Name>Create), emit a
-        # type alias — the read schema fully represents the entity and there is no
-        # meaningful base class to synthesise.  This is the safest choice and avoids
-        # duplicating field definitions.
-        if has_read and not has_create:
-            new_class_def = f"\n# Auto-generated alias\n{missing_name} = {read_variant}\n"
+        # Rule 1: When a <Name>Read variant exists, emit a subclass alias — this is
+        # the safest choice because it fully represents the entity without duplicating
+        # field definitions and works for both response_model and ORM usage.  The
+        # "Read" schema is preferred because it typically includes all fields (including
+        # database-generated ones like `id`).  If no Read variant exists but a Create
+        # variant does, fall back to creating a base class with merged fields.
+        if has_read:
+            new_class_def = (
+                f"\n# Auto-generated alias: {missing_name} is an alias for {read_variant}\n"
+                f"class {missing_name}({read_variant}):\n"
+                f'    """Auto-generated alias for {read_variant}."""\n'
+                f"    pass\n"
+            )
             return {
                 "success": True,
                 "action": "insert",
@@ -2044,17 +2074,15 @@ class SFEService:
                 "line": insert_line,
                 "content": new_class_def,
                 "reasoning": (
-                    f"Created type alias '{missing_name} = {read_variant}' "
-                    f"because '{missing_name}' was not defined but '{read_variant}' exists "
-                    f"and no '{create_variant}' sibling was found."
+                    f"Created class alias '{missing_name}({read_variant})' "
+                    f"because '{missing_name}' was not defined but '{read_variant}' exists. "
+                    f"Using class inheritance alias ensures FastAPI response_model compatibility "
+                    f"and is idempotent when applied more than once."
                 ),
-                "confidence": 0.85,
+                "confidence": 0.90,
             }
 
         # Rule 2: If sibling classes have annotated fields, generate a merged class.
-        # This is preferred over a type alias when Create *and* Read variants exist
-        # because a bare alias of FooRead would expose database-only fields (e.g. id)
-        # to code that creates new entities.
         if merged_fields:
             field_lines = "\n".join(
                 f"    {name}: {typ}" for name, typ in merged_fields.items()
@@ -2321,9 +2349,14 @@ class SFEService:
         # Schema-class handler: catches ImportError/NameError for missing schema classes
         _is_schema_error = (
             "schemas" in message.lower()
+            or "schema" in message.lower()
             or (
                 ("import" in error_type.lower() or "nameerror" in error_type.lower())
                 and "cannot import name" in message.lower()
+            )
+            or (
+                "importerror" in error_type.lower()
+                and re.search(r"cannot import name '(\w+)' from", message)
             )
         )
         if _is_schema_error and fix_result is None:
@@ -2737,6 +2770,26 @@ Example response:
                     if file_path.exists():
                         with open(file_path, "r", encoding="utf-8") as fh:
                             file_lines = fh.readlines()
+                        # Idempotency check: skip insert if any non-empty, non-comment
+                        # line from the content block is already present in the file.
+                        # This prevents the same fix being applied multiple times when
+                        # SFE re-analyzes a project that was previously patched.
+                        content_check_lines = [
+                            ln.strip()
+                            for ln in content.splitlines()
+                            if ln.strip() and not ln.strip().startswith("#")
+                        ]
+                        existing_stripped = {ln.strip() for ln in file_lines}
+                        if content_check_lines and all(
+                            cl in existing_stripped for cl in content_check_lines
+                        ):
+                            logger.info(
+                                "SKIPPED (idempotent): content already present in %s — "
+                                "skipping duplicate insert at line %s",
+                                file_path, line,
+                            )
+                            skipped_count += 1
+                            continue
                         insert_pos = max(0, line - 1)
                         file_lines.insert(insert_pos, content + "\n")
                         with open(file_path, "w", encoding="utf-8") as fh:
