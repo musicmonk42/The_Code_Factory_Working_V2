@@ -88,10 +88,17 @@ def render_main_component(main):
 @pytest.fixture
 def mock_onboarding_backends():
     """Mocks backend-related imports for the onboarding wizard."""
+    # Use patch.object targeting the actual _dashboard module reference rather than
+    # a string path.  String-based patching resolves the target via sys.modules at
+    # patch-time; if another test module (e.g. test_simulation_main_sim_runner.py)
+    # has replaced sys.modules["self_fixing_engineer.simulation.dashboard"] with a
+    # MagicMock at collection time, the string patch would target that MagicMock
+    # instead of the real module, leaving _dashboard's MeshPubSub/CheckpointManager
+    # stubs in place and causing _run_health_checks_gui to raise TypeError.
     with (
-        patch("self_fixing_engineer.simulation.dashboard.ONBOARDING_BACKENDS_AVAILABLE", True),
-        patch("self_fixing_engineer.simulation.dashboard.MeshPubSub") as MockMeshPubSub,
-        patch("self_fixing_engineer.simulation.dashboard.CheckpointManager") as MockCheckpointManager,
+        patch.object(_dashboard, "ONBOARDING_BACKENDS_AVAILABLE", True),
+        patch.object(_dashboard, "MeshPubSub") as MockMeshPubSub,
+        patch.object(_dashboard, "CheckpointManager") as MockCheckpointManager,
     ):
 
         MockMeshPubSub.supported_backends.return_value = ["redis", "local"]
