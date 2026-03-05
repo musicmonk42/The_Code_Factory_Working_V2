@@ -39,7 +39,7 @@ def mock_streamlit():
     mock_st.tabs = MagicMock()
     mock_st.rerun = MagicMock()
     mock_st.stop = MagicMock()
-    with patch("self_fixing_engineer.simulation.dashboard.st_dash", new=mock_st):
+    with patch.object(_dashboard, "st_dash", new=mock_st):
         yield mock_st
 
 
