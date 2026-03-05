@@ -19,10 +19,12 @@ import hashlib
 import json
 import logging
 import os
+import re
+import shutil
+import tempfile
+from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
-import re
-import tempfile
 from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
@@ -2588,8 +2590,6 @@ Example response:
               - failed:  list of fix_ids that failed to apply
               - skipped: list of fix_ids that were not in PROPOSED or APPROVED state
         """
-        import shutil
-        from collections import defaultdict
         from server.storage import fixes_db
         from server.schemas import FixStatus
 
@@ -2862,10 +2862,11 @@ Example response:
                 if len(group) == 1:
                     merged.append((all_fix_ids, group[0][1]))
                 else:
-                    # Combine content blocks, preserving each block as its own
-                    # line(s) so imports/statements don't run together.
+                    # Combine content blocks, stripping trailing newlines before
+                    # joining so that blocks don't produce double-blank-lines when
+                    # a block already ends with '\n'.
                     combined_content = "\n".join(
-                        ch.get("content") or "" for _, ch in group
+                        (ch.get("content") or "").rstrip("\n") for _, ch in group
                     )
                     merged_change = dict(group[0][1])
                     merged_change["content"] = combined_content

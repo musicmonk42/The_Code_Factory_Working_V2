@@ -585,10 +585,6 @@ class TestApplyAllPendingFixesBatchRefresh:
         target.parent.mkdir(parents=True)
         target.write_text("# original\n")
 
-        # Track write calls to assert single write
-        original_open = open
-        write_calls = []
-
         # 2 fixes both insert at line 1
         fixes = {
             "fix-A": self._approved_fix(

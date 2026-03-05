@@ -6679,8 +6679,11 @@ class OmniCoreService:
                                 _sfe_svc = SFEService()
                                 # Populate errors cache so propose_fix can look up issues
                                 _sfe_svc._populate_errors_cache(_auto_fixable, job_id)
-                                # Phase 1: propose all fixes (stores them in fixes_db)
+                                # Phase 1: propose all fixes (stores them in fixes_db).
+                                # Track fix_id → (error_id, proposed_files) for
+                                # backward-compatible remediation_results entries.
                                 _proposed_fix_ids: List[str] = []
+                                _fix_meta: Dict[str, Dict] = {}  # fix_id → {error_id, files}
                                 for _issue in _auto_fixable:
                                     _err_id = _issue.get("error_id")
                                     if not _err_id:
@@ -6691,20 +6694,31 @@ class OmniCoreService:
                                             _fix_id = _fix_proposal.get("fix_id")
                                             if _fix_id:
                                                 _proposed_fix_ids.append(_fix_id)
+                                                _fix_meta[_fix_id] = {
+                                                    "error_id": _err_id,
+                                                    "files": [
+                                                        c.get("file", "")
+                                                        for c in _fix_proposal.get("proposed_changes", [])
+                                                        if c.get("file")
+                                                    ],
+                                                }
                                     except Exception as _prop_err:
                                         logger.debug(
                                             f"[SFE_ANALYSIS] Auto-fix proposal skipped for {_err_id}: {_prop_err}"
                                         )
                                 # Phase 2: apply all proposed fixes in a single batch so
-                                # files are written once and the manifest is refreshed once
-                                # (instead of once per fix).
+                                # each file is written once and the manifest is refreshed
+                                # once (instead of once per fix).
                                 if _proposed_fix_ids:
                                     _batch_result = await _sfe_svc.apply_all_pending_fixes(job_id)
                                     issues_fixed = len(_batch_result.get("applied", []))
                                     for _fix_id in _batch_result.get("applied", []):
+                                        _meta = _fix_meta.get(_fix_id, {})
                                         remediation_results.append({
                                             "status": "fixed",
+                                            "error_id": _meta.get("error_id"),
                                             "fix_id": _fix_id,
+                                            "files_modified": _meta.get("files", []),
                                         })
                                 if issues_fixed:
                                     logger.info(
