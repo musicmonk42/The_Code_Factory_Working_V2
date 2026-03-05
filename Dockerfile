@@ -354,6 +354,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ARBITER_ROLE="admin" \
     POLICY_CONFIG_FILE_PATH="/app/data/policies.json" \
     PIPELINE_CODEGEN_TIMEOUT_SECONDS="900" \
+    PIPELINE_CRITIQUE_TIMEOUT_SECONDS="180" \
     ENSEMBLE_PROVIDER_TIMEOUT_SECONDS="300" \
     CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD="10" \
     CODEGEN_MULTIPASS_FILE_THRESHOLD="20" \
@@ -365,7 +366,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     SENTRY_ENVIRONMENT="production" \
     REFACTOR_AGENT_CONFIG="/app/self_fixing_engineer/refactor_agent/refactor_agent.yaml" \
     CONFIGDB_REMOTE_ENDPOINT="" \
-    CONFIGDB_ALLOWED_HOSTS=""
+    CONFIGDB_ALLOWED_HOSTS="" \
+    OTEL_BSP_MAX_EXPORT_BATCH_SIZE="64" \
+    OTEL_BSP_SCHEDULE_DELAY="10000"
     # SENTRY_DSN: Set at deployment time — never bake into the image.
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 

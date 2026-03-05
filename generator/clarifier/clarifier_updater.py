@@ -322,7 +322,7 @@ class HistoryStore:
                 conn.row_factory = sqlite3.Row
                 conn.execute("PRAGMA journal_mode=WAL;")
                 conn.execute("PRAGMA synchronous=NORMAL;")
-                conn.execute("PRAGMA busy_timeout=5000;")
+                conn.execute("PRAGMA busy_timeout=30000;")
                 conn.execute("""
                     CREATE TABLE IF NOT EXISTS history (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
