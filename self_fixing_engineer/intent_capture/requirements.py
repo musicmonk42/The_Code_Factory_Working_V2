@@ -30,6 +30,7 @@ import io
 import json
 import logging
 import os
+import pathlib
 import re  # For input sanitization
 import sys
 import threading
@@ -301,17 +302,17 @@ def validate_uuid(uuid_str: str) -> bool:
 
 async def _load_json_file(file_path: str) -> Dict:
     """Asynchronously loads data from a JSON file."""
-    if not aiofiles:
-        logger.error(
-            "aiofiles is not installed. File operations will fail. Run 'pip install aiofiles'."
-        )
-        return {}
     if not os.path.exists(file_path):
         return {}
     try:
-        async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
-            content = await f.read()
-            return json.loads(content)
+        if aiofiles:
+            async with aiofiles.open(file_path, "r", encoding="utf-8") as f:
+                content = await f.read()
+        else:
+            content = await asyncio.to_thread(
+                lambda: pathlib.Path(file_path).read_text(encoding="utf-8")
+            )
+        return json.loads(content)
     except json.JSONDecodeError as e:
         logger.error(f"Error decoding {file_path}: {e}. Starting fresh.")
     except Exception as e:
@@ -321,14 +322,15 @@ async def _load_json_file(file_path: str) -> Dict:
 
 async def _save_json_file(file_path: str, data: Dict):
     """Asynchronously saves data to a JSON file."""
-    if not aiofiles:
-        logger.error(
-            "aiofiles is not installed. File operations will fail. Run 'pip install aiofiles'."
-        )
-        return
     try:
-        async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
-            await f.write(json.dumps(data, indent=2))
+        serialized = json.dumps(data, indent=2)
+        if aiofiles:
+            async with aiofiles.open(file_path, "w", encoding="utf-8") as f:
+                await f.write(serialized)
+        else:
+            await asyncio.to_thread(
+                lambda: pathlib.Path(file_path).write_text(serialized, encoding="utf-8")
+            )
     except IOError as e:
         logger.error(f"Error saving {file_path}: {e}", exc_info=True)
 
@@ -401,7 +403,7 @@ class RequirementsManager:
                 )
                 sys.exit(1)
 
-            self._db_pool = await asyncpg.create_pool(
+            pool_or_coro = asyncpg.create_pool(
                 database=db_name,
                 user=db_user,
                 password=db_pass,
@@ -411,6 +413,10 @@ class RequirementsManager:
                 max_size=10,
                 timeout=30,  # Connection timeout
             )
+            if inspect.isawaitable(pool_or_coro):
+                self._db_pool = await pool_or_coro
+            else:
+                self._db_pool = pool_or_coro
             logger.info(
                 f"PostgreSQL connection pool created for {db_host}:{db_port}/{db_name}"
             )

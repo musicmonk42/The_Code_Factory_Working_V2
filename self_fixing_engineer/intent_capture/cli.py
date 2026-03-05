@@ -611,6 +611,7 @@ async def main_cli_loop():
         from .autocomplete import (
             add_to_history,
             execute_macro,
+            execute_macro_async,
             handle_command_not_found,
             setup_autocomplete,
         )
@@ -619,9 +620,10 @@ async def main_cli_loop():
         async def get_or_create_agent(*a, **k):
             class Dummy:
                 memory = {}
+                _llm = None
 
                 async def predict(self, x):
-                    return {"response": "mocked"}
+                    return {"response": "mocked", "token_usage": 0}
 
             return Dummy()
 
@@ -631,13 +633,33 @@ async def main_cli_loop():
         def execute_macro(x):
             return x
 
+        async def execute_macro_async(x):
+            return x
+
         def handle_command_not_found(x, y):
             CONSOLE.print(f"Unknown command: {x}")
 
         def setup_autocomplete(llm=None):
             pass
 
-    agent = await get_or_create_agent(session_id="default_cli_session")
+    class _FallbackAgent:
+        memory = {}
+        _llm = None
+
+        async def predict(self, x):
+            return {"response": "Agent unavailable.", "token_usage": 0}
+
+    try:
+        agent = await get_or_create_agent(session_id="default_cli_session")
+    except Exception as e:
+        logger.warning(f"Failed to create agent (session_id kwarg): {e}; retrying with positional arg")
+        try:
+            agent = await get_or_create_agent("default_cli_session")
+        except Exception as e2:
+            logger.warning(f"Failed to create agent: {e2}; using fallback agent")
+            agent = _FallbackAgent()
+
+
     await session_state.set("agent", agent)
     setup_autocomplete(llm=getattr(agent, "_llm", None))
     CONSOLE.print(
@@ -683,7 +705,7 @@ async def main_cli_loop():
             if not sanitized_input:
                 continue
             add_to_history(sanitized_input)
-            processed_input = execute_macro(sanitized_input)
+            processed_input = await execute_macro_async(sanitized_input)
             parts = shlex.split(processed_input)
             # UPGRADE: Pydantic input validation
             try:
