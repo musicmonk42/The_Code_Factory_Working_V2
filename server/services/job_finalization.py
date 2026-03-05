@@ -641,8 +641,8 @@ async def _generate_output_manifest(
         file_count = 0
         max_files = 10000  # Safety limit to prevent memory exhaustion
         
-        # Recursively scan for all files with security validation (sorted for stable ordering)
-        for file_path in sorted(job_dir.rglob('*'), key=lambda p: p.as_posix()):
+        # Recursively scan for all files with security validation
+        for file_path in job_dir.rglob('*'):
             if file_count >= max_files:
                 logger.warning(
                     f"File limit reached for job {job_id}, stopping scan at {max_files} files",
@@ -670,10 +670,10 @@ async def _generate_output_manifest(
                         )
                         continue
                     
-                    # [FIX] Add error handling for path resolution
+                    # [FIX] Use already-resolved job_dir to avoid TypeError with mocks
                     try:
-                        rel_path = str(file_path.resolve().relative_to(job_dir.resolve()))
-                    except ValueError as e:
+                        rel_path = str(resolved_path.relative_to(job_dir))
+                    except (ValueError, TypeError) as e:
                         logger.warning(f"[JOB_FINALIZATION] File {file_path} is outside job_dir {job_dir}, using absolute path. Error: {e}")
                         rel_path = str(file_path)
                     file_stat = file_path.stat()
