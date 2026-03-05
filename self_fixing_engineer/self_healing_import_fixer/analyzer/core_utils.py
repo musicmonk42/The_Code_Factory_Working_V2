@@ -464,7 +464,7 @@ def timing_context(operation: str):
         duration = time.time() - start_time
         operation_histogram.labels(operation=operation).observe(duration)
         active_operations.dec()
-        logger.debug(f"Operation '{operation}' took {duration:.3f}s")
+        logger.debug(f"{operation} took {duration:.3f}s")
 
 
 def retry_with_backoff(
@@ -486,6 +486,35 @@ def retry_with_backoff(
     """
 
     def decorator(func):
+        if asyncio.iscoroutinefunction(func):
+            @functools.wraps(func)
+            async def async_wrapper(*args, **kwargs):
+                backoff = initial_backoff
+                last_exception = None
+
+                for attempt in range(max_retries):
+                    try:
+                        return await func(*args, **kwargs)
+                    except exceptions as e:
+                        last_exception = e
+                        if attempt < max_retries - 1:
+                            logger.warning(
+                                f"Attempt {attempt + 1}/{max_retries} failed for {func.__name__}: {e}. "
+                                f"Retrying in {backoff:.1f}s..."
+                            )
+                            await asyncio.sleep(backoff)
+                            backoff = min(backoff * backoff_multiplier, max_backoff)
+                        else:
+                            logger.error(
+                                f"All {max_retries} attempts failed for {func.__name__}"
+                            )
+
+                raise last_exception or RuntimeError(
+                    f"retry_with_backoff: all {max_retries} attempts exhausted for {func.__name__}"
+                )
+
+            return async_wrapper
+
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             backoff = initial_backoff
@@ -508,7 +537,9 @@ def retry_with_backoff(
                             f"All {max_retries} attempts failed for {func.__name__}"
                         )
 
-            raise last_exception
+            raise last_exception or RuntimeError(
+                f"retry_with_backoff: all {max_retries} attempts exhausted for {func.__name__}"
+            )
 
         return wrapper
 
@@ -966,7 +997,7 @@ def scrub_secrets(data: Any) -> Any:
             # Check if key itself indicates sensitive data
             if any(
                 sensitive in key.lower()
-                for sensitive in ["password", "secret", "token", "key", "auth"]
+                for sensitive in ["password", "secret", "token", "key", "auth", "connection"]
             ):
                 scrubbed[key] = "***REDACTED***"
             else:

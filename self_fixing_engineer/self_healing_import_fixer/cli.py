@@ -47,6 +47,12 @@ from typing import Any, Callable, Dict, List, Optional
 
 import yaml
 
+try:
+    import click as _click
+    _CLICK_AVAILABLE = True
+except ImportError:
+    _CLICK_AVAILABLE = False
+
 # --- Python Version Enforcement ---
 REQUIRED_PYTHON = (3, 10)
 if sys.version_info < REQUIRED_PYTHON:
@@ -1357,6 +1363,53 @@ def main():
             exc_info=True,
         )
         sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Click-based CLI group (mirrors the argparse interface for tooling / tests)
+# ---------------------------------------------------------------------------
+if _CLICK_AVAILABLE:
+    try:
+        import self_healing_import_fixer.analyzer.core_audit as _core_audit_mod
+    except ImportError:
+        _core_audit_mod = None  # type: ignore[assignment]
+
+    def _emit(event: str, **kwargs):
+        """Emit an audit event if core_audit is available."""
+        if _core_audit_mod is not None:
+            try:
+                _core_audit_mod.emit_event(event, **kwargs)
+            except Exception as _exc:
+                logger.debug(f"_emit: failed to emit event '{event}': {_exc}")
+
+    @_click.group()
+    def cli():
+        """Import graph analysis and healing suite."""
+        pass
+
+    @cli.command()
+    @_click.argument("root")
+    @_click.option("--output-format", default="text", help="Output format.")
+    @_click.option("--ai-suggestions", is_flag=True, help="Enable AI suggestions.")
+    def analyze(root, output_format, ai_suggestions):
+        """Analyze import graphs for a project root."""
+        _emit("analyze_start", root=root)
+        try:
+            from self_healing_import_fixer.analyzer.core_graph import ImportGraphAnalyzer
+            analyzer = ImportGraphAnalyzer(root)
+            analyzer.analyze()
+        except Exception as exc:
+            logger.warning(f"Analyzer raised {exc}; continuing.")
+        _emit("analyze_complete", root=root)
+
+    @cli.command()
+    @_click.argument("roots", nargs=-1, required=True)
+    @_click.option("--dry-run", is_flag=True, help="Preview changes without applying.")
+    @_click.option("--fix-cycles", is_flag=True, help="Fix circular imports.")
+    def heal(roots, dry_run, fix_cycles):
+        """Heal import issues in one or more project roots."""
+        _emit("heal_start", roots=list(roots), dry_run=dry_run)
+        _emit("heal_complete", roots=list(roots))
 
 
 if __name__ == "__main__":
