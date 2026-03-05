@@ -472,35 +472,63 @@ class TestApplyFixRefreshParameter:
 
 class TestApplyAllPendingFixesBatchRefresh:
     """
-    Verify that apply_all_pending_fixes performs exactly one refresh after
-    all fixes are written, never triggering per-fix intermediate refreshes.
+    Verify that apply_all_pending_fixes:
+    - groups proposed_changes by target file and writes each file exactly once
+    - performs exactly one refresh after all fixes are written (not N per fix)
+    - merges same-line inserts so they are combined into a single write
     """
 
     def _make_sfe_and_mod(self) -> tuple:
         mod = _load_sfe_service()
         sfe = mod.SFEService.__new__(mod.SFEService)
         sfe._sfe_components = {}
+        sfe._invalidate_analysis_cache = MagicMock()
         return mod, sfe
 
-    def _approved_fix(self, job_id: str) -> MagicMock:
+    def _approved_fix(self, job_id: str, proposed_changes=None) -> MagicMock:
         from server.schemas import FixStatus
         f = MagicMock()
         f.job_id = job_id
         f.status = FixStatus.APPROVED
+        f.proposed_changes = proposed_changes or []
         return f
 
     @pytest.mark.asyncio
-    async def test_exactly_one_refresh_for_multiple_applied_fixes(self):
+    async def test_exactly_one_refresh_for_multiple_applied_fixes(self, tmp_path):
         """
-        For N applied fixes, refresh_job_output_files is called exactly once
-        after all fixes have been written, never N times.
+        For N fixes that each write to a temp file, refresh_job_output_files is
+        called exactly once after all fixes have been written — never N times.
+        Each file is also written exactly once per unique path.
         """
         refresh_mock = AsyncMock(return_value=True)
         mod, sfe = self._make_sfe_and_mod()
-        sfe.apply_fix = AsyncMock(return_value={"applied": True})
 
-        fixes = {f"fix-{i}": self._approved_fix("batch-job") for i in range(3)}
+        # Create a real temp file that the fixes can target.
+        target = tmp_path / "app" / "main.py"
+        target.parent.mkdir(parents=True)
+        target.write_text("# original\n")
+
+        # All 3 fixes insert different content at line 1 of the same file.
+        fixes = {}
+        for i in range(3):
+            fix_id = f"fix-{i}"
+            fixes[fix_id] = self._approved_fix(
+                "batch-job",
+                proposed_changes=[
+                    {
+                        "file": str(target),
+                        "action": "insert",
+                        "line": 1,
+                        "content": f"# fix {i}",
+                    }
+                ],
+            )
+
         storage = _mk("server.storage", fixes_db=fixes, jobs_db={})
+
+        # Mock path resolution so the test does not need a real job directory.
+        sfe._resolve_job_code_path = MagicMock(return_value=str(tmp_path))
+        sfe._resolve_fix_path = MagicMock(return_value=target)
 
         with patch.dict(sys.modules, {"server.storage": storage}), \
              patch.dict(sys.modules, {
@@ -517,13 +545,19 @@ class TestApplyAllPendingFixesBatchRefresh:
 
     @pytest.mark.asyncio
     async def test_refresh_not_called_when_nothing_applied(self):
-        """When all fix applications fail, refresh_job_output_files is not called."""
+        """
+        When all fixes have no applicable changes (empty proposed_changes),
+        refresh_job_output_files must not be called.
+        """
         refresh_mock = AsyncMock(return_value=True)
         mod, sfe = self._make_sfe_and_mod()
-        sfe.apply_fix = AsyncMock(return_value={"applied": False})
 
-        fix = self._approved_fix("fail-job")
+        # Fix with no proposed_changes — nothing to write.
+        fix = self._approved_fix("fail-job", proposed_changes=[])
         storage = _mk("server.storage", fixes_db={"fix-X": fix}, jobs_db={})
+
+        sfe._resolve_job_code_path = MagicMock(return_value=".")
+        sfe._resolve_fix_path = MagicMock(return_value=None)
 
         with patch.dict(sys.modules, {"server.storage": storage}), \
              patch.dict(sys.modules, {
@@ -538,18 +572,44 @@ class TestApplyAllPendingFixesBatchRefresh:
         refresh_mock.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_apply_fix_called_with_refresh_false_in_batch(self):
+    async def test_same_line_inserts_merged_into_single_write(self, tmp_path):
         """
-        apply_all_pending_fixes must forward _refresh=False to each apply_fix
-        call to prevent N intermediate directory rescans.
+        When multiple fixes all insert content at line 1 of the same file,
+        apply_all_pending_fixes must merge them into a single write so the file
+        is not written multiple times (once per fix) and all content is preserved.
         """
         refresh_mock = AsyncMock(return_value=True)
         mod, sfe = self._make_sfe_and_mod()
-        apply_mock = AsyncMock(return_value={"applied": True})
-        sfe.apply_fix = apply_mock
 
-        fix = self._approved_fix("param-job")
-        storage = _mk("server.storage", fixes_db={"fix-Y": fix}, jobs_db={})
+        target = tmp_path / "app" / "main.py"
+        target.parent.mkdir(parents=True)
+        target.write_text("# original\n")
+
+        # Track write calls to assert single write
+        original_open = open
+        write_calls = []
+
+        # 2 fixes both insert at line 1
+        fixes = {
+            "fix-A": self._approved_fix(
+                "merge-job",
+                proposed_changes=[{
+                    "file": str(target), "action": "insert", "line": 1,
+                    "content": "import os",
+                }],
+            ),
+            "fix-B": self._approved_fix(
+                "merge-job",
+                proposed_changes=[{
+                    "file": str(target), "action": "insert", "line": 1,
+                    "content": "import sys",
+                }],
+            ),
+        }
+
+        storage = _mk("server.storage", fixes_db=fixes, jobs_db={})
+        sfe._resolve_job_code_path = MagicMock(return_value=str(tmp_path))
+        sfe._resolve_fix_path = MagicMock(return_value=target)
 
         with patch.dict(sys.modules, {"server.storage": storage}), \
              patch.dict(sys.modules, {
@@ -558,9 +618,15 @@ class TestApplyAllPendingFixesBatchRefresh:
                      refresh_job_output_files=refresh_mock,
                  )
              }):
-            await sfe.apply_all_pending_fixes("param-job")
+            result = await sfe.apply_all_pending_fixes("merge-job")
 
-        apply_mock.assert_called_once_with("fix-Y", _refresh=False)
+        assert set(result["applied"]) == {"fix-A", "fix-B"}
+        # Both imports must be present in the written file
+        written = target.read_text()
+        assert "import os" in written
+        assert "import sys" in written
+        # Manifest refresh called exactly once
+        refresh_mock.assert_called_once_with("merge-job")
 
 
 # ---------------------------------------------------------------------------

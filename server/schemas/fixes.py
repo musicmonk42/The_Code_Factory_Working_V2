@@ -6,7 +6,7 @@ Fix-related schemas for error handling and corrections.
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -51,7 +51,7 @@ class Fix(BaseModel):
     proposed_changes: List[Dict[str, Any]] = Field(
         ..., description="List of proposed changes"
     )
-    applied_changes: Optional[List[Dict[str, Any]]] = Field(
+    applied_changes: Optional[List[Union[str, Dict[str, Any]]]] = Field(
         None, description="Changes that were actually applied"
     )
     confidence: float = Field(

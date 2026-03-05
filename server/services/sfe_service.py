@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import re
 import tempfile
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Union
 from uuid import uuid4
 
 from fastapi import HTTPException
@@ -2569,9 +2569,11 @@ Example response:
         Apply all pending (PROPOSED or APPROVED) fixes for a given job.
 
         Retrieves every fix in fixes_db whose job_id matches and whose status
-        is PROPOSED or APPROVED, applies each one in turn via apply_fix(), and
-        returns a summary of the results. Must be called BEFORE the output ZIP
-        is packaged so that fixed content is included in the archive.
+        is PROPOSED or APPROVED, groups their proposed_changes by target file,
+        and writes each file exactly once.  Multiple inserts targeting the same
+        line are merged into a single block to prevent duplicate/conflicting
+        content.  The manifest is refreshed exactly once after all files have
+        been written.
 
         PROPOSED (unreviewed) fixes are auto-applied with a prominent warning
         log entry so that operators are aware they bypassed the review workflow.
@@ -2586,6 +2588,8 @@ Example response:
               - failed:  list of fix_ids that failed to apply
               - skipped: list of fix_ids that were not in PROPOSED or APPROVED state
         """
+        import shutil
+        from collections import defaultdict
         from server.storage import fixes_db
         from server.schemas import FixStatus
 
@@ -2609,6 +2613,35 @@ Example response:
         failed: List[str] = []
         skipped: List[str] = []
 
+        # ------------------------------------------------------------------ #
+        # Resolve the job output directory once, up front
+        # ------------------------------------------------------------------ #
+        job_output_dir: Optional[Path] = None
+        if job_id:
+            try:
+                resolved_path = self._resolve_job_code_path(job_id, ".")
+                job_output_dir = Path(resolved_path).resolve()
+                logger.info(
+                    "apply_all_pending_fixes: resolved job output directory: %s",
+                    job_output_dir,
+                )
+            except Exception as _dir_err:
+                logger.warning(
+                    "apply_all_pending_fixes: could not resolve job path for %s: %s",
+                    job_id, _dir_err,
+                )
+
+        # ------------------------------------------------------------------ #
+        # Pass 1: validate statuses and group changes by target file
+        # ------------------------------------------------------------------ #
+        # file_changes maps resolved absolute path string → list of
+        # (fix_id, change_dict) tuples in the order they should be applied.
+        file_changes: Dict[str, List] = defaultdict(list)
+        # Track whether each fix_id ended up with at least one change that
+        # could be resolved to a real path.  Fixes with no resolvable changes
+        # are treated as failed immediately in Pass 1.
+        fix_has_change: Dict[str, bool] = {}
+
         for fix_id in pending_fix_ids:
             fix = fixes_db.get(fix_id)
             fix_status = getattr(fix, "status", None)
@@ -2619,37 +2652,149 @@ Example response:
                 logger.warning(
                     f"Auto-applying PROPOSED (unreviewed) fix {fix_id} for job {job_id}"
                 )
-            try:
-                # Pass _refresh=False to suppress the per-fix directory rescan;
-                # apply_all_pending_fixes performs a single authoritative refresh
-                # after all fixes have been written (see below).
-                result = await self.apply_fix(fix_id, _refresh=False)
-                if result.get("applied"):
-                    # Update fix status to APPLIED
-                    fix.status = FixStatus.APPLIED
-                    fix.applied_at = datetime.now(timezone.utc)
-                    fix.updated_at = datetime.now(timezone.utc)
-                    applied.append(fix_id)
-                    logger.info(f"Applied fix {fix_id} for job {job_id}")
-                else:
-                    failed.append(fix_id)
+
+            fix_has_change.setdefault(fix_id, False)
+            for change in (getattr(fix, "proposed_changes", None) or []):
+                action = change.get("action", "insert")
+                if action == "info":
+                    continue
+                resolved = self._resolve_fix_path(change.get("file", ""), job_output_dir)
+                if resolved is None:
                     logger.warning(
-                        f"Fix {fix_id} for job {job_id} did not apply: "
-                        f"{result.get('error', 'unknown error')}"
+                        "apply_all_pending_fixes: could not resolve path for fix %s "
+                        "change file=%s — fix will be marked failed",
+                        fix_id, change.get("file", "?"),
                     )
-            except Exception as exc:
+                else:
+                    file_changes[str(resolved)].append((fix_id, change))
+                    fix_has_change[fix_id] = True
+
+        # Fixes with no resolvable, non-info changes cannot be applied.
+        for fix_id, had_change in fix_has_change.items():
+            if not had_change:
+                # Either all changes were info-only, or all path resolutions failed.
+                # Either way the fix cannot be applied — treat as failed.
                 failed.append(fix_id)
-                logger.error(
-                    f"Exception applying fix {fix_id} for job {job_id}: {exc}",
-                    exc_info=True,
+
+        # ------------------------------------------------------------------ #
+        # Pass 2: for each file, merge same-line inserts, then write once
+        # ------------------------------------------------------------------ #
+        # Track which fix_ids succeed at the file level.  Only include fixes
+        # that actually have at least one change (had_change=True).
+        fix_file_ok: Dict[str, bool] = {
+            fid: True
+            for fid, had_change in fix_has_change.items()
+            if had_change
+        }
+
+        now = datetime.now(timezone.utc)
+
+        for file_path_str, changes in file_changes.items():
+            file_path = Path(file_path_str)
+
+            # Merge consecutive inserts that target the same line so that only
+            # one insert block is written (prevents duplicate imports etc.).
+            merged_changes = self._merge_same_line_inserts(changes)
+
+            # Create ONE backup before any modification.
+            if file_path.exists():
+                backup_path = file_path.with_suffix(file_path.suffix + ".bak")
+                try:
+                    shutil.copy2(file_path, backup_path)
+                    logger.info(
+                        "apply_all_pending_fixes: created backup at %s", backup_path
+                    )
+                except OSError as _bak_err:
+                    logger.warning(
+                        "apply_all_pending_fixes: could not create backup for %s: %s",
+                        file_path, _bak_err,
+                    )
+
+            # Read the file ONCE.
+            if file_path.exists():
+                try:
+                    with open(file_path, "r", encoding="utf-8") as fh:
+                        file_lines = fh.readlines()
+                except OSError as _read_err:
+                    logger.error(
+                        "apply_all_pending_fixes: failed to read %s: %s",
+                        file_path, _read_err,
+                    )
+                    for fix_id, _ in changes:
+                        fix_file_ok[fix_id] = False
+                    continue
+            else:
+                file_lines = []
+
+            # Apply all changes to the in-memory line list.
+            # _merge_same_line_inserts returns (List[fix_ids], change_dict) tuples
+            # so that all contributing fix_ids are marked on failure.
+            for group_fix_ids, change in merged_changes:
+                try:
+                    self._apply_change_to_lines(file_lines, change)
+                    logger.info(
+                        "apply_all_pending_fixes: applied change for fixes %s to %s:%s "
+                        "(action=%s)",
+                        group_fix_ids, file_path, change.get("line", "?"), change.get("action"),
+                    )
+                except Exception as _apply_err:
+                    logger.error(
+                        "apply_all_pending_fixes: failed to apply change for fixes %s "
+                        "to %s: %s",
+                        group_fix_ids, file_path, _apply_err,
+                    )
+                    for fix_id in group_fix_ids:
+                        fix_file_ok[fix_id] = False
+
+            # Write the file ONCE.
+            try:
+                if not file_path.parent.exists():
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+                with open(file_path, "w", encoding="utf-8") as fh:
+                    if file_lines:
+                        fh.writelines(file_lines)
+                logger.info(
+                    "apply_all_pending_fixes: FILE WRITTEN: %s (%d change groups)",
+                    file_path.absolute(), len(merged_changes),
                 )
+            except OSError as _write_err:
+                logger.error(
+                    "apply_all_pending_fixes: failed to write %s: %s",
+                    file_path, _write_err,
+                )
+                # Mark ALL fix_ids that contributed to this file as failed.
+                for fix_id, _ in changes:
+                    fix_file_ok[fix_id] = False
+
+        # ------------------------------------------------------------------ #
+        # Pass 3: update fix statuses based on per-file success/failure
+        # ------------------------------------------------------------------ #
+        for fix_id, ok in fix_file_ok.items():
+            fix = fixes_db.get(fix_id)
+            if fix is None:
+                continue
+            if ok:
+                fix.status = FixStatus.APPLIED
+                fix.applied_at = now
+                fix.updated_at = now
+                applied.append(fix_id)
+                logger.info(f"Applied fix {fix_id} for job {job_id}")
+            else:
+                failed.append(fix_id)
+                logger.warning(
+                    f"Fix {fix_id} for job {job_id} did not apply fully"
+                )
+
+        # Invalidate analysis cache so next detect_errors reflects updated files.
+        if applied:
+            self._invalidate_analysis_cache(job_id)
 
         logger.info(
             f"apply_all_pending_fixes for job {job_id}: "
             f"applied={len(applied)}, failed={len(failed)}, skipped={len(skipped)}"
         )
 
-        # Refresh job output_files once after all fixes are applied.
+        # Refresh job output_files ONCE after all fixes are applied.
         # Deferred import: see the comment in apply_fix() for the rationale.
         if applied:
             try:
@@ -2668,6 +2813,150 @@ Example response:
                 )
 
         return {"applied": applied, "failed": failed, "skipped": skipped}
+
+    # ---------------------------------------------------------------------- #
+    # Batching helpers
+    # ---------------------------------------------------------------------- #
+
+    def _merge_same_line_inserts(
+        self,
+        changes: List[Tuple[str, Dict[str, Any]]],
+    ) -> List[Tuple[List[str], Dict[str, Any]]]:
+        """
+        Merge ``action=insert`` changes that target the **same line** in the
+        same file into a single combined change.
+
+        This prevents duplicate imports and conflicting inserts when multiple
+        fixes all target the same line (most commonly line 1 — the top of the
+        file).  Non-insert actions (``replace``, ``delete``) are passed through
+        unchanged; pending inserts are flushed before each non-insert to
+        preserve the logical application order.
+
+        Args:
+            changes: Ordered list of ``(fix_id, change_dict)`` tuples for a
+                     single target file, as produced by the grouping pass in
+                     ``apply_all_pending_fixes``.
+
+        Returns:
+            A new list of ``(List[fix_id], change_dict)`` tuples.  Same-line
+            inserts are collapsed into a single entry whose ``fix_id`` list
+            contains **all** contributing fix IDs (so that every fix is
+            correctly marked as applied or failed).  Non-insert entries are
+            emitted as single-element ``fix_id`` lists.
+        """
+        if not changes:
+            return []
+
+        # (List[fix_id], change_dict) pairs that make up the merged output.
+        merged: List[Tuple[List[str], Dict[str, Any]]] = []
+
+        # Buffer for inserts grouped by target line number.  Using an ordered
+        # dict preserves the first-seen order of lines when flushing.
+        pending_inserts: Dict[int, List[Tuple[str, Dict[str, Any]]]] = {}
+        pending_lines: List[int] = []
+
+        def _flush_inserts() -> None:
+            for ln in pending_lines:
+                group = pending_inserts[ln]
+                all_fix_ids: List[str] = [fid for fid, _ in group]
+                if len(group) == 1:
+                    merged.append((all_fix_ids, group[0][1]))
+                else:
+                    # Combine content blocks, preserving each block as its own
+                    # line(s) so imports/statements don't run together.
+                    combined_content = "\n".join(
+                        ch.get("content") or "" for _, ch in group
+                    )
+                    merged_change = dict(group[0][1])
+                    merged_change["content"] = combined_content
+                    logger.debug(
+                        "_merge_same_line_inserts: merged %d inserts at line %d "
+                        "(fix_ids=%s)",
+                        len(group), ln, all_fix_ids,
+                    )
+                    merged.append((all_fix_ids, merged_change))
+            pending_inserts.clear()
+            pending_lines.clear()
+
+        for fix_id, change in changes:
+            action = change.get("action", "insert")
+            if action == "insert":
+                ln = int(change.get("line") or 1)
+                if ln not in pending_inserts:
+                    pending_inserts[ln] = []
+                    pending_lines.append(ln)
+                pending_inserts[ln].append((fix_id, change))
+            else:
+                # Flush all buffered inserts before a non-insert change to
+                # preserve the correct logical ordering.
+                _flush_inserts()
+                merged.append(([fix_id], change))
+
+        _flush_inserts()
+        return merged
+
+    def _apply_change_to_lines(
+        self, file_lines: List[str], change: Dict[str, Any]
+    ) -> None:
+        """
+        Apply a single proposed change to an in-memory list of file lines.
+
+        Mutates *file_lines* in place.  Raises ``ValueError`` for out-of-range
+        line numbers so callers can distinguish structural errors (wrong line
+        number) from unexpected exceptions.
+
+        Args:
+            file_lines: Mutable list of file lines.  Lines may or may not
+                        include a trailing newline character.
+            change:     A change dict with keys:
+                        - ``action``:  ``"insert"``, ``"replace"``, or ``"delete"``
+                        - ``line``:    1-based target line number
+                        - ``content``: replacement/insert text (omit for ``delete``)
+        """
+        action = change.get("action", "insert")
+        # Coerce line to int defensively; default to 1 if absent or falsy.
+        line: int = int(change.get("line") or 1)
+        # Guard against None content (e.g. ``{"content": null}`` from JSON).
+        content: str = change.get("content") or ""
+
+        if action == "insert":
+            # Python's list.insert() is safe on empty lists; index is clamped
+            # automatically so no special-case for new/empty files is needed.
+            insert_pos = max(0, line - 1)
+            file_lines.insert(insert_pos, content + "\n")
+
+        elif action == "replace":
+            if not file_lines:
+                raise ValueError(f"Cannot replace line {line}: file is empty")
+            if not (0 < line <= len(file_lines)):
+                raise ValueError(
+                    f"Line {line} out of range (file has {len(file_lines)} lines)"
+                )
+            content_lines = content.split("\n")
+            if len(content_lines) == 1:
+                file_lines[line - 1] = content + "\n"
+            else:
+                # Multi-line replacement: include all non-empty trailing segments.
+                new_lines = [
+                    cl + "\n"
+                    for i, cl in enumerate(content_lines)
+                    if i < len(content_lines) - 1 or cl
+                ]
+                file_lines[line - 1 : line] = new_lines
+
+        elif action == "delete":
+            if not file_lines:
+                raise ValueError(f"Cannot delete line {line}: file is empty")
+            if not (0 < line <= len(file_lines)):
+                raise ValueError(
+                    f"Line {line} out of range (file has {len(file_lines)} lines)"
+                )
+            del file_lines[line - 1]
+
+        else:
+            # Unknown action — log and skip.  Info-only changes should have
+            # been filtered before reaching this method.
+            logger.debug("_apply_change_to_lines: unknown action %r — skipped", action)
 
     async def rollback_fix(self, fix_id: str) -> Dict[str, Any]:
         """
@@ -2722,7 +3011,23 @@ Example response:
                 logger.info(f"Resolved job output directory for rollback: {job_output_dir}")
 
             # Restore each modified file from backup
-            for file_path_str in fix.applied_changes:
+            for entry in fix.applied_changes:
+                # applied_changes may contain either a plain path string or a
+                # dict (e.g. {"path": "...", "type": "file"}) depending on how
+                # the fix was applied.  Handle both shapes.
+                if isinstance(entry, dict):
+                    file_path_str = entry.get("path") or entry.get("file") or ""
+                else:
+                    file_path_str = str(entry) if entry else ""
+
+                if not file_path_str:
+                    logger.warning(
+                        "rollback_fix: skipping applied_changes entry with empty path "
+                        "(fix_id=%s, entry=%r)",
+                        fix_id, entry,
+                    )
+                    continue
+
                 # Resolve file path relative to job output directory
                 if job_output_dir:
                     file_path = job_output_dir / file_path_str
