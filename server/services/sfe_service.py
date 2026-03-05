@@ -1533,12 +1533,12 @@ class SFEService:
         if not source_context.get("success"):
             error_detail = source_context.get('error', 'Unknown error')
             return {
-                "success": True,
+                "success": False,
                 "content": f"# TODO: Add missing import statement (source read failed: {error_detail})",
-                "action": "insert",
+                "action": "info",
                 "line": 1,
                 "reasoning": f"Could not read source file: {error_detail}",
-                "confidence": 0.30,
+                "confidence": 0.0,
             }
         
         # Try to use ImportFixerEngine if available
@@ -1617,14 +1617,14 @@ class SFEService:
                     "confidence": 0.85,
                 }
         
-        # Ultimate fallback
+        # Ultimate fallback — info-only (no fake code change)
         return {
-            "success": True,
+            "success": False,
             "content": f"# TODO: Add missing import statement for: {error_message}",
-            "action": "insert",
+            "action": "info",
             "line": 1,
             "reasoning": "Could not automatically determine the correct import. Manual review required.",
-            "confidence": 0.30,
+            "confidence": 0.0,
         }
     
     def _generate_complexity_fix(self, file_path: Path, line_num: int, message: str, source_context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1696,6 +1696,10 @@ class SFEService:
     _UPLOADS_BASE_DIR = Path("uploads")
     # Valid action values that the LLM is allowed to return for code fixes.
     _ALLOWED_FIX_ACTIONS = frozenset({"replace", "insert", "delete"})
+    # Pydantic schema class name suffixes — used to identify schema-file targets.
+    _PYDANTIC_SCHEMA_SUFFIXES: Tuple = (
+        "Create", "Update", "Read", "Response", "Base", "Out", "In",
+    )
 
     def _resolve_fix_path(self, change_file: str, job_output_dir: Optional[Path]) -> Optional[Path]:
         """Resolve fix file path with multiple fallback strategies.
@@ -1794,12 +1798,12 @@ class SFEService:
         """
         if not source_context.get("success"):
             return {
-                "success": True,
+                "success": False,
                 "content": f"# TODO: Manual security fix required: {message}",
-                "action": "insert",
+                "action": "info",
                 "line": max(1, line_num),
                 "reasoning": f"Could not read source: {source_context.get('error', 'Unknown')}. Manual review required.",
-                "confidence": 0.40,
+                "confidence": 0.0,
             }
         
         target_line = source_context.get("target_line", "")
@@ -1891,14 +1895,335 @@ class SFEService:
                     "confidence": 0.90,
                 }
         
-        # Generic security issue
+        # Generic security issue — return info-only (no fake code change)
         return {
-            "success": True,
+            "success": False,
             "content": f"# TODO: Manual security fix required: {message}",
-            "action": "insert",
+            "action": "info",
             "line": line_num,
             "reasoning": f"Security issue detected but no automatic fix available. Manual review required: {message}",
-            "confidence": 0.40,
+            "confidence": 0.0,
+        }
+
+    # ---------------------------------------------------------------------- #
+    # Schema fix handler
+    # ---------------------------------------------------------------------- #
+
+    def _generate_schema_fix(
+        self,
+        file_path: Path,
+        message: str,
+        job_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Generate a fix for a missing Pydantic schema class.
+
+        Detects ``ImportError`` / ``NameError`` messages of the form
+        "cannot import name 'X' from 'app.schemas'" (and similar), reads the
+        existing ``app/schemas.py`` (or ``app/schemas/__init__.py``) from the
+        job output directory, infers the missing class from any sibling CRUD
+        classes (e.g. ``FooCreate``, ``FooRead`` exist but ``Foo`` is absent),
+        and returns an ``action: "insert"`` fix that appends the new class
+        definition at the end of the schemas file.
+
+        Returns ``None`` when the message does not match the expected pattern
+        or the schemas file cannot be located.
+        """
+        # ---- 1. Detect the missing class name --------------------------------
+        missing_name: Optional[str] = None
+        for pat in (
+            r"cannot import name '(\w+)' from '[\w.]*schemas[\w.]*'",
+            r"cannot import name '(\w+)' from '[\w.]+'",
+            r"ImportError.*'(\w+)'",
+            r"NameError.*name '(\w+)' is not defined",
+        ):
+            m = re.search(pat, message)
+            if m:
+                missing_name = m.group(1)
+                break
+
+        if not missing_name:
+            return None
+
+        # ---- 2. Locate schemas file ------------------------------------------
+        schemas_file: Optional[Path] = None
+        if job_id:
+            base = Path(self._resolve_job_code_path(job_id, "."))
+            for candidate in (
+                base / "app" / "schemas.py",
+                base / "app" / "schemas" / "__init__.py",
+            ):
+                if candidate.exists():
+                    schemas_file = candidate
+                    break
+
+        if schemas_file is None:
+            # Fall back to a path relative to the file being fixed
+            for candidate in (
+                file_path.parent / "schemas.py",
+                file_path.parent.parent / "schemas.py",
+            ):
+                if candidate.exists():
+                    schemas_file = candidate
+                    break
+
+        if schemas_file is None:
+            return None
+
+        try:
+            schemas_source = schemas_file.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+        # ---- 3. Check whether the class already exists -----------------------
+        try:
+            tree = ast.parse(schemas_source)
+            existing_names = {
+                node.name
+                for node in ast.walk(tree)
+                if isinstance(node, ast.ClassDef)
+            }
+        except SyntaxError:
+            existing_names = set()
+
+        if missing_name in existing_names:
+            return None  # Nothing to do
+
+        # ---- 4. Look for sibling CRUD classes to infer fields ---------------
+        sibling_classes: Dict[str, ast.ClassDef] = {}
+        try:
+            for node in ast.walk(ast.parse(schemas_source)):
+                if isinstance(node, ast.ClassDef):
+                    for sfx in self._PYDANTIC_SCHEMA_SUFFIXES:
+                        if node.name == missing_name + sfx or node.name.startswith(missing_name):
+                            sibling_classes[node.name] = node
+        except SyntaxError:
+            pass
+
+        # Collect annotated fields from sibling classes
+        merged_fields: Dict[str, str] = {}
+        for cls_node in sibling_classes.values():
+            for stmt in cls_node.body:
+                if isinstance(stmt, ast.AnnAssign) and isinstance(stmt.target, ast.Name):
+                    field_name = stmt.target.id
+                    # Reconstruct type annotation as source snippet
+                    try:
+                        type_ann = ast.unparse(stmt.annotation)
+                    except Exception:
+                        type_ann = "Any"
+                    if field_name not in merged_fields:
+                        merged_fields[field_name] = type_ann
+
+        # ---- 5. Build the new class definition --------------------------------
+        # Helper for a consistent relative-file key
+        def _schemas_rel_file() -> str:
+            try:
+                return str(
+                    schemas_file.relative_to(
+                        Path(self._resolve_job_code_path(job_id, "."))
+                    ) if job_id else schemas_file
+                )
+            except ValueError:
+                return str(schemas_file)
+
+        insert_line = schemas_source.count("\n") + 1
+        read_variant = missing_name + "Read"
+        create_variant = missing_name + "Create"
+        has_read = read_variant in existing_names
+        has_create = create_variant in existing_names
+
+        # Rule 1: When only a <Name>Read variant exists (no <Name>Create), emit a
+        # type alias — the read schema fully represents the entity and there is no
+        # meaningful base class to synthesise.  This is the safest choice and avoids
+        # duplicating field definitions.
+        if has_read and not has_create:
+            new_class_def = f"\n# Auto-generated alias\n{missing_name} = {read_variant}\n"
+            return {
+                "success": True,
+                "action": "insert",
+                "file": _schemas_rel_file(),
+                "line": insert_line,
+                "content": new_class_def,
+                "reasoning": (
+                    f"Created type alias '{missing_name} = {read_variant}' "
+                    f"because '{missing_name}' was not defined but '{read_variant}' exists "
+                    f"and no '{create_variant}' sibling was found."
+                ),
+                "confidence": 0.85,
+            }
+
+        # Rule 2: If sibling classes have annotated fields, generate a merged class.
+        # This is preferred over a type alias when Create *and* Read variants exist
+        # because a bare alias of FooRead would expose database-only fields (e.g. id)
+        # to code that creates new entities.
+        if merged_fields:
+            field_lines = "\n".join(
+                f"    {name}: {typ}" for name, typ in merged_fields.items()
+            )
+            class_body = (
+                f'    """Auto-generated base schema for {missing_name}."""\n'
+                f"    model_config = ConfigDict(from_attributes=True)\n\n"
+                f"{field_lines}"
+            )
+            config_import_hint = (
+                ""
+                if "ConfigDict" in schemas_source
+                else "\n# NOTE: add 'ConfigDict' to your pydantic import if missing\n"
+            )
+            confidence = 0.80
+
+        elif sibling_classes:
+            # Siblings exist but have no usable annotated fields — minimal stub
+            class_body = f'    """Auto-generated stub for {missing_name}."""\n    pass'
+            config_import_hint = ""
+            confidence = 0.70
+        else:
+            # No siblings — generate a minimal stub with a placeholder field
+            class_body = (
+                f'    """Auto-generated stub for {missing_name}."""\n'
+                f"    model_config = ConfigDict(from_attributes=True)\n\n"
+                f"    id: Optional[int] = None"
+            )
+            config_import_hint = (
+                ""
+                if "ConfigDict" in schemas_source
+                else "\n# NOTE: add 'ConfigDict' to your pydantic import if missing\n"
+            )
+            confidence = 0.70
+
+        new_class_def = (
+            f"{config_import_hint}\n\nclass {missing_name}(BaseModel):\n{class_body}\n"
+        )
+
+        return {
+            "success": True,
+            "action": "insert",
+            "file": _schemas_rel_file(),
+            "line": insert_line,
+            "content": new_class_def,
+            "reasoning": (
+                f"Generated missing Pydantic schema class '{missing_name}' "
+                f"by merging fields from sibling classes: "
+                f"{list(sibling_classes.keys()) or ['(none found — stub generated)']}"
+            ),
+            "confidence": confidence,
+        }
+
+    # ---------------------------------------------------------------------- #
+    # Type-mismatch fix handler
+    # ---------------------------------------------------------------------- #
+
+    def _generate_type_mismatch_fix(
+        self,
+        file_path: Path,
+        message: str,
+        job_id: Optional[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Generate a fix for PK type mismatches (Integer model vs UUID router).
+
+        Detects messages about Integer vs UUID primary key inconsistencies and
+        rewrites the SQLAlchemy model column to use ``UUID(as_uuid=True)`` with
+        the required imports.  Returns ``None`` when the pattern is not matched.
+        """
+        # Pattern: "Integer" PK in model but UUID expected
+        _mismatch_patterns = [
+            r"(?i)(integer|int).*primary.key.*uuid",
+            r"(?i)uuid.*primary.key.*integer",
+            r"(?i)pk.*type.*mismatch",
+            r"(?i)type.*mismatch.*primary.key",
+            r"(?i)Column\(Integer.*primary_key.*uuid",
+        ]
+        matched = any(re.search(pat, message) for pat in _mismatch_patterns)
+        if not matched:
+            return None
+
+        if not file_path.exists():
+            return None
+
+        try:
+            source = file_path.read_text(encoding="utf-8")
+        except OSError:
+            return None
+
+        lines = source.splitlines()
+
+        # Find the line with Column(Integer, primary_key=True)
+        pk_line_idx: Optional[int] = None
+        for idx, ln in enumerate(lines):
+            if re.search(r"Column\s*\(\s*Integer\s*,\s*primary_key\s*=\s*True", ln):
+                pk_line_idx = idx
+                break
+
+        if pk_line_idx is None:
+            return None
+
+        original_line = lines[pk_line_idx]
+
+        # Replace Integer with UUID(as_uuid=True) and add default=uuid.uuid4,
+        # preserving any additional Column arguments (e.g. index=True, nullable=False).
+        # Pattern: Column(Integer, primary_key=True[, extra_args...])
+        # We capture everything after primary_key=True up to the closing paren so
+        # additional kwargs are not silently discarded.
+        def _replace_pk_column(m: re.Match) -> str:
+            extra = m.group("extra").strip().rstrip(",").strip()
+            if extra:
+                return f"Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, {extra})"
+            return "Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)"
+
+        fixed_line = re.sub(
+            r"Column\s*\(\s*Integer\s*,\s*primary_key\s*=\s*True(?P<extra>[^)]*)\)",
+            _replace_pk_column,
+            original_line,
+        )
+
+        if fixed_line == original_line:
+            # Could not apply substitution
+            return None
+
+        # Build the imports that need to be added
+        imports_to_add: List[str] = []
+        if "from sqlalchemy.dialects.postgresql import UUID" not in source:
+            imports_to_add.append("from sqlalchemy.dialects.postgresql import UUID")
+        if "import uuid" not in source:
+            imports_to_add.append("import uuid")
+
+        # Separate the primary (column replace) change from any import insertions.
+        # Using explicit dicts avoids the fragility of relying on list position.
+        replace_change = {
+            "action": "replace",
+            "line": pk_line_idx + 1,
+            "content": fixed_line,
+        }
+        import_changes = (
+            [{"action": "insert", "line": 1, "content": "\n".join(imports_to_add)}]
+            if imports_to_add
+            else []
+        )
+
+        try:
+            if job_id:
+                rel_file = str(
+                    file_path.relative_to(
+                        Path(self._resolve_job_code_path(job_id, "."))
+                    )
+                )
+            else:
+                rel_file = str(file_path)
+        except ValueError:
+            rel_file = str(file_path)
+
+        return {
+            "success": True,
+            "action": replace_change["action"],
+            "file": rel_file,
+            "line": replace_change["line"],
+            "content": replace_change["content"],
+            "reasoning": (
+                f"Changed primary key column from Integer to UUID(as_uuid=True) "
+                f"to match the UUID type used in the router. "
+                f"Added required imports: {imports_to_add or ['(already present)']}."
+            ),
+            "confidence": 0.85,
+            "extra_changes": import_changes,
         }
 
     async def propose_fix(self, error_id: str) -> Dict[str, Any]:
@@ -1991,22 +2316,55 @@ class SFEService:
         # Generate fix based on error type and analysis
         fix_result = None
 
-        if "import" in error_type.lower() or "import" in message.lower():
-            # Import error - use ImportFixerEngine
-            fix_result = self._generate_import_fix(file_path, message, source_context)
-            description = f"Add missing import in {file_path_str}"
+        # ---- P0 handlers: run before LLM fallback ----
 
-        elif "complexity" in error_type.lower() or "COMPLEXITY" in error_type:
+        # Schema-class handler: catches ImportError/NameError for missing schema classes
+        _is_schema_error = (
+            "schemas" in message.lower()
+            or (
+                ("import" in error_type.lower() or "nameerror" in error_type.lower())
+                and "cannot import name" in message.lower()
+            )
+        )
+        if _is_schema_error and fix_result is None:
+            _schema_fix = self._generate_schema_fix(file_path, message, job_id)
+            if _schema_fix is not None:
+                fix_result = _schema_fix
+                description = f"Add missing schema class for {file_path_str}"
+
+        # Type-mismatch handler: catches Integer PK vs UUID router mismatches
+        _is_type_mismatch = (
+            "type_consistency" in error_type.lower()
+            or "type mismatch" in message.lower()
+            or "pk type" in message.lower()
+            or (
+                re.search(r"(?i)(integer|int).*primary.key", message)
+                and re.search(r"(?i)uuid", message)
+            )
+        )
+        if _is_type_mismatch and fix_result is None:
+            _type_fix = self._generate_type_mismatch_fix(file_path, message, job_id)
+            if _type_fix is not None:
+                fix_result = _type_fix
+                description = f"Fix PK type mismatch in {file_path_str}"
+
+        if "import" in error_type.lower() or "import" in message.lower():
+            # Import error - use ImportFixerEngine (only if a P0 handler didn't fire)
+            if fix_result is None:
+                fix_result = self._generate_import_fix(file_path, message, source_context)
+                description = f"Add missing import in {file_path_str}"
+
+        elif fix_result is None and ("complexity" in error_type.lower() or "COMPLEXITY" in error_type):
             # Complexity issue - provide refactoring guidance
             fix_result = self._generate_complexity_fix(file_path, line, message, source_context)
             description = f"Refactor complex code in {file_path_str}"
 
-        elif "security" in error_type.lower() or "B" in error_type.upper():
+        elif fix_result is None and ("security" in error_type.lower() or "B" in error_type.upper()):
             # Security issue - generate concrete fix
             fix_result = self._generate_security_fix(file_path, line, message, source_context)
             description = f"Fix security vulnerability in {file_path_str}"
 
-        else:
+        elif fix_result is None:
             # Unknown error type - use LLM to generate a real code fix.
             # `call_llm_api` is imported here rather than at module level to
             # avoid a circular import between the server package and the
@@ -2107,44 +2465,63 @@ Example response:
                 # for a developer to diagnose malformed LLM output.
                 logger.warning(
                     "LLM fix generation failed (response parsing): %s — "
-                    "falling back to insert action",
+                    "falling back to info action",
                     _parse_err,
                 )
                 fix_result = {
-                    "success": True,
+                    "success": False,
                     "content": f"# TODO: Manual fix required for {error_type}: {message}",
-                    "action": "insert",
+                    "action": "info",
                     "line": line,
-                    "reasoning": f"Could not parse LLM response: {_parse_err}",
+                    "confidence": 0.0,
+                    "reasoning": f"No automated fix could be generated. Manual intervention required. (parse error: {_parse_err})",
                 }
             except Exception as _llm_err:
                 # Network, authentication, rate-limit, or other API-level failure.
                 logger.warning(
                     "LLM fix generation failed (API error): %s — "
-                    "falling back to insert action",
+                    "falling back to info action",
                     _llm_err,
                 )
                 fix_result = {
-                    "success": True,
+                    "success": False,
                     "content": f"# TODO: Manual fix required for {error_type}: {message}",
-                    "action": "insert",
+                    "action": "info",
                     "line": line,
-                    "reasoning": f"LLM API error: {_llm_err}",
+                    "confidence": 0.0,
+                    "reasoning": f"No automated fix could be generated. Manual intervention required. (API error: {_llm_err})",
                 }
 
         # Build proposed changes — only include when a real fix was generated
         proposed_changes = []
         if fix_result and fix_result.get("success"):
             change = {
-                "file": file_path_str,  # Keep as relative path in the change
+                "file": fix_result.get("file", file_path_str),  # honour schema/type-fix overrides
                 "line": fix_result.get("line", line),
                 "action": fix_result.get("action", "insert"),
                 "content": fix_result.get("content", ""),
             }
             proposed_changes.append(change)
+            # Append any secondary changes (e.g. import insertions from type mismatch fix)
+            for extra in fix_result.get("extra_changes", []):
+                proposed_changes.append({
+                    "file": fix_result.get("file", file_path_str),
+                    "line": extra.get("line", 1),
+                    "action": extra.get("action", "insert"),
+                    "content": extra.get("content", ""),
+                })
         else:
+            # Include info-only entries so the caller knows a fix was attempted
+            # but could not be automated.
+            if fix_result:
+                proposed_changes.append({
+                    "file": file_path_str,
+                    "line": fix_result.get("line", line),
+                    "action": "info",
+                    "content": fix_result.get("content", ""),
+                })
             logger.warning(
-                "proposed_changes is empty for error_id=%s file=%s fix_result=%s",
+                "proposed_changes is info-only for error_id=%s file=%s fix_result=%s",
                 error_id,
                 file_path_str,
                 fix_result,
@@ -2167,8 +2544,9 @@ Example response:
                 )
             reasoning = fix_result.get("reasoning", "Automated fix generated successfully.")
         else:
-            confidence = 0.50
-            reasoning = fix_result.get("reasoning", "Placeholder fix - manual review required.") if fix_result else "Could not generate automated fix."
+            # Fix failed or was not automated — report truthfully with 0.0 confidence
+            confidence = 0.0
+            reasoning = fix_result.get("reasoning", "No automated fix could be generated. Manual intervention required.") if fix_result else "Could not generate automated fix."
 
         fix = {
             "fix_id": f"fix-{error_id}",
@@ -2632,7 +3010,8 @@ Example response:
                 )
 
         # ------------------------------------------------------------------ #
-        # Pass 1: validate statuses and group changes by target file
+        # Pass 1: validate statuses, run sandbox validation, and group
+        #         changes by target file
         # ------------------------------------------------------------------ #
         # file_changes maps resolved absolute path string → list of
         # (fix_id, change_dict) tuples in the order they should be applied.
@@ -2652,6 +3031,37 @@ Example response:
                 logger.warning(
                     f"Auto-applying PROPOSED (unreviewed) fix {fix_id} for job {job_id}"
                 )
+
+            # ---- Sandbox validation gate ---------------------------------- #
+            # Skip validation for info-only fixes (nothing will be written) and
+            # for fixes that were already validated during the review step.
+            _already_validated = getattr(fix, "validation_status", None) == "validated"
+            _all_info = all(
+                c.get("action") == "info"
+                for c in (getattr(fix, "proposed_changes", None) or [])
+            )
+            if not _already_validated and not _all_info:
+                try:
+                    _val_result = await self.validate_fix_in_sandbox(fix_id, job_id)
+                    _val_status = _val_result.get("status")
+                    if _val_status != "validated":
+                        logger.warning(
+                            "apply_all_pending_fixes: fix %s failed sandbox validation "
+                            "(status=%s) — skipping",
+                            fix_id, _val_status,
+                        )
+                        failed.append(fix_id)
+                        continue
+                    # Persist validation outcome so future calls don't re-validate
+                    fix.validation_status = _val_status
+                    fix.validation_result = _val_result.get("result")
+                except Exception as _val_err:
+                    logger.warning(
+                        "apply_all_pending_fixes: sandbox validation raised for fix %s: %s "
+                        "— proceeding anyway (best-effort)",
+                        fix_id, _val_err,
+                    )
+            # -------------------------------------------------------------- #
 
             fix_has_change.setdefault(fix_id, False)
             for change in (getattr(fix, "proposed_changes", None) or []):

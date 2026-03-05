@@ -86,6 +86,13 @@ class FixApplyRequest(BaseModel):
     dry_run: bool = Field(
         False, description="Simulate application without making changes"
     )
+    skip_validation: bool = Field(
+        False,
+        description=(
+            "Skip sandbox validation before applying the fix. "
+            "Use only when you explicitly want to bypass validation (not recommended for production)."
+        ),
+    )
 
 
 class RollbackRequest(BaseModel):
