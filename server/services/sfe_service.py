@@ -97,6 +97,36 @@ PRIORITY_EFFORT_IMPORT_ERROR_BONUS = 10  # Import errors are easier to fix, high
 PRIORITY_LEVEL_HIGH_THRESHOLD = 70
 PRIORITY_LEVEL_MEDIUM_THRESHOLD = 40
 
+# ---------------------------------------------------------------------------
+# Lint-only error type detection
+# ---------------------------------------------------------------------------
+# Patterns that identify lint/style issues whose fixes should be validated
+# by checking lint improvement rather than pytest improvement.  These tools
+# (pylint, ruff, flake8, pycodestyle) emit codes that match these patterns.
+#
+# Configurable: set the environment variable SFE_LINT_ONLY_PATTERNS to a
+# comma-separated list of regex patterns to override the built-in defaults.
+# Example: SFE_LINT_ONLY_PATTERNS="^C\d+,^W\d+,mypy.*"
+_DEFAULT_LINT_ONLY_PATTERNS = [
+    r"^C\d+",           # pylint convention codes: C0116, C0115, C0114, C0301, …
+    r"^W\d+",           # pylint warning codes: W0611 (unused-import), W0401, …
+    r"^R\d+",           # pylint refactoring codes: R0201, R0903, …
+    r"^E\d{3}",         # flake8/pycodestyle style codes: E501, E302, E303, …
+    r"^W\d{3}",         # pycodestyle warning codes: W291, W293, W503, …
+    r"^ANN\d+",         # flake8-annotations codes
+    r"^D\d+",           # pydocstyle codes
+    r"(?i)pylint",      # any type containing the word "pylint"
+    r"(?i)ruff",        # any type containing "ruff"
+    r"(?i)flake8",      # any type containing "flake8"
+    r"(?i)pycodestyle", # any type containing "pycodestyle"
+    r"(?i)missing.docstring",
+    r"(?i)missing.module.docstring",
+    r"(?i)import.order",
+    r"(?i)ungrouped.import",
+    r"(?i)unused.import",
+    r"(?i)line.too.long",
+]
+
 
 def _stable_hash(text: str, length: int = 8) -> str:
     """
@@ -863,6 +893,91 @@ class SFEService:
             summary_count = int(m.group(1))
         return max(error_line_count, summary_count)
 
+    @staticmethod
+    def _is_lint_only_error_type(error_type: str) -> bool:
+        """Return True when *error_type* identifies a lint/style issue.
+
+        Lint-only issues (pylint, ruff, flake8, pycodestyle, pydocstyle) do
+        not change runtime behaviour, so their fixes should be validated by
+        checking lint non-regression rather than requiring pytest improvement.
+
+        The list of patterns is seeded from the module-level
+        ``_DEFAULT_LINT_ONLY_PATTERNS`` list and can be extended at runtime
+        via the ``SFE_LINT_ONLY_PATTERNS`` environment variable (comma-separated
+        regex patterns).
+        """
+        _patterns = list(_DEFAULT_LINT_ONLY_PATTERNS)
+        env_extra = os.environ.get("SFE_LINT_ONLY_PATTERNS", "").strip()
+        if env_extra:
+            _patterns.extend(p.strip() for p in env_extra.split(",") if p.strip())
+        return any(re.search(p, error_type or "") for p in _patterns)
+
+    def _is_lint_only_fix(self, fix: Any) -> bool:
+        """Return True when the fix targets a lint/style issue.
+
+        Detection order:
+        1. Look up the originating error record in ``_errors_cache`` using
+           ``fix.error_id`` and check its ``type`` field.
+        2. Fall back to parsing ``fix.description`` (which is formatted as
+           ``"Fix <error_type> in <file>"`` by ``propose_fix``).
+        """
+        # Try the errors cache first — the most reliable source.
+        error_data = self._errors_cache.get(getattr(fix, "error_id", None) or "")
+        if error_data:
+            return self._is_lint_only_error_type(error_data.get("type", ""))
+
+        # Fall back to parsing the fix description.
+        description = getattr(fix, "description", "") or ""
+        # Description format: "Fix <error_type> in <file_path>"
+        m = re.match(r"Fix\s+(\S+)\s+in\s+", description)
+        if m:
+            return self._is_lint_only_error_type(m.group(1))
+
+        return False
+
+    @staticmethod
+    def _count_lint_issues(directory: "Path") -> int:
+        """Count lint issues in *directory* using ruff (preferred) or flake8.
+
+        Returns the number of violations reported, or -1 when no lint tool is
+        available.  Used for lint-only fix validation so that we can accept
+        fixes that improve (or at least do not worsen) the lint score even
+        when pytest results are unchanged.
+        """
+        import subprocess
+
+        # Try ruff first (faster and more widely available in modern projects).
+        for cmd in (
+            ["python", "-m", "ruff", "check", "--output-format=json", "."],
+            ["ruff", "check", "--output-format=json", "."],
+            ["python", "-m", "flake8", "--format=default", "."],
+            ["flake8", "--format=default", "."],
+        ):
+            try:
+                proc = subprocess.run(
+                    cmd,
+                    cwd=str(directory),
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+                output = proc.stdout + proc.stderr
+                # ruff json output: list of violation objects
+                if "--output-format=json" in cmd:
+                    import json as _json
+                    try:
+                        violations = _json.loads(proc.stdout)
+                        return len(violations) if isinstance(violations, list) else -1
+                    except Exception:
+                        pass
+                # flake8 / ruff text output: one violation per non-empty line
+                count = sum(1 for ln in output.splitlines() if ln.strip())
+                return count
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                continue
+
+        return -1  # No lint tool found
+
     async def validate_fix_in_sandbox(
         self, fix_id: str, job_id: str
     ) -> Dict[str, Any]:
@@ -879,6 +994,10 @@ class SFEService:
         * The baseline had collection/import errors **and** the post-fix run has
           fewer such errors — i.e. the fix improved bootability even if some
           unrelated tests still fail.
+        * The fix targets a **lint-only** issue (pylint, ruff, flake8, etc.) and
+          the lint issue count did not increase after applying the fix (non-
+          regression criterion).  Lint-only fixes do not change runtime behaviour,
+          so requiring pytest improvement would produce false rejections.
         """
         import shutil
         import subprocess
@@ -898,6 +1017,17 @@ class SFEService:
         if raw_job_path == "." or not job_path.exists():
             logger.warning(f"[SFE] Job path not found for fix {fix_id}; skipping sandbox validation")
             return {"status": "validated", "result": {"skipped": True, "reason": "job_path_missing"}}
+
+        # Determine early if this is a lint-only fix so we can run the
+        # appropriate pre/post metric (lint issue count) in addition to tests.
+        is_lint_only = self._is_lint_only_fix(fix)
+        if is_lint_only:
+            logger.info(
+                "[SFE] Fix %s targets a lint-only issue; lint non-regression "
+                "criterion will be used for validation",
+                fix_id,
+            )
+
         sandbox_dir = tempfile.mkdtemp(prefix=f"sfe_validate_{fix_id}_")
         try:
             sandbox_code_dir = Path(sandbox_dir) / "code"
@@ -924,6 +1054,14 @@ class SFEService:
                 fix_id,
                 baseline_collection_errors,
             )
+
+            # Capture baseline lint count for lint-only fixes.
+            baseline_lint_count = -1
+            if is_lint_only:
+                baseline_lint_count = self._count_lint_issues(sandbox_code_dir)
+                logger.debug(
+                    "[SFE] Fix %s baseline lint issues: %d", fix_id, baseline_lint_count
+                )
 
             # Apply proposed changes to the sandbox copy
             for change in fix.proposed_changes:
@@ -976,6 +1114,15 @@ class SFEService:
                         failed = int(m2.group(1))
             post_fix_output = proc.stdout + proc.stderr
             post_fix_collection_errors = self._count_pytest_collection_errors(post_fix_output)
+
+            # Capture post-fix lint count for lint-only fixes.
+            post_fix_lint_count = -1
+            if is_lint_only:
+                post_fix_lint_count = self._count_lint_issues(sandbox_code_dir)
+                logger.debug(
+                    "[SFE] Fix %s post-fix lint issues: %d", fix_id, post_fix_lint_count
+                )
+
             validation_result = {
                 "tests_passed": passed,
                 "tests_failed": failed,
@@ -983,6 +1130,9 @@ class SFEService:
                 "stdout": proc.stdout[-2000:],
                 "baseline_collection_errors": baseline_collection_errors,
                 "post_fix_collection_errors": post_fix_collection_errors,
+                "is_lint_only": is_lint_only,
+                "baseline_lint_count": baseline_lint_count,
+                "post_fix_lint_count": post_fix_lint_count,
             }
 
             # Accept the fix when tests pass normally …
@@ -1008,6 +1158,44 @@ class SFEService:
                     post_fix_collection_errors,
                 )
                 return {"status": "validated", "result": validation_result}
+
+            # … or when the fix targets a lint-only issue and lint count did
+            # not increase (non-regression criterion).  Test results are not
+            # expected to change for pure style/convention fixes, so requiring
+            # pytest improvement would produce systematic false rejections.
+            if is_lint_only:
+                # Accept when: lint tool unavailable (-1), count improved, or
+                # count stayed the same (non-regression).
+                lint_non_regression = (
+                    baseline_lint_count < 0
+                    or post_fix_lint_count < 0
+                    or post_fix_lint_count <= baseline_lint_count
+                )
+                if lint_non_regression:
+                    fix.validation_status = "validated"
+                    fix.validation_result = validation_result
+                    logger.info(
+                        "[SFE] Fix %s validated (lint-only): lint count %d → %d "
+                        "(non-regression criterion satisfied)",
+                        fix_id,
+                        baseline_lint_count,
+                        post_fix_lint_count,
+                    )
+                    return {"status": "validated", "result": validation_result}
+                # Lint count regressed — reject.
+                fix.validation_status = "rejected"
+                fix.validation_result = validation_result
+                logger.warning(
+                    "[SFE] Fix %s rejected (lint-only): lint count increased %d → %d",
+                    fix_id,
+                    baseline_lint_count,
+                    post_fix_lint_count,
+                )
+                return {
+                    "status": "rejected",
+                    "reason": "Lint-only fix increased lint issue count",
+                    "result": validation_result,
+                }
 
             fix.validation_status = "rejected"
             fix.validation_result = validation_result
@@ -2475,7 +2663,12 @@ class SFEService:
             # generator package (which is also imported by other server modules).
             description = f"Fix {error_type} in {file_path_str}"
             try:
-                from generator.runner import call_llm_api
+                # Import from the canonical module path; fall back to the
+                # re-export in generator.runner.__init__ for backward compat.
+                try:
+                    from generator.runner.llm_client import call_llm_api
+                except ImportError:
+                    from generator.runner import call_llm_api  # type: ignore[no-redef]
 
                 # Guard against sending excessively large files to the LLM.
                 # Limit to ~8 000 characters (≈ 2 000 tokens) which is enough

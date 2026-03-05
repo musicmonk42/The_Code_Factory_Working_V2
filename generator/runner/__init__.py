@@ -266,7 +266,19 @@ __all__ = [
     "mutation_test",  # NEW: Export for mutation testing
     "property_based_test",  # NEW: Export for property-based testing
     "runner_metrics",  # NEW: Export for metrics module access
+    "call_llm_api",  # Re-export for backward-compatible `from generator.runner import call_llm_api`
 ]
+
+# Re-export call_llm_api from llm_client so that legacy callers using
+# `from generator.runner import call_llm_api` continue to work.
+try:
+    from .llm_client import call_llm_api  # noqa: F401
+except ImportError as _llm_import_err:
+    _logger.warning(
+        "runner/__init__: call_llm_api not importable from llm_client (%s); "
+        "LLM-based fix generation will be unavailable.",
+        _llm_import_err,
+    )
 
 # Import tracer for OpenTelemetry support
 try:

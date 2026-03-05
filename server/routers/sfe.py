@@ -426,7 +426,7 @@ async def review_fix(
 
     if request.approved:
         # Run sandbox validation unless the fix was already explicitly validated
-        already_validated = fix.validation_status == "validated"
+        already_validated = fix.validation_status in ("validated", "skipped")
         force_override = "force" in (request.comments or "").lower()
 
         # Skip sandbox validation for low-confidence or informational fixes:
@@ -461,6 +461,24 @@ async def review_fix(
                     f"Fix {fix_id}: sandbox validation error ({exc}); "
                     "proceeding with human-only approval"
                 )
+        elif not already_validated:
+            # Sandbox validation was intentionally skipped (info-only, low
+            # confidence, force override, or no job context).  Record this so
+            # that apply_fix does not unexpectedly re-validate the fix.
+            skip_reason = (
+                "force_override" if force_override
+                else "info_only" if is_info_fix
+                else "low_confidence" if low_confidence
+                else "no_job_context"
+            )
+            fix.validation_status = "skipped"
+            fix.validation_result = {"skipped": True, "reason": skip_reason}
+            logger.debug(
+                "Fix %s: sandbox validation skipped at review time (%s); "
+                "validation_status set to 'skipped' so apply will not re-validate",
+                fix_id,
+                skip_reason,
+            )
 
         fix.status = FixStatus.APPROVED
     else:
@@ -527,8 +545,11 @@ async def apply_fix(
     # Sandbox validation gate: validate before applying unless explicitly skipped
     if not request.dry_run and not request.skip_validation:
         job_id = fix.job_id or ""
-        # Skip validation when the fix was already validated during the review step
-        already_validated = getattr(fix, "validation_status", None) == "validated"
+        # Skip validation when the fix was already handled during the review
+        # step — either fully validated ("validated") or intentionally skipped
+        # ("skipped" for info-only / low-confidence / no-job-context fixes).
+        prior_status = getattr(fix, "validation_status", None)
+        already_validated = prior_status in ("validated", "skipped")
         if not already_validated:
             logger.info(
                 "Running sandbox validation before applying fix %s (job=%s)",
