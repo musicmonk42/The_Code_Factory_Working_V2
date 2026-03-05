@@ -532,7 +532,33 @@ class CommandCompleter:
 
 
 def execute_macro(input_text: str) -> str:
-    state = asyncio.run(AutocompleteState.instance())
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop is not None and loop.is_running():
+        # Called from within a running event loop (e.g. under pytest-asyncio).
+        # Use the existing singleton if available; skip macro expansion otherwise
+        # to avoid a nested asyncio.run() call.
+        state = AutocompleteState._instance
+    else:
+        state = asyncio.run(AutocompleteState.instance())
+    if state is None:
+        return input_text
+    parts = input_text.strip().split()
+    if not parts or parts[0].lower() not in state.macros:
+        return input_text
+    sanitized_args = [bleach.clean(arg) for arg in parts[1:]]
+    try:
+        return state.macros[parts[0].lower()](sanitized_args)
+    except Exception as e:
+        logger.error(f"Macro execution failed: {e}")
+        return input_text
+
+
+async def execute_macro_async(input_text: str) -> str:
+    """Async-safe version of execute_macro for use inside async contexts."""
+    state = await AutocompleteState.instance()
     parts = input_text.strip().split()
     if not parts or parts[0].lower() not in state.macros:
         return input_text
