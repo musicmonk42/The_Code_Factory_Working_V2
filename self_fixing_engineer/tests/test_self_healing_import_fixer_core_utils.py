@@ -158,14 +158,14 @@ class TestAlertSystem:
         assert "attachments" in payload
         assert payload["attachments"][0]["title"] == "ERROR: Slack test"
 
-    @patch("boto3.client")  # Patch boto3 directly
-    def test_sns_alert(self, mock_boto_client):
+    @patch("analyzer.core_utils.boto3")
+    def test_sns_alert(self, mock_boto):
         """Test AWS SNS alert functionality."""
         _alert_config.sns_topic_arn = "arn:aws:sns:us-east-1:123456789:test-topic"
         _alert_config.enabled_channels = [AlertChannel.SNS]
 
         mock_sns = MagicMock()
-        mock_boto_client.return_value = mock_sns
+        mock_boto.client.return_value = mock_sns
 
         alert_operator("SNS test", AlertLevel.WARNING)
 
