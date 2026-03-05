@@ -172,7 +172,15 @@ async def _run_subprocess_safe(
 ) -> Dict[str, Any]:
     """
     Helper to run a shell command safely and capture output.
-    Raises RunnerError for subprocess failures.
+
+    Exception-handling contract:
+    - asyncio.TimeoutError is caught in an *inner* try/except that wraps only the
+      wait_for call.  The custom runner_errors.TimeoutError is raised from there
+      exactly once and then propagates out of the outer try/except unchanged –
+      it is never re-wrapped by the outer ``except Exception`` handler.
+    - RunnerError subclasses (including TimeoutError) raised inside the outer try
+      block (e.g., non-zero-exit RunnerError) are re-raised as-is.
+    - All other unexpected exceptions are wrapped in a plain RunnerError.
     """
     cmd_list = cmd if isinstance(cmd, list) else cmd.split()
     logger.debug(f"Executing subprocess command: {' '.join(cmd_list)} in {cwd}")
@@ -181,7 +189,33 @@ async def _run_subprocess_safe(
         process = await asyncio.create_subprocess_exec(
             *cmd_list, stdout=subprocess.PIPE, stderr=subprocess.PIPE, cwd=cwd
         )
-        stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+
+        # Isolate asyncio.TimeoutError in its own inner try/except so that the
+        # custom TimeoutError raised below cannot be accidentally re-caught or
+        # re-wrapped by the outer ``except RunnerError`` / ``except Exception``
+        # handlers.  In Python 3.11+ asyncio.TimeoutError is an alias for the
+        # built-in TimeoutError; keeping this handler separate prevents any
+        # ambiguity with our runner_errors.TimeoutError (which is *not* a
+        # subclass of the built-in TimeoutError).
+        try:
+            stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
+        except asyncio.TimeoutError as e:
+            # Kill the subprocess and wait for it to exit before re-raising.
+            if process:
+                process.kill()
+                await process.wait()
+            logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd_list)}")
+            # Raise our custom TimeoutError exactly once.  ``from e`` preserves
+            # the original asyncio.TimeoutError as the explicit cause for
+            # debugging, while ensuring only runner_errors.TimeoutError
+            # propagates to callers.
+            raise TimeoutError(
+                "TASK_TIMEOUT",
+                detail=f"Subprocess command timed out after {timeout} seconds.",
+                timeout_seconds=timeout,
+                cmd=" ".join(cmd_list),
+                cause=e,
+            ) from e
 
         stdout_str = stdout.decode("utf-8", errors="ignore").strip()
         stderr_str = stderr.decode("utf-8", errors="ignore").strip()
@@ -201,17 +235,6 @@ async def _run_subprocess_safe(
                 cmd=" ".join(cmd_list),
             )
         return {"stdout": stdout_str, "stderr": stderr_str, "returncode": returncode}
-    except asyncio.TimeoutError:
-        if process:
-            process.kill()
-            await process.wait()
-        logger.error(f"Command timed out after {timeout} seconds: {' '.join(cmd_list)}")
-        raise TimeoutError(
-            "TASK_TIMEOUT",
-            detail=f"Subprocess command timed out after {timeout} seconds.",
-            timeout_seconds=timeout,
-            cmd=" ".join(cmd_list),
-        )
     except FileNotFoundError:
         first_arg = cmd_list[0]
         logger.error(
@@ -223,7 +246,10 @@ async def _run_subprocess_safe(
             returncode=127,
             cmd=" ".join(cmd_list),
         )
-    except RunnerError:  # Re-raise already structured errors
+    except RunnerError:
+        # Re-raise already-structured errors (e.g., non-zero-exit RunnerError,
+        # or runner_errors.TimeoutError propagated from the inner try above)
+        # without wrapping them in another exception layer.
         raise
     except Exception as e:
         logger.error(f"Unexpected error running subprocess: {e}", exc_info=True)
