@@ -212,6 +212,13 @@ DOC_TYPE_CANONICAL = {
     "user": "README",
 }
 
+# Pre-summarisation thresholds for docgen context.
+# When total collected context exceeds DOCGEN_MAX_CONTEXT_CHARS each file is
+# truncated to its first DOCGEN_TRUNCATION_LINES lines.  Both values can be
+# overridden via environment variables of the same name.
+DOCGEN_MAX_CONTEXT_CHARS: int = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", "30000"))
+DOCGEN_TRUNCATION_LINES: int = int(os.environ.get("DOCGEN_TRUNCATION_LINES", "100"))
+
 
 def scrub_text(text: str) -> str:
     """
@@ -896,6 +903,12 @@ class DocGenPromptAgent:
     ) -> Dict[str, Any]:  # Added repo_path param
         """
         Gathers raw file contents from the repository for use in the prompt context.
+
+        If the total collected context exceeds ``DOCGEN_MAX_CONTEXT_CHARS`` (default
+        30 000 characters, overridable via the environment variable of the same name),
+        each file's content is pre-summarised to its first 100 lines.  This prevents
+        the >150s prompt latency observed in production when large codebases are
+        included verbatim.
         """
         context: Dict[str, Any] = {"files_content": {}}
         read_tasks = []
@@ -914,6 +927,26 @@ class DocGenPromptAgent:
         for file_name, content in results:
             if content is not None:
                 context["files_content"][file_name] = content
+
+        # Pre-summarise oversized contexts to reduce prompt latency.
+        # Use the module-level constants which were already resolved from the
+        # environment at import time.  Override DOCGEN_MAX_CONTEXT_CHARS or
+        # DOCGEN_TRUNCATION_LINES in the process environment before importing
+        # this module if different thresholds are needed.
+        _total_chars = sum(len(v) for v in context["files_content"].values())
+        if _total_chars > DOCGEN_MAX_CONTEXT_CHARS:
+            logger.info(
+                f"[DOCGEN] Context size {_total_chars} chars exceeds threshold "
+                f"{DOCGEN_MAX_CONTEXT_CHARS} — truncating each file to first "
+                f"{DOCGEN_TRUNCATION_LINES} lines"
+            )
+            context["files_content"] = {
+                fname: "\n".join(fcontent.splitlines()[:DOCGEN_TRUNCATION_LINES])
+                for fname, fcontent in context["files_content"].items()
+            }
+            context["context_truncated"] = True
+            context["original_total_chars"] = _total_chars
+
         return context
 
     async def _read_single_file_for_context(

@@ -317,6 +317,12 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 #   - USE_KAFKA_INGESTION / USE_KAFKA_AUDIT: Fine-grained Kafka routing controls.
 # PIPELINE_CODEGEN_TIMEOUT_SECONDS: Per-job outer budget for multi-pass code generation (900 s / 15 min).
 # ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: Per-provider timeout for ensemble LLM calls (300 s / 5 min).
+# RAG_ENABLED: Set to true + configure VECTOR_DB_PROVIDER/VECTOR_DB_URL to enable RAG-enhanced critique.
+# OTEL_BATCH_LINT_SPANS: Batch per-file lint spans to stay under Railway's 500 logs/sec cap (true).
+# DOCGEN_MAX_CONTEXT_CHARS: Pre-summarisation threshold for docgen prompt context (30 000 chars).
+# DOCGEN_TRUNCATION_LINES: Lines per file when context is pre-summarised (100).
+# AUTO_MIGRATE: 0=disabled (migrations run via Helm initContainer). 1=run Alembic on startup.
+# SFE_SKIP_MIGRATE_ON_ANALYSIS: true skips Alembic during analysis-only SFE runs (~39s saving).
 # ENCRYPTION_MODE: Encryption backend — local | aws_kms | azure_keyvault (see SECURITY_CONFIGURATION.md).
 # SUPPRESS_SECURITY_WARNINGS: Set to "1" in development to silence security-posture log warnings.
 # PLUGIN_INTEGRITY_CHECK_ENABLED: Enable plugin hash verification via HASH_MANIFEST.
@@ -356,6 +362,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIPELINE_CODEGEN_TIMEOUT_SECONDS="900" \
     PIPELINE_CRITIQUE_TIMEOUT_SECONDS="180" \
     ENSEMBLE_PROVIDER_TIMEOUT_SECONDS="300" \
+    # RAG/vector DB is OFF by default; set RAG_ENABLED=true + VECTOR_DB_PROVIDER/URL to enable
+    # context-aware critique.  See .env.example for provider options.
+    RAG_ENABLED="false" \
     CODEGEN_MULTIPASS_ENDPOINT_THRESHOLD="10" \
     CODEGEN_MULTIPASS_FILE_THRESHOLD="20" \
     CODEGEN_MULTIPASS_MD_SIZE_THRESHOLD="30000" \
@@ -368,7 +377,21 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CONFIGDB_REMOTE_ENDPOINT="" \
     CONFIGDB_ALLOWED_HOSTS="" \
     OTEL_BSP_MAX_EXPORT_BATCH_SIZE="64" \
-    OTEL_BSP_SCHEDULE_DELAY="10000"
+    OTEL_BSP_SCHEDULE_DELAY="10000" \
+    # Batch per-file lint spans into a single parent span to stay under the
+    # Railway 500 logs/sec rate limit.  Set to false only for deep tracing.
+    OTEL_BATCH_LINT_SPANS="true" \
+    # Docgen context pre-summarisation thresholds — truncate files when the
+    # total prompt context would otherwise exceed the character limit.
+    DOCGEN_MAX_CONTEXT_CHARS="30000" \
+    DOCGEN_TRUNCATION_LINES="100" \
+    # SFE migration controls.
+    # AUTO_MIGRATE=0 disables automatic Alembic runs at startup (migrations run
+    # via the Helm initContainer / k8s Job instead, so the app container never
+    # needs to do it).  SFE_SKIP_MIGRATE_ON_ANALYSIS=false keeps the default
+    # behaviour; set to true in analysis-only deployments to save ~39s per run.
+    AUTO_MIGRATE="0" \
+    SFE_SKIP_MIGRATE_ON_ANALYSIS="false"
     # SENTRY_DSN: Set at deployment time — never bake into the image.
     # Example: SENTRY_DSN=https://<key>@<org>.ingest.sentry.io/<project>
 

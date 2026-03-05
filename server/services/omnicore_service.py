@@ -22,6 +22,8 @@ import logging
 import os
 import re
 import shutil
+import subprocess
+import sys
 import threading
 import time
 import yaml
@@ -6686,11 +6688,21 @@ class OmniCoreService:
                                 _fix_meta: Dict[str, Dict] = {}  # fix_id → {error_id, files}
                                 for _issue in _auto_fixable:
                                     _err_id = _issue.get("error_id")
+                                    _issue_id = _issue.get("id", _err_id or "unknown")
+                                    _issue_type = _issue.get("type", "unknown")
                                     if not _err_id:
+                                        logger.warning(
+                                            f"[SFE_AUTOFIX] Issue {_issue_id} ({_issue_type}): "
+                                            "SKIPPED — no error_id present"
+                                        )
                                         continue
+                                    logger.info(
+                                        f"[SFE_AUTOFIX] Attempting fix for issue {_issue_id}: {_issue_type}"
+                                    )
                                     try:
                                         _fix_proposal = await _sfe_svc.propose_fix(_err_id)
-                                        if _fix_proposal.get("confidence", 0.0) >= 0.7:
+                                        _confidence = _fix_proposal.get("confidence", 0.0)
+                                        if _confidence >= 0.7:
                                             _fix_id = _fix_proposal.get("fix_id")
                                             if _fix_id:
                                                 _proposed_fix_ids.append(_fix_id)
@@ -6702,9 +6714,25 @@ class OmniCoreService:
                                                         if c.get("file")
                                                     ],
                                                 }
+                                                logger.info(
+                                                    f"[SFE_AUTOFIX] Issue {_issue_id}: fix proposed "
+                                                    f"(fix_id={_fix_id}, confidence={_confidence:.2f})"
+                                                )
+                                            else:
+                                                logger.warning(
+                                                    f"[SFE_AUTOFIX] Issue {_issue_id}: SKIPPED — "
+                                                    "fix proposal returned no fix_id"
+                                                )
+                                        else:
+                                            logger.warning(
+                                                f"[SFE_AUTOFIX] Issue {_issue_id}: SKIPPED — "
+                                                f"confidence {_confidence:.2f} below threshold 0.70"
+                                            )
                                     except Exception as _prop_err:
-                                        logger.debug(
-                                            f"[SFE_ANALYSIS] Auto-fix proposal skipped for {_err_id}: {_prop_err}"
+                                        logger.warning(
+                                            f"[SFE_AUTOFIX] Issue {_issue_id} ({_issue_type}): "
+                                            f"SKIPPED — {type(_prop_err).__name__}: {_prop_err}",
+                                            extra={"issue_id": _issue_id, "issue_type": _issue_type},
                                         )
                                 # Phase 2: apply all proposed fixes in a single batch so
                                 # each file is written once and the manifest is refreshed
@@ -6720,9 +6748,21 @@ class OmniCoreService:
                                             "fix_id": _fix_id,
                                             "files_modified": _meta.get("files", []),
                                         })
+                                        logger.info(
+                                            f"[SFE_AUTOFIX] Issue fix_id={_fix_id}: applied successfully"
+                                        )
+                                    for _fix_id in _batch_result.get("failed", []):
+                                        logger.warning(
+                                            f"[SFE_AUTOFIX] Issue fix_id={_fix_id}: apply FAILED"
+                                        )
                                 if issues_fixed:
                                     logger.info(
                                         f"[SFE_ANALYSIS] Auto-fixed {issues_fixed} issues for job {job_id}"
+                                    )
+                                else:
+                                    logger.warning(
+                                        f"[SFE_ANALYSIS] Auto-fix proposed {len(_proposed_fix_ids)} fix(es) "
+                                        f"but none were applied for job {job_id}"
                                     )
                             except Exception as _sfe_auto_err:
                                 logger.warning(
@@ -8967,7 +9007,43 @@ class OmniCoreService:
             # This allows auto-fix to repair issues before deployment
             # FIX: Default to True since critique is a core pipeline feature for quality
             critique_result = {}  # Initialize for later reference
+            # Cold-start pre-check warnings collected before critique and merged into
+            # validation_warnings later in the pipeline.
+            _pre_critique_cold_start_warnings: List[str] = []
             if payload.get("run_critique", True):
+                # Cold-start import check: run BEFORE critique so the critique agent
+                # is informed of boot failures early.
+                _output_dir_for_cold_start = Path(codegen_result.get("output_path", ""))
+                if _output_dir_for_cold_start.exists():
+                    try:
+                        _cold_start_proc = subprocess.run(
+                            [sys.executable, "-c", "import app.main"],
+                            cwd=str(_output_dir_for_cold_start),
+                            timeout=30,
+                            capture_output=True,
+                            text=True,
+                        )
+                        if _cold_start_proc.returncode != 0:
+                            _cold_start_err = (
+                                _cold_start_proc.stderr.strip()
+                                or _cold_start_proc.stdout.strip()
+                                or "unknown import error"
+                            )
+                            logger.warning(
+                                f"[PIPELINE] Job {job_id} pre-critique cold-start import check FAILED: "
+                                f"{_cold_start_err[:500]}"
+                            )
+                            _pre_critique_cold_start_warnings.append(
+                                f"Cold-start import check failed before critique: {_cold_start_err[:200]}"
+                            )
+                        else:
+                            logger.debug(
+                                f"[PIPELINE] Job {job_id} pre-critique cold-start import check passed"
+                            )
+                    except Exception as _cs_err:
+                        logger.debug(
+                            f"[PIPELINE] Job {job_id} pre-critique cold-start check skipped: {_cs_err}"
+                        )
                 # Enrich critique with test and validation results for better context
                 # NOTE: Only testgen can have failed at this point since critique runs before deploy/docgen
                 # Deploy and docgen failures will be detected in later pipeline runs
@@ -9263,6 +9339,40 @@ class OmniCoreService:
                     if docgen_result.get("status") == "completed":
                         stages_completed.append("docgen")
                         logger.info(f"[PIPELINE] Job {job_id} completed step: docgen")
+                        # Post-docgen: inject copyright and license notice if missing
+                        try:
+                            _docgen_output_path = codegen_result.get("output_path")
+                            if _docgen_output_path:
+                                _readme_candidates = [
+                                    Path(_docgen_output_path) / "docs" / "README.md",
+                                    Path(_docgen_output_path) / "README.md",
+                                ]
+                                for _readme_path in _readme_candidates:
+                                    if _readme_path.exists():
+                                        _readme_content = _readme_path.read_text(encoding="utf-8")
+                                        _readme_modified = False
+                                        if "copyright" not in _readme_content.lower() and "©" not in _readme_content:
+                                            _readme_content += (
+                                                "\n\n---\n\n"
+                                                "© 2025 Generated by The Code Factory. All rights reserved.\n"
+                                            )
+                                            _readme_modified = True
+                                        if "license" not in _readme_content.lower():
+                                            _readme_content += (
+                                                "\n## License\n\n"
+                                                "Proprietary. See LICENSE file for details.\n"
+                                            )
+                                            _readme_modified = True
+                                        if _readme_modified:
+                                            _readme_path.write_text(_readme_content, encoding="utf-8")
+                                            logger.info(
+                                                f"[PIPELINE] Job {job_id} injected copyright/license into {_readme_path}"
+                                            )
+                                        break
+                        except Exception as _copyright_err:
+                            logger.debug(
+                                f"[PIPELINE] Job {job_id} copyright/license injection skipped: {_copyright_err}"
+                            )
                     elif docgen_result.get("status") == "error":
                         logger.error(
                             f"[PIPELINE] Job {job_id} failed step: docgen - {docgen_result.get('message', 'Unknown error')}",
@@ -9378,6 +9488,9 @@ class OmniCoreService:
             # FIX Bug 5: Validate deployment artifacts and raise errors for missing required files
             # Include any deploy validation errors collected earlier in the pipeline
             validation_warnings = list(_deploy_validation_errors)
+            # Merge in any pre-critique cold-start warnings collected before critique ran
+            if _pre_critique_cold_start_warnings:
+                validation_warnings.extend(_pre_critique_cold_start_warnings)
             validation_errors = []
             
             if output_path:

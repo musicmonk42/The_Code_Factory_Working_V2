@@ -92,6 +92,65 @@ _finalized_jobs: Set[str] = set()
 # Track dispatched jobs to ensure dispatch idempotency (separate from finalization)
 _dispatched_jobs: Set[str] = set()
 
+# The canonical check name written into validation_report.failed_checks when the cold-start
+# import test fails.  Defined as a constant here so both finalization and routing code can
+# reference it without hard-coding the string in multiple places.
+COLD_START_CHECK_NAME: str = "Cold-start Import Test"
+
+# Explicit stage name fragments that indicate a cold-start / import failure.
+# Using an explicit frozenset instead of substring matching avoids false positives on
+# stage names like "reimport_data" or "cold_storage".
+_COLD_START_STAGE_NAMES: frozenset = frozenset({
+    "cold_start",
+    "cold-start",
+    "import_test",
+    "cold_start_import",
+})
+
+
+def pipeline_result_has_cold_start_failure(result: Optional[Dict[str, Any]]) -> bool:
+    """Return True if *result* carries evidence of a cold-start import failure.
+
+    Checks three independent signals in the pipeline result dict so that the
+    detection is robust regardless of which component recorded the failure:
+
+    1. ``validation_report.failed_checks`` contains the canonical check name
+       ``"Cold-start Import Test"``.
+    2. The top-level flags ``cold_start_failed`` or ``import_test_failed`` are
+       truthy (set by the pipeline runner when the import test subprocess fails).
+    3. ``stages_failed`` contains an entry that exactly matches one of the known
+       cold-start stage name tokens (see ``_COLD_START_STAGE_NAMES``).
+
+    Using an explicit allowlist for stage names (rather than substring matching)
+    prevents false positives such as a stage named ``"reimport_data"`` matching
+    ``"import"``.
+
+    Args:
+        result: The pipeline result dict, or ``None``.
+
+    Returns:
+        ``True`` if any cold-start failure signal is present; ``False`` otherwise.
+    """
+    if not result:
+        return False
+
+    # Signal 1: validation report failed checks
+    _vr: Dict[str, Any] = result.get("validation_report") or {}
+    if COLD_START_CHECK_NAME in (_vr.get("failed_checks") or []):
+        return True
+
+    # Signal 2: explicit top-level flags
+    if result.get("cold_start_failed") or result.get("import_test_failed"):
+        return True
+
+    # Signal 3: stages_failed — exact-token match against known cold-start names
+    for _stage in (result.get("stages_failed") or []):
+        if str(_stage).lower() in _COLD_START_STAGE_NAMES:
+            return True
+
+    return False
+
+
 def _get_correlation_id() -> str:
     """
     Generate a fresh correlation ID for tracking a single finalization operation.
@@ -233,6 +292,24 @@ async def _finalize_job_success_impl(
         # 2. Update job with final status - ATOMIC operation
         # This is the critical state transition that makes artifacts visible.
         # Honour completed_with_warnings from the pipeline result when present.
+
+        # Check for cold-start import failure — this is a hard failure that should
+        # NOT be overridden to COMPLETED even if the pipeline "completed" its stages.
+        if pipeline_result_has_cold_start_failure(result):
+            job.status = JobStatus.FAILED
+            job.current_stage = JobStage.COMPLETED
+            job.completed_at = datetime.now(timezone.utc)
+            job.updated_at = datetime.now(timezone.utc)
+            job.metadata["failure_reason"] = "cold_start_import_test_failed"
+            logger.error(
+                f"Job {job_id} cold-start import test FAILED — finalizing as FAILED, not COMPLETED",
+                extra={"job_id": job_id, "correlation_id": correlation_id},
+            )
+            _finalized_jobs.add(job_id)
+            if METRICS_AVAILABLE:
+                job_finalization_total.labels(job_id=job_id, result="cold_start_failed").inc()
+            return True
+
         _pipeline_status = result.get("status") if result else None
         if _pipeline_status == "completed_with_warnings":
             job.status = JobStatus.COMPLETED_WITH_WARNINGS
