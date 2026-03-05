@@ -285,17 +285,21 @@ except Exception:
 class EVMConfig(BaseModel):
     """Configuration schema for EVM client."""
 
+    # Security flag must precede rpc_url so validate_rpc_url_scheme can read it
+    allow_insecure_http: bool = False
+
     rpc_url: HttpUrl
     chain_id: int = Field(..., ge=1)
     contract_address: str = Field(..., pattern=r"^0x[a-fA-F0-9]{40}$")
     contract_abi_path: str = Field(..., min_length=1)
 
-    private_key: Optional[str] = None  # Non-prod only; prod requires secrets backend
-    secrets_provider: Optional[str] = None  # "aws", "azure", "gcp"
-    private_key_secret_id: Optional[str] = None
+    # Secrets fields must precede private_key so validators can access them
     secrets_provider_config: Optional[Dict[str, Any]] = (
         None  # e.g., {"vault_url":"..."}, {"project_id":"..."}
     )
+    secrets_provider: Optional[str] = None  # "aws", "azure", "gcp"
+    private_key_secret_id: Optional[str] = None
+    private_key: Optional[str] = None  # Non-prod only; prod requires secrets backend
 
     poa_middleware: bool = False
     default_gas_limit: int = Field(2_000_000, ge=21_000)
@@ -314,31 +318,28 @@ class EVMConfig(BaseModel):
     close_timeout: float = Field(5.0, ge=0.1)
     log_format: str = Field("json", pattern=r"^(json|text)$")
 
-    # Security
-    allow_insecure_http: bool = False
-
-    @classmethod
     @field_validator("rpc_url")
-    def validate_rpc_url_scheme(cls, v, values):
+    @classmethod
+    def validate_rpc_url_scheme(cls, v, info):
         parsed = urlparse(str(v))
         if parsed.scheme not in ("http", "https"):
             raise ValueError("rpc_url must use http or https scheme")
         if (
             PRODUCTION_MODE
             and parsed.scheme == "http"
-            and not values.get("allow_insecure_http", False)
+            and not info.data.get("allow_insecure_http", False)
         ):
             raise ValueError(
                 "In PRODUCTION_MODE, HTTPS is required for rpc_url unless allow_insecure_http is true."
             )
         return v
 
-    @classmethod
     @field_validator("private_key", mode='before')
-    def validate_private_key_presence(cls, v, values):
+    @classmethod
+    def validate_private_key_presence(cls, v, info):
         # In production, require secrets provider; no inline private key allowed
         if PRODUCTION_MODE:
-            if not values.get("secrets_provider") or not values.get(
+            if not info.data.get("secrets_provider") or not info.data.get(
                 "private_key_secret_id"
             ):
                 raise ValueError(
@@ -349,8 +350,8 @@ class EVMConfig(BaseModel):
         # Non-prod: allow direct key, env fallback, or secrets backend
         if (
             v is None
-            and not values.get("private_key_secret_id")
-            and not values.get("secrets_provider")
+            and not info.data.get("private_key_secret_id")
+            and not info.data.get("secrets_provider")
         ):
             env_key = os.getenv("ETHEREUM_PRIVATE_KEY")
             if not env_key:
@@ -365,18 +366,18 @@ class EVMConfig(BaseModel):
             )
         return v
 
-    @classmethod
     @field_validator("secrets_provider")
-    def validate_secrets_provider_type(cls, v, values):
+    @classmethod
+    def validate_secrets_provider_type(cls, v, info):
         if v and v not in ("aws", "azure", "gcp"):
             raise ValueError("secrets_provider must be one of 'aws', 'azure', 'gcp'.")
-        if v == "azure" and not values.get("secrets_provider_config", {}).get(
+        if v == "azure" and not (info.data.get("secrets_provider_config") or {}).get(
             "vault_url"
         ):
             raise ValueError(
                 "secrets_provider_config.vault_url required for Azure Key Vault."
             )
-        if v == "gcp" and not values.get("secrets_provider_config", {}).get(
+        if v == "gcp" and not (info.data.get("secrets_provider_config") or {}).get(
             "project_id"
         ):
             raise ValueError(
@@ -384,8 +385,8 @@ class EVMConfig(BaseModel):
             )
         return v
 
-    @classmethod
     @field_validator("rpc_url")
+    @classmethod
     def validate_rpc_url_not_mock(cls, v):
         s = str(v).lower()
         if PRODUCTION_MODE and any(
