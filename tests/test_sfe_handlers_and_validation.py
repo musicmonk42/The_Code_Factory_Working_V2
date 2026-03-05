@@ -663,3 +663,178 @@ class TestPydanticV2StubGeneration:
                             f"(found in class Order):\n{models_out}"
                         )
                 break
+
+
+# ===========================================================================
+# _count_pytest_collection_errors tests
+# ===========================================================================
+
+
+class TestCountPytestCollectionErrors:
+    """Unit tests for SFEService._count_pytest_collection_errors."""
+
+    def _count(self, output: str) -> int:
+        svc = _make_sfe_service()
+        return svc._count_pytest_collection_errors(output)
+
+    def test_no_errors_returns_zero(self):
+        output = "3 passed in 0.12s\n"
+        assert self._count(output) == 0
+
+    def test_error_lines_counted(self):
+        output = (
+            "ERROR collecting tests/test_foo.py\n"
+            "ImportError: No module named 'missing_mod'\n"
+            "ERROR collecting tests/test_bar.py\n"
+            "ImportError: cannot import name 'X'\n"
+            "2 errors\n"
+        )
+        assert self._count(output) == 2
+
+    def test_summary_line_only(self):
+        output = "collected 0 items / 1 error\n"
+        assert self._count(output) == 1
+
+    def test_error_line_with_no_summary(self):
+        output = "ERROR tests/test_baz.py - ImportError: oops\n"
+        assert self._count(output) >= 1
+
+
+# ===========================================================================
+# validate_fix_in_sandbox bootability acceptance tests
+# ===========================================================================
+
+
+class TestValidateFixInSandboxBootability:
+    """Tests for the bootability-improvement acceptance path.
+
+    Uses subprocess mocking to avoid spawning real pytest processes.
+    """
+
+    def _make_fix(self, fix_id: str, proposed_changes=None):
+        """Return a minimal Fix-like object for the given fix_id."""
+        fix = MagicMock()
+        fix.proposed_changes = proposed_changes or []
+        fix.job_id = "job-test"
+        fix.validation_status = None
+        fix.validation_result = None
+        return fix
+
+    @pytest.mark.asyncio
+    async def test_bootability_fix_accepted_when_collection_errors_resolved(
+        self, tmp_path
+    ):
+        """A fix that eliminates collection/import errors is accepted even when
+        no tests pass in the post-fix run (other tests may still fail for
+        unrelated reasons)."""
+        svc = _make_sfe_service()
+        fix_id = "fix-bootability-1"
+        fix = self._make_fix(fix_id)
+
+        # Baseline: 1 collection error (import fails before fix)
+        baseline_result = MagicMock()
+        baseline_result.stdout = (
+            "ERROR collecting tests/test_app.py\n"
+            "ImportError: No module named 'missing_module'\n"
+            "1 error\n"
+        )
+        baseline_result.stderr = ""
+        baseline_result.returncode = 2
+
+        # Post-fix: no collection errors but 2 tests still fail (unrelated)
+        post_fix_result = MagicMock()
+        post_fix_result.stdout = (
+            "FAILED tests/test_app.py::test_one - AssertionError\n"
+            "FAILED tests/test_app.py::test_two - AssertionError\n"
+            "2 failed in 0.45s\n"
+        )
+        post_fix_result.stderr = ""
+        post_fix_result.returncode = 1
+
+        with (
+            patch("server.storage.fixes_db") as mock_db,
+            patch.object(svc, "_resolve_job_code_path", return_value=str(tmp_path)),
+            patch("shutil.copytree"),
+            patch(
+                "subprocess.run",
+                side_effect=[baseline_result, post_fix_result],
+            ),
+        ):
+            mock_db.get.return_value = fix
+            result = await svc.validate_fix_in_sandbox(fix_id, "job-test")
+
+        assert result["status"] == "validated", (
+            f"Expected 'validated' for a fix that eliminated collection errors; "
+            f"got: {result}"
+        )
+        result_data = result["result"]
+        assert result_data["baseline_collection_errors"] == 1
+        assert result_data["post_fix_collection_errors"] == 0
+
+    @pytest.mark.asyncio
+    async def test_non_bootability_fix_still_rejected_when_no_improvement(
+        self, tmp_path
+    ):
+        """A fix that neither passes tests nor reduces collection errors must
+        still be rejected."""
+        svc = _make_sfe_service()
+        fix_id = "fix-no-improve"
+        fix = self._make_fix(fix_id)
+
+        baseline_result = MagicMock()
+        baseline_result.stdout = "1 failed in 0.10s\n"
+        baseline_result.stderr = ""
+        baseline_result.returncode = 1
+
+        post_fix_result = MagicMock()
+        post_fix_result.stdout = "1 failed in 0.10s\n"
+        post_fix_result.stderr = ""
+        post_fix_result.returncode = 1
+
+        with (
+            patch("server.storage.fixes_db") as mock_db,
+            patch.object(svc, "_resolve_job_code_path", return_value=str(tmp_path)),
+            patch("shutil.copytree"),
+            patch(
+                "subprocess.run",
+                side_effect=[baseline_result, post_fix_result],
+            ),
+        ):
+            mock_db.get.return_value = fix
+            result = await svc.validate_fix_in_sandbox(fix_id, "job-test")
+
+        assert result["status"] == "rejected", (
+            f"Expected 'rejected' when fix did not improve anything; got: {result}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_tests_passing_still_accepted(self, tmp_path):
+        """The original acceptance path (tests pass) still works."""
+        svc = _make_sfe_service()
+        fix_id = "fix-tests-pass"
+        fix = self._make_fix(fix_id)
+
+        baseline_result = MagicMock()
+        baseline_result.stdout = "2 failed in 0.20s\n"
+        baseline_result.stderr = ""
+        baseline_result.returncode = 1
+
+        post_fix_result = MagicMock()
+        post_fix_result.stdout = "2 passed in 0.18s\n"
+        post_fix_result.stderr = ""
+        post_fix_result.returncode = 0
+
+        with (
+            patch("server.storage.fixes_db") as mock_db,
+            patch.object(svc, "_resolve_job_code_path", return_value=str(tmp_path)),
+            patch("shutil.copytree"),
+            patch(
+                "subprocess.run",
+                side_effect=[baseline_result, post_fix_result],
+            ),
+        ):
+            mock_db.get.return_value = fix
+            result = await svc.validate_fix_in_sandbox(fix_id, "job-test")
+
+        assert result["status"] == "validated"
+        assert result["result"]["tests_passed"] == 2

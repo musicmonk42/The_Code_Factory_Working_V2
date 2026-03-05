@@ -845,13 +845,40 @@ class SFEService:
 
         return "test"
 
+    @staticmethod
+    def _count_pytest_collection_errors(output: str) -> int:
+        """Count pytest collection/import errors in combined stdout+stderr output.
+
+        pytest reports import/bootability errors as lines starting with 'ERROR'
+        (e.g. ``ERROR collecting tests/test_foo.py``) and in the summary line
+        (e.g. ``1 error`` or ``3 errors``).  We take the maximum of the two
+        counting strategies so that we are robust to varying pytest versions.
+        """
+        error_line_count = sum(
+            1 for ln in output.splitlines() if re.match(r"^ERROR\b", ln.strip())
+        )
+        summary_count = 0
+        m = re.search(r"(\d+) errors?", output)
+        if m:
+            summary_count = int(m.group(1))
+        return max(error_line_count, summary_count)
+
     async def validate_fix_in_sandbox(
         self, fix_id: str, job_id: str
     ) -> Dict[str, Any]:
         """Validate a proposed fix by running tests in a sandbox before approval.
 
-        Copies the job codebase to a temp directory, applies the fix, runs pytest,
-        and returns whether the fix improved test results.
+        Copies the job codebase to a temp directory, runs a baseline collection
+        check (``pytest --collect-only``) to detect pre-existing import/bootability
+        errors, applies the fix, then runs the full test suite.
+
+        A fix is accepted when any of the following are true after it is applied:
+
+        * ``pytest`` exits with return-code 0 (all tests pass).
+        * At least one test passes.
+        * The baseline had collection/import errors **and** the post-fix run has
+          fewer such errors — i.e. the fix improved bootability even if some
+          unrelated tests still fail.
         """
         import shutil
         import subprocess
@@ -875,6 +902,28 @@ class SFEService:
         try:
             sandbox_code_dir = Path(sandbox_dir) / "code"
             shutil.copytree(job_path, str(sandbox_code_dir), dirs_exist_ok=True)
+
+            # ------------------------------------------------------------------
+            # Baseline: run collect-only BEFORE applying the fix to detect
+            # pre-existing import / bootability errors.  This is fast (no tests
+            # are executed) and gives us a reference count of collection errors
+            # so that we can accept fixes that resolve them even when unrelated
+            # tests still fail.
+            # ------------------------------------------------------------------
+            baseline_proc = subprocess.run(
+                ["python", "-m", "pytest", "--collect-only", "-q", "--tb=line"],
+                cwd=str(sandbox_code_dir),
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            baseline_output = baseline_proc.stdout + baseline_proc.stderr
+            baseline_collection_errors = self._count_pytest_collection_errors(baseline_output)
+            logger.debug(
+                "[SFE] Fix %s baseline collection errors: %d",
+                fix_id,
+                baseline_collection_errors,
+            )
 
             # Apply proposed changes to the sandbox copy
             for change in fix.proposed_changes:
@@ -925,29 +974,51 @@ class SFEService:
                     m2 = re.search(r"(\d+) failed", ln)
                     if m2:
                         failed = int(m2.group(1))
+            post_fix_output = proc.stdout + proc.stderr
+            post_fix_collection_errors = self._count_pytest_collection_errors(post_fix_output)
             validation_result = {
                 "tests_passed": passed,
                 "tests_failed": failed,
                 "returncode": proc.returncode,
                 "stdout": proc.stdout[-2000:],
+                "baseline_collection_errors": baseline_collection_errors,
+                "post_fix_collection_errors": post_fix_collection_errors,
             }
 
+            # Accept the fix when tests pass normally …
             if proc.returncode == 0 or passed > 0:
                 fix.validation_status = "validated"
                 fix.validation_result = validation_result
                 logger.info(f"[SFE] Fix {fix_id} validated: {passed} tests passed")
                 return {"status": "validated", "result": validation_result}
-            else:
-                fix.validation_status = "rejected"
+
+            # … or when it resolved bootability/import errors that previously
+            # prevented test collection.  The fix is accepted even if some
+            # unrelated tests still fail, because eliminating collection errors
+            # is a genuine improvement in the health of the codebase.
+            if baseline_collection_errors > 0 and post_fix_collection_errors < baseline_collection_errors:
+                fix.validation_status = "validated"
                 fix.validation_result = validation_result
-                logger.warning(
-                    f"[SFE] Fix {fix_id} rejected: did not improve test results"
+                logger.info(
+                    "[SFE] Fix %s validated: resolved %d collection error(s) "
+                    "(baseline=%d, post-fix=%d)",
+                    fix_id,
+                    baseline_collection_errors - post_fix_collection_errors,
+                    baseline_collection_errors,
+                    post_fix_collection_errors,
                 )
-                return {
-                    "status": "rejected",
-                    "reason": "Fix did not improve test results",
-                    "result": validation_result,
-                }
+                return {"status": "validated", "result": validation_result}
+
+            fix.validation_status = "rejected"
+            fix.validation_result = validation_result
+            logger.warning(
+                f"[SFE] Fix {fix_id} rejected: did not improve test results"
+            )
+            return {
+                "status": "rejected",
+                "reason": "Fix did not improve test results",
+                "result": validation_result,
+            }
         except subprocess.TimeoutExpired:
             logger.error(f"[SFE] Sandbox validation timed out for fix {fix_id}")
             return {"status": "error", "reason": "Sandbox validation timed out"}
