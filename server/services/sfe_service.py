@@ -2138,6 +2138,9 @@ class SFEService:
     # Maximum characters of file content to include in an LLM fix prompt.
     # Keeps requests within token limits while providing sufficient context.
     _MAX_LLM_FILE_CONTENT_CHARS = 8_000
+    # Maximum characters of feedback detail to inject into the retry prompt.
+    # Prevents oversized payloads while still conveying the rejection reason.
+    _MAX_FEEDBACK_DETAIL_CHARS = 500
     # Base directory for job uploads, relative to the server working directory.
     _UPLOADS_BASE_DIR = Path("uploads")
     # Valid action values that the LLM is allowed to return for code fixes.
@@ -2677,12 +2680,22 @@ class SFEService:
             "extra_changes": import_changes,
         }
 
-    async def propose_fix(self, error_id: str) -> Dict[str, Any]:
+    async def propose_fix(
+        self,
+        error_id: str,
+        feedback: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Propose a fix for a detected error using actual SFE components.
 
         Args:
             error_id: Error identifier
+            feedback: Optional previous sandbox validation result dict. When
+                provided (e.g. on a retry after a failed validation) the
+                rejection reason and any available details are included in the
+                LLM prompt so the next proposal can avoid repeating the same
+                mistake. Callers that omit this argument retain the original
+                behaviour.
 
         Returns:
             Fix proposal with real code fixes (not TODO placeholders)
@@ -2693,7 +2706,7 @@ class SFEService:
         3. Generates real fixes using ImportFixerEngine and other tools
         4. Falls back gracefully to TODO placeholders only when necessary
         """
-        logger.info(f"Proposing fix for error {error_id}")
+        logger.info(f"Proposing fix for error {error_id}{' (with feedback)' if feedback else ''}")
 
         # Look up error from cache
         error_data = self._errors_cache.get(error_id)
@@ -2860,13 +2873,31 @@ class SFEService:
                     "java": "Java", "go": "Go", "rb": "Ruby", "rs": "Rust",
                 }.get(file_ext, file_ext or "code")
 
+                feedback_section = ""
+                if feedback:
+                    feedback_reason = feedback.get("reason") or feedback.get("status", "unknown")
+                    feedback_detail = feedback.get("detail") or feedback.get("output", "")
+                    feedback_section = (
+                        f"\nPrevious fix attempt was REJECTED by sandbox validation.\n"
+                        f"Rejection reason: {feedback_reason}\n"
+                    )
+                    if feedback_detail:
+                        # Limit feedback detail to avoid oversized prompts
+                        feedback_section += (
+                            f"Rejection details (first {self._MAX_FEEDBACK_DETAIL_CHARS} chars): "
+                            f"{str(feedback_detail)[:self._MAX_FEEDBACK_DETAIL_CHARS]}\n"
+                        )
+                    feedback_section += (
+                        "Please propose a DIFFERENT fix that addresses this rejection.\n"
+                    )
+
                 fix_prompt = f"""You are a code fixer. Fix the following issue in a {lang} file.
 
 Error: {error_type}
 Message: {message}
 File: {file_path_str}
 Line: {line}
-
+{feedback_section}
 Current file content:
 ```{file_ext}
 {file_content}
