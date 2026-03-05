@@ -563,21 +563,32 @@ async def test_get_or_create_agent_with_token(
 # --- Test for Configuration Validation ---
 
 
-def test_validate_environment(mock_env_vars, monkeypatch):
-    """Test environment validation"""
+def test_validate_environment(monkeypatch):
+    """Test environment validation.
+
+    Uses monkeypatch exclusively for environment management to avoid
+    subtle interactions between patch.dict and monkeypatch.delenv that
+    can cause flaky failures in CI.
+    """
     from intent_capture.agent_core import validate_environment
+
+    # Set up all required env vars via monkeypatch for full control
+    monkeypatch.setenv("JWT_SECRET", "test_secret_key_that_is_at_least_32_characters_long")
+    monkeypatch.setenv("OPENAI_API_KEYS", "test_openai_key_1,test_openai_key_2")
+    monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/0")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("USE_VECTOR_MEMORY", "false")
 
     # Should pass with all required vars
     validate_environment()
 
-    # Should fail with missing JWT_SECRET.  Use monkeypatch.delenv to robustly
-    # remove JWT_SECRET regardless of any ambient CI environment variable.
+    # Should fail with missing JWT_SECRET
     monkeypatch.delenv("JWT_SECRET", raising=False)
     with pytest.raises(ConfigurationError, match="JWT_SECRET"):
         validate_environment()
 
     # Restore JWT_SECRET then remove OPENAI_API_KEYS
-    monkeypatch.setenv("JWT_SECRET", mock_env_vars["JWT_SECRET"])
+    monkeypatch.setenv("JWT_SECRET", "test_secret_key_that_is_at_least_32_characters_long")
     monkeypatch.delenv("OPENAI_API_KEYS", raising=False)
     with pytest.raises(ConfigurationError, match="OPENAI_API_KEYS"):
         validate_environment()
