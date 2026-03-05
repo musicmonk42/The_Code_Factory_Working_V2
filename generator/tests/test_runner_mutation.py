@@ -391,7 +391,14 @@ async def test_run_subprocess_safe_timeout(
 ):
     """
     If the subprocess does not complete within timeout, _run_subprocess_safe
-    should raise the custom TimeoutError from runner_errors.
+    should raise generator.runner.runner_errors.TimeoutError exactly once.
+
+    Import note: runner_mutation.py shadows the built-in TimeoutError with
+    runner_errors.TimeoutError.  We import it explicitly with an alias here to
+    avoid that shadowing and to make it unambiguous which class we are asserting
+    on.  In Python 3.11+ asyncio.TimeoutError is an alias for the built-in
+    TimeoutError; runner_errors.TimeoutError is a *different* class that
+    inherits from RunnerError, not from the built-in TimeoutError.
     """
 
     class FakeProcess:
@@ -418,6 +425,8 @@ async def test_run_subprocess_safe_timeout(
     monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
     monkeypatch.setattr(asyncio, "wait_for", fake_wait_for)
 
+    # Import with explicit alias to avoid masking by runner_mutation's local
+    # ``TimeoutError`` name (which refers to runner_errors.TimeoutError).
     from generator.runner.runner_errors import TimeoutError as RunnerTimeoutError
 
     with pytest.raises(RunnerTimeoutError):
