@@ -822,18 +822,26 @@ yarn-error.log*
                 re.MULTILINE | re.IGNORECASE,
             )
             if _app_copy_re.search(dockerfile_content):
-                # Only warn if there is no explicit site-packages copy alongside it.
-                _has_site_packages_copy = bool(
-                    re.search(r'COPY\s+--from=\S+\s+\S*site-packages', dockerfile_content, re.IGNORECASE)
+                # The Dockerfile is fine if it copies one of:
+                #  a) explicit site-packages directory  (pip install, no venv)
+                #  b) a Python virtual-environment directory  (pip install into venv)
+                #  c) /usr/local  (covers the entire Python prefix)
+                # Any of these ensures runtime deps are present in the final stage.
+                _has_deps_copy = bool(
+                    re.search(
+                        r'COPY\s+--from=\S+\s+\S*(?:site-packages|venv|\.venv|/usr/local)',
+                        dockerfile_content,
+                        re.IGNORECASE,
+                    )
                 )
-                if not _has_site_packages_copy:
+                if not _has_deps_copy:
                     logger.warning(
                         "[DOCKER] Multi-stage build copies /app but may miss pip site-packages"
                     )
                     warnings.append(
                         "Multi-stage Dockerfile copies /app from a builder stage but pip packages "
-                        "are in site-packages — consider also copying site-packages or using "
-                        "'pip install --user'"
+                        "may not be present in the final stage — ensure site-packages, a venv "
+                        "directory, or /usr/local is also copied from the builder"
                     )
 
         return dockerfile_content, warnings

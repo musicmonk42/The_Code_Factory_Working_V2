@@ -85,6 +85,13 @@ data:
   # gpt-4o-mini before falling back to hard token-budget truncation.
   # Override: kubectl set env deployment/codefactory DOCGEN_PROMPT_MIN_LENGTH=1200 -n codefactory
   DOCGEN_PROMPT_MIN_LENGTH: "800"
+  # Docgen context pre-summarisation.  When the total file context assembled for
+  # the docgen prompt exceeds DOCGEN_MAX_CONTEXT_CHARS, each file is truncated to
+  # its first DOCGEN_TRUNCATION_LINES lines.  Prevents >150s prompt latency for
+  # large codebases.
+  # Override: kubectl set env ... DOCGEN_MAX_CONTEXT_CHARS=40000
+  DOCGEN_MAX_CONTEXT_CHARS: "30000"
+  DOCGEN_TRUNCATION_LINES: "100"
   # LLM_USE_MOCK: set to "true" ONLY for non-production testing without real API keys.
   # agent_core.init_llm() raises ValueError on a missing key unless this
   # flag is "true". Never enable in staging or production deployments.
@@ -117,6 +124,11 @@ data:
   PIPELINE_CRITIQUE_TIMEOUT_SECONDS: "180"
   # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
   ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
+  # RAG/vector DB for context-aware critique.  Set to "true" and configure
+  # VECTOR_DB_PROVIDER + VECTOR_DB_URL (via Secret) to enable.  When "false" the
+  # critique agent falls back to static analysis only.
+  # Override: kubectl set env ... RAG_ENABLED=true
+  RAG_ENABLED: "false"
   # Strict-mode flag for the codegen agent (generator/agents/codegen_agent/__init__.py).
   # When "1", the agent raises RunnerDependencyUnavailableError at startup if the runner
   # foundation (llm_client, runner_config, etc.) cannot be imported.
@@ -250,6 +262,10 @@ data:
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "64"
   OTEL_BSP_SCHEDULE_DELAY: "10000"
   OTEL_BSP_MAX_QUEUE_SIZE: "2048"
+  # Batch per-file lint OTEL spans into a single parent span instead of emitting
+  # one child span per file.  Reduces span volume by up to 45x on large repos.
+  # Override: kubectl set env ... OTEL_BATCH_LINT_SPANS=false
+  OTEL_BATCH_LINT_SPANS: "true"
   # Set below 1.0 to sample traces (e.g. "0.5" = 50 %); "1.0" = sample all (default).
   # Override: kubectl set env deployment/codefactory-api OTEL_TRACES_SAMPLE_RATE=0.5 -n codefactory
   OTEL_TRACES_SAMPLE_RATE: "1.0"
@@ -276,6 +292,14 @@ data:
   SFE_SKIP_PYLINT: "false"
   # Fast-mode skips both Pylint and Mypy, running only Bandit (security) and Radon (complexity).
   SFE_FAST_MODE: "false"
+  # Skip Alembic migrations during analysis-only SFE runs (saves ~39s per run).
+  # Set to "true" in environments where migrations are managed externally.
+  # Override: kubectl set env ... SFE_SKIP_MIGRATE_ON_ANALYSIS=true
+  SFE_SKIP_MIGRATE_ON_ANALYSIS: "false"
+  # AUTO_MIGRATE: "0" disables automatic Alembic upgrade at app startup.
+  # Migrations are handled by the k8s migration Job (k8s/base/migration-job.yaml).
+  # Set to "1" only if no external migration mechanism is present.
+  AUTO_MIGRATE: "0"
 
   # ============================================
   # Self-Healing Import Fixer (SHIF) Settings

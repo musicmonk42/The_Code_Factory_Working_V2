@@ -124,6 +124,9 @@ services:
       # When gpt-3.5-turbo compresses below this threshold, the system retries with
       # gpt-4o-mini before falling back to hard token-budget truncation.
       - DOCGEN_PROMPT_MIN_LENGTH=${DOCGEN_PROMPT_MIN_LENGTH:-800}
+      # Docgen context pre-summarisation — truncate files to avoid >150s prompt latency.
+      - DOCGEN_MAX_CONTEXT_CHARS=${DOCGEN_MAX_CONTEXT_CHARS:-30000}
+      - DOCGEN_TRUNCATION_LINES=${DOCGEN_TRUNCATION_LINES:-100}
       # Multi-pass code generation thresholds.
       # When a spec reaches either threshold the codegen agent splits generation into
       # sequential passes and auto-enables ensemble voting per chunk.
@@ -220,6 +223,10 @@ services:
       - OTEL_BSP_MAX_EXPORT_BATCH_SIZE=${OTEL_BSP_MAX_EXPORT_BATCH_SIZE:-64}
       - OTEL_BSP_SCHEDULE_DELAY=${OTEL_BSP_SCHEDULE_DELAY:-10000}
       - OTEL_BSP_MAX_QUEUE_SIZE=${OTEL_BSP_MAX_QUEUE_SIZE:-2048}
+      # Batch per-file lint spans into a single parent span to avoid Railway rate limit.
+      - OTEL_BATCH_LINT_SPANS=${OTEL_BATCH_LINT_SPANS:-true}
+      # RAG/vector DB for context-aware critique (off by default).
+      - RAG_ENABLED=${RAG_ENABLED:-false}
       # Set below 1.0 to sample traces (e.g. 0.5 = 50 %); 1.0 = sample all (default).
       - OTEL_TRACES_SAMPLE_RATE=${OTEL_TRACES_SAMPLE_RATE:-1.0}
 
@@ -244,6 +251,10 @@ services:
       - SFE_SKIP_PYLINT=${SFE_SKIP_PYLINT:-false}
       # SFE_FAST_MODE=true skips both Pylint and Mypy, running only Bandit + Radon.
       - SFE_FAST_MODE=${SFE_FAST_MODE:-false}
+      # Skip Alembic migrations during analysis-only runs (~39s saving per run).
+      - SFE_SKIP_MIGRATE_ON_ANALYSIS=${SFE_SKIP_MIGRATE_ON_ANALYSIS:-false}
+      # AUTO_MIGRATE=0 disables automatic Alembic upgrade at startup.
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-0}
 
       # ============================================
       # Arbiter Configuration

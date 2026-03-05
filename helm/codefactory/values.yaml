@@ -269,6 +269,13 @@ env:
   # retries with gpt-4o-mini before falling back to hard token-budget truncation.
   # Override: helm upgrade --set env.DOCGEN_PROMPT_MIN_LENGTH=1200 ...
   DOCGEN_PROMPT_MIN_LENGTH: "800"
+  # Docgen context pre-summarisation.  When the total file context assembled for
+  # the docgen prompt exceeds DOCGEN_MAX_CONTEXT_CHARS, each file is truncated to
+  # its first DOCGEN_TRUNCATION_LINES lines.  This prevents the >150s latency
+  # observed in production when large codebases are included verbatim.
+  # Override: helm upgrade --set env.DOCGEN_MAX_CONTEXT_CHARS=40000 ...
+  DOCGEN_MAX_CONTEXT_CHARS: "30000"
+  DOCGEN_TRUNCATION_LINES: "100"
   # LLM_USE_MOCK: set to "true" ONLY for non-production testing when no real API keys are
   # available. agent_core.init_llm() raises ValueError on a missing key unless
   # this flag is "true". Never enable in staging or production deployments.
@@ -302,6 +309,11 @@ env:
   # Per-provider timeout for each individual ensemble LLM call (300 s = 5 minutes).
   # Override: helm upgrade --set env.ENSEMBLE_PROVIDER_TIMEOUT_SECONDS=360 ...
   ENSEMBLE_PROVIDER_TIMEOUT_SECONDS: "300"
+  # RAG/vector DB for context-aware critique.  Set RAG_ENABLED=true and configure
+  # VECTOR_DB_PROVIDER + VECTOR_DB_URL (via secret) to enable.  When false the
+  # critique agent falls back to static analysis only.
+  # Override: helm upgrade --set env.RAG_ENABLED=true ...
+  RAG_ENABLED: "false"
   # Strict-mode flag for the codegen agent (generator/agents/codegen_agent/__init__.py).
   # When "1", the agent raises RunnerDependencyUnavailableError at startup if the runner
   # foundation (llm_client, runner_config, etc.) cannot be imported.
@@ -509,6 +521,11 @@ env:
   OTEL_BSP_MAX_EXPORT_BATCH_SIZE: "64"
   OTEL_BSP_SCHEDULE_DELAY: "10000"
   OTEL_BSP_MAX_QUEUE_SIZE: "2048"
+  # Batch per-file lint OTEL spans into a single parent span instead of emitting
+  # one child span per file.  Reduces span volume by up to 45x on large repos.
+  # Only files with lint errors > 0 still get individual spans.
+  # Override: helm upgrade --set env.OTEL_BATCH_LINT_SPANS=false ...
+  OTEL_BATCH_LINT_SPANS: "true"
   # Set below 1.0 to sample traces (e.g. "0.5" = 50 %); "1.0" = sample all (default).
   # Override: helm upgrade --set env.OTEL_TRACES_SAMPLE_RATE=0.5 ...
   OTEL_TRACES_SAMPLE_RATE: "1.0"
@@ -536,6 +553,14 @@ env:
   # Fast-mode skips both Pylint and Mypy, running only Bandit (security) and Radon (complexity).
   # Useful for CI pipelines that prioritise speed over completeness.
   SFE_FAST_MODE: "false"
+  # Skip Alembic migrations during analysis-only SFE runs (saves ~39s per run).
+  # Set to "true" in environments where migrations are managed externally (Helm job, CI).
+  # Override: helm upgrade --set env.SFE_SKIP_MIGRATE_ON_ANALYSIS=true ...
+  SFE_SKIP_MIGRATE_ON_ANALYSIS: "false"
+  # AUTO_MIGRATE: "0" disables automatic Alembic runs at app startup.
+  # Migrations are handled by the Helm initContainer / k8s migration Job instead.
+  # Set to "1" only in environments where no external migration mechanism exists.
+  AUTO_MIGRATE: "0"
 
   # ============================================
   # Self-Healing Import Fixer (SHIF) Settings
