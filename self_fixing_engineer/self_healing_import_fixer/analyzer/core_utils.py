@@ -491,21 +491,21 @@ def retry_with_backoff(
             backoff = initial_backoff
             last_exception = None
 
-            for attempt in range(max_retries + 1):
+            for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
                 except exceptions as e:
                     last_exception = e
-                    if attempt < max_retries:
+                    if attempt < max_retries - 1:
                         logger.warning(
-                            f"Attempt {attempt + 1}/{max_retries + 1} failed for {func.__name__}: {e}. "
+                            f"Attempt {attempt + 1}/{max_retries} failed for {func.__name__}: {e}. "
                             f"Retrying in {backoff:.1f}s..."
                         )
                         time.sleep(backoff)
                         backoff = min(backoff * backoff_multiplier, max_backoff)
                     else:
                         logger.error(
-                            f"All {max_retries + 1} attempts failed for {func.__name__}"
+                            f"All {max_retries} attempts failed for {func.__name__}"
                         )
 
             raise last_exception
