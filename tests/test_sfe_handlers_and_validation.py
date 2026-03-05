@@ -88,7 +88,13 @@ class TestGenerateSchemaFix:
         assert result is None
 
     def test_generates_class_with_merged_fields(self, tmp_path):
-        """Schema handler must merge fields from sibling classes into the new class."""
+        """Schema handler must generate a class alias when Read variant exists.
+
+        Previously, the handler merged fields from sibling classes into a new
+        class.  The improved behavior prefers a class inheritance alias to
+        PrescriptionRead when a Read variant is available, which is safer and
+        avoids duplicating field definitions.
+        """
         schemas_content = (
             "from pydantic import BaseModel, ConfigDict\n\n"
             "class PrescriptionCreate(BaseModel):\n"
@@ -110,13 +116,12 @@ class TestGenerateSchemaFix:
         assert result["success"] is True
         assert result["action"] == "insert"
         content = result["content"]
-        assert "class Prescription(BaseModel):" in content
-        assert "model_config = ConfigDict(from_attributes=True)" in content
-        assert "medication" in content
-        assert result["confidence"] >= 0.75
+        # New behavior: use class inheritance alias from PrescriptionRead
+        assert "class Prescription(PrescriptionRead):" in content
+        assert result["confidence"] >= 0.85
 
     def test_generates_type_alias_when_read_variant_exists(self, tmp_path):
-        """When only a <Name>Read class exists and no annotated siblings, emit a type alias."""
+        """When a <Name>Read class exists, emit a class inheritance alias (not a simple = alias)."""
         schemas_content = (
             "from pydantic import BaseModel\n\n"
             "class TokenRead(BaseModel):\n"
@@ -133,7 +138,9 @@ class TestGenerateSchemaFix:
         )
         assert result is not None
         assert result["success"] is True
-        assert "Token = TokenRead" in result["content"]
+        # New behavior: class inheritance alias for FastAPI response_model compatibility
+        assert "class Token(TokenRead):" in result["content"]
+        assert result["confidence"] >= 0.85
 
     def test_generates_stub_when_no_siblings(self, tmp_path):
         """When no sibling classes exist, a minimal BaseModel stub must be generated."""

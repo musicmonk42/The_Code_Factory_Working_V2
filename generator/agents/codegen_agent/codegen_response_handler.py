@@ -5940,12 +5940,14 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
             # so the APIRouter import can be emitted once at the module header.
             pass  # fall through to stub generation below
         elif not _is_stub_content(code_files[target_module_path]):
-            # Fix 2: file already has real (non-stub) content — do NOT overwrite it.
+            # Fix 2: file already has real (non-stub) content.
+            # We must NOT overwrite it, but we CAN append any symbols that are
+            # genuinely missing from it.  Fall through to the append-missing path
+            # below (line 6210+) which correctly handles real-content files.
             logger.info(
-                "ensure_local_module_stubs: skipping %s — file already has non-stub content (%d bytes)",
-                target_module_path, len(code_files[target_module_path]),
+                "ensure_local_module_stubs: %s has real content — checking for missing symbols to append",
+                target_module_path,
             )
-            continue
 
         if target_module_path not in code_files:
             # Module file is entirely missing — generate a stub.
