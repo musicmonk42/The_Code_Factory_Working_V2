@@ -490,6 +490,7 @@ async def apply_fix(
     **Request Body:**
     - force: Force application even if conditions aren't met
     - dry_run: Simulate application without making changes
+    - skip_validation: Skip sandbox validation (not recommended for production)
 
     **Returns:**
     - Application result including:
@@ -504,6 +505,7 @@ async def apply_fix(
     **Errors:**
     - 404: Fix not found
     - 400: Fix not approved or already applied
+    - 422: Sandbox validation failed (fix not applied)
     """
     if fix_id not in fixes_db:
         raise HTTPException(status_code=404, detail=f"Fix {fix_id} not found")
@@ -520,6 +522,45 @@ async def apply_fix(
         raise HTTPException(
             status_code=400,
             detail=f"Fix {fix_id} is already applied",
+        )
+
+    # Sandbox validation gate: validate before applying unless explicitly skipped
+    if not request.dry_run and not request.skip_validation:
+        job_id = fix.job_id or ""
+        # Skip validation when the fix was already validated during the review step
+        already_validated = getattr(fix, "validation_status", None) == "validated"
+        if not already_validated:
+            logger.info(
+                "Running sandbox validation before applying fix %s (job=%s)",
+                fix_id,
+                job_id,
+            )
+            validation = await sfe_service.validate_fix_in_sandbox(fix_id, job_id)
+            validation_status = validation.get("status")
+            if validation_status != "validated":
+                logger.warning(
+                    "Fix %s failed sandbox validation (status=%s); not applying",
+                    fix_id,
+                    validation_status,
+                )
+                # Encode structured validation failure as a plain-string detail so the
+                # response remains a standard RFC 7807 Problem Detail and is handled
+                # correctly by all FastAPI exception handlers / OpenAPI clients.
+                _val_detail = (
+                    f"Fix {fix_id} did not pass sandbox validation "
+                    f"(status: {validation_status!r}). "
+                    "Pass skip_validation=true to bypass (not recommended). "
+                    f"Validation result: {validation.get('result')}"
+                )
+                raise HTTPException(status_code=422, detail=_val_detail)
+            # Persist the validated status so it is not re-validated on retry
+            fix.validation_status = validation_status
+            fix.validation_result = validation.get("result")
+    elif not request.dry_run and request.skip_validation:
+        logger.warning(
+            "Sandbox validation SKIPPED for fix %s at explicit user request "
+            "(skip_validation=true). This is not recommended for production.",
+            fix_id,
         )
 
     result = await sfe_service.apply_fix(fix_id, dry_run=request.dry_run)

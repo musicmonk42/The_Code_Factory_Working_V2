@@ -10,6 +10,7 @@ import importlib.util
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -1246,6 +1247,174 @@ class CodebaseAnalyzer:
                 pass
             return {"error": str(e)}
 
+    def _detect_dockerfile_multistage_issues(
+        self, root: Path
+    ) -> List[Dict[str, Any]]:
+        """Detect multi-stage Dockerfile patterns where pip-installed packages
+        are not copied into the runtime stage.
+
+        Looks for the anti-pattern:
+          - Builder stage runs ``pip install --user …`` (installs to /root/.local)
+          - Runtime stage ``COPY --from=builder /app /app`` but does NOT copy
+            ``/root/.local`` or another virtualenv path.
+
+        Returns a list of ``Defect``-compatible dicts with
+        ``type: "DockerfileDependencyMissing"`` and ``risk_level: "critical"``.
+        """
+        issues: List[Dict[str, Any]] = []
+
+        def _rel_or_abs(p: Path, base: Path) -> str:
+            """Return *p* relative to *base* when possible; absolute path otherwise.
+
+            ``Path.is_relative_to`` was added in Python 3.9.  We use a
+            try/except so this code is compatible with Python 3.8 as well.
+            """
+            try:
+                return str(p.relative_to(base))
+            except ValueError:
+                return str(p)
+
+        # Search for Dockerfiles (including tagged variants like Dockerfile.prod).
+        # Use a dict keyed by resolved path to deduplicate without an extra set,
+        # preserving encounter order.
+        dockerfiles: Dict[Path, None] = {
+            p: None
+            for pattern in ("Dockerfile", "Dockerfile.*")
+            for p in root.rglob(pattern)
+        }
+
+        for df_path in dockerfiles:
+            try:
+                content = df_path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+
+            lines = content.splitlines()
+
+            # ---- Parse FROM statements to detect multi-stage builds -------
+            _FROM_ALIAS_RE = re.compile(r"FROM\s+\S+\s+AS\s+(\S+)", re.IGNORECASE)
+            _FROM_RE = re.compile(r"FROM\s+", re.IGNORECASE)
+            from_statements: List[Dict[str, Any]] = []
+            for lineno, ln in enumerate(lines, start=1):
+                stripped = ln.strip()
+                from_match = _FROM_ALIAS_RE.match(stripped)
+                if from_match:
+                    from_statements.append({
+                        "lineno": lineno,
+                        "alias": from_match.group(1).lower(),
+                    })
+                elif _FROM_RE.match(stripped):
+                    from_statements.append({"lineno": lineno, "alias": None})
+
+            if len(from_statements) < 2:
+                # Single-stage build — nothing to check
+                continue
+
+            # ---- Identify builder stage aliases ---------------------------
+            # All stages except the last one are considered builder stages.
+            # Un-aliased FROM statements (alias=None) are ignored when building
+            # the lookup list because un-named stages cannot be referenced by
+            # COPY --from=<name>.
+            builder_aliases: List[str] = [
+                stmt["alias"]
+                for stmt in from_statements[:-1]
+                if stmt.get("alias")
+            ]
+            # Fall back to stage index "0" when no alias is present; Docker
+            # supports `COPY --from=0` for un-aliased stages.
+            effective_aliases: List[str] = builder_aliases if builder_aliases else ["0"]
+
+            _pip_user_pattern = re.compile(
+                r"pip(?:3)?\s+install\s+(?:.*\s)?--user", re.IGNORECASE
+            )
+            _pip_prefix_pattern = re.compile(
+                r"pip(?:3)?\s+install\s+(?:.*\s)?--prefix=(\S+)", re.IGNORECASE
+            )
+
+            builder_has_pip_user = bool(_pip_user_pattern.search(content))
+            prefix_match = _pip_prefix_pattern.search(content)
+            pip_prefix = prefix_match.group(1) if prefix_match else None
+
+            if not builder_has_pip_user and pip_prefix is None:
+                # No pip --user or --prefix install found — standard install goes to
+                # /usr/local which is available in derived images; nothing to flag.
+                continue
+
+            # ---- Check runtime COPY --from=builder statements ---------------
+            _copy_pattern = re.compile(
+                r"COPY\s+--from=(\S+)\s+(\S+)\s+", re.IGNORECASE
+            )
+            copied_paths: Dict[str, List[str]] = {}  # alias-or-index → [src_path, …]
+            for ln in lines:
+                cm = _copy_pattern.match(ln.strip())
+                if cm:
+                    src_alias = cm.group(1).lower()
+                    src_path = cm.group(2)
+                    copied_paths.setdefault(src_alias, []).append(src_path)
+
+            for b_alias in effective_aliases:
+                b_alias_lower = b_alias.lower()
+                copied = copied_paths.get(b_alias_lower, [])
+
+                # Determine whether the pip install target is copied
+                if builder_has_pip_user:
+                    _needed_paths = ["/root/.local", "/usr/local/lib"]
+                    already_covered = any(
+                        any(p.startswith(need) for need in _needed_paths)
+                        for p in copied
+                    )
+                    if not already_covered:
+                        rel_df = _rel_or_abs(df_path, root)
+                        issues.append({
+                            "type": "DockerfileDependencyMissing",
+                            "risk_level": "critical",
+                            "file": rel_df,
+                            "details": {
+                                "message": (
+                                    f"Multi-stage Dockerfile: builder stage '{b_alias}' runs "
+                                    "`pip install --user` (installs to /root/.local) but the "
+                                    "runtime stage does not copy that directory. "
+                                    "Python packages will be missing at runtime."
+                                ),
+                                "fix": (
+                                    "Add `COPY --from={alias} /root/.local /root/.local` "
+                                    "to the runtime stage, or use "
+                                    "`pip install --prefix=/app/deps` instead."
+                                ).format(alias=b_alias),
+                                "line": None,
+                            },
+                            "suggested_fixer": "manual_review",
+                            "confidence": 0.95,
+                            "source": "codebase_analyzer",
+                        })
+                elif pip_prefix:
+                    # pip install --prefix=<dir>: check that <dir> is copied
+                    already_covered = any(p.startswith(pip_prefix) for p in copied)
+                    if not already_covered:
+                        rel_df = _rel_or_abs(df_path, root)
+                        issues.append({
+                            "type": "DockerfileDependencyMissing",
+                            "risk_level": "critical",
+                            "file": rel_df,
+                            "details": {
+                                "message": (
+                                    f"Multi-stage Dockerfile: builder stage '{b_alias}' installs "
+                                    f"packages to '{pip_prefix}' (via --prefix) but the runtime "
+                                    "stage does not copy that directory."
+                                ),
+                                "fix": (
+                                    f"Add `COPY --from={b_alias} {pip_prefix} {pip_prefix}` "
+                                    "to the runtime stage."
+                                ),
+                                "line": None,
+                            },
+                            "suggested_fixer": "manual_review",
+                            "confidence": 0.90,
+                            "source": "codebase_analyzer",
+                        })
+
+        return issues
+
     async def scan_codebase(
         self, path: Optional[Union[str, List[str]]] = None, use_baseline: bool = False
     ) -> FileSummary:
@@ -1379,6 +1548,12 @@ class CodebaseAnalyzer:
             )
 
         deps = await self.map_dependencies(primary_path)
+
+        # Detect Dockerfile multi-stage dependency copy issues
+        dockerfile_defects = await asyncio.to_thread(
+            self._detect_dockerfile_multistage_issues, primary_path
+        )
+        defects.extend(dockerfile_defects)
 
         results: FileSummary = {
             "files": len(py_files),

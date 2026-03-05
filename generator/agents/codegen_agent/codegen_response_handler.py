@@ -6261,6 +6261,8 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                     appended_lines.append("from app.database import Base\n")
                 if has_pydantic_missing and "from pydantic import BaseModel" not in existing_content:
                     appended_lines.append("from pydantic import BaseModel\n")
+                if has_pydantic_missing and _is_pydantic_module and "ConfigDict" not in existing_content:
+                    appended_lines.append("from pydantic import ConfigDict\n")
                 if has_router_missing and "from fastapi import APIRouter" not in existing_content:
                     appended_lines.append("from fastapi import APIRouter\n")
                 for sym in sorted(missing):
@@ -6281,6 +6283,7 @@ def ensure_local_module_stubs(code_files: Dict[str, str]) -> Dict[str, str]:
                                 appended_lines.append(
                                     f"\nclass {sym}(BaseModel):\n"
                                     f'    """Stub Pydantic model."""\n'
+                                    f"    model_config = ConfigDict(from_attributes=True)\n"
                                     f"    pass\n"
                                 )
                             else:
