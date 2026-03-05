@@ -929,18 +929,19 @@ class DocGenPromptAgent:
                 context["files_content"][file_name] = content
 
         # Pre-summarise oversized contexts to reduce prompt latency.
-        # Re-read constants at call time so tests / env overrides applied after module
-        # load are respected (the module-level defaults are used when unset).
-        _max_chars = int(os.environ.get("DOCGEN_MAX_CONTEXT_CHARS", str(DOCGEN_MAX_CONTEXT_CHARS)))
-        _truncation_lines = int(os.environ.get("DOCGEN_TRUNCATION_LINES", str(DOCGEN_TRUNCATION_LINES)))
+        # Use the module-level constants which were already resolved from the
+        # environment at import time.  Override DOCGEN_MAX_CONTEXT_CHARS or
+        # DOCGEN_TRUNCATION_LINES in the process environment before importing
+        # this module if different thresholds are needed.
         _total_chars = sum(len(v) for v in context["files_content"].values())
-        if _total_chars > _max_chars:
+        if _total_chars > DOCGEN_MAX_CONTEXT_CHARS:
             logger.info(
                 f"[DOCGEN] Context size {_total_chars} chars exceeds threshold "
-                f"{_max_chars} — truncating each file to first {_truncation_lines} lines"
+                f"{DOCGEN_MAX_CONTEXT_CHARS} — truncating each file to first "
+                f"{DOCGEN_TRUNCATION_LINES} lines"
             )
             context["files_content"] = {
-                fname: "\n".join(fcontent.splitlines()[:_truncation_lines])
+                fname: "\n".join(fcontent.splitlines()[:DOCGEN_TRUNCATION_LINES])
                 for fname, fcontent in context["files_content"].items()
             }
             context["context_truncated"] = True
