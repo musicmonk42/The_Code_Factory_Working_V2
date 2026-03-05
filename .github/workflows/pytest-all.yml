@@ -739,11 +739,13 @@ jobs:
             PYTEST_ARGS="-n 1"  # 1 worker to prevent OOM/process exhaustion in CI
             TIMEOUT_VALUE=60  # 60 seconds per test; slow/integration tests are filtered out
             IGNORE_ARGS=""
+            WALL_CLOCK_TIMEOUT="10m"  # 10-minute wall-clock limit to avoid CI resource exhaustion
 
             echo "✓ I/O optimizations applied"
             echo "  - Coverage: ENABLED"
             echo "  - Timeout: ${TIMEOUT_VALUE}s"
             echo "  - Parallel workers: 1 (limited to prevent OOM/process exhaustion in CI)"
+            echo "  - Wall-clock timeout: ${WALL_CLOCK_TIMEOUT}"
           else
             # Limit to 1 worker (-n 1) to prevent OOM/process exhaustion (exit code 137)
             # and BlockingIOError in CI. Using loadscope to group tests by module scope.
@@ -751,6 +753,7 @@ jobs:
             PYTEST_ARGS="-n 1 --dist loadscope"
             TIMEOUT_VALUE=300
             IGNORE_ARGS=""
+            WALL_CLOCK_TIMEOUT="75m"
           fi
 
           # Use timeout command to prevent runaway processes (75 minutes wall-clock time)
@@ -763,10 +766,10 @@ jobs:
             MARKER_FILTER="not slow and not heavy"
           fi
 
-          # Use timeout command to prevent runaway processes (60 minutes wall-clock time)
-          # Increased from 40m to 60m to accommodate longer-running test suites
+          # Use timeout command to prevent runaway processes
+          # Server tests use a 10-minute wall-clock limit; all other modules use 75 minutes.
           # Use python -m pytest to ensure proper sys.path setup
-          timeout --signal=TERM --kill-after=30s 75m python -m pytest \
+          timeout --signal=TERM --kill-after=30s ${WALL_CLOCK_TIMEOUT} python -m pytest \
             ${{ matrix.module }}/ \
             $PYTEST_ARGS \
             -v \
@@ -774,6 +777,7 @@ jobs:
             -m "${MARKER_FILTER}" \
             --maxfail=10 \
             --timeout=${TIMEOUT_VALUE} \
+            --timeout-method=signal \
             --durations=25 \
             $COVERAGE_ARGS \
             $IGNORE_ARGS \
@@ -972,6 +976,7 @@ jobs:
             --tb=long \
             -m "not heavy and not slow and not integration and not external" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=0 \
             -p no:warnings \
@@ -1092,6 +1097,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=600 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=0 \
             -p no:warnings \
@@ -1192,6 +1198,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=10 \
             -p no:warnings \
@@ -1243,6 +1250,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=10 \
             -p no:warnings \
@@ -1301,6 +1309,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=10 \
             -p no:warnings \
@@ -1352,6 +1361,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=10 \
             -p no:warnings \
@@ -1402,6 +1412,7 @@ jobs:
             --tb=short \
             -m "not heavy" \
             --timeout=300 \
+            --timeout-method=signal \
             --maxfail=10 \
             --durations=10 \
             -p no:warnings \

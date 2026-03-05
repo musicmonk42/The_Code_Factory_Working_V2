@@ -431,6 +431,20 @@ def pytest_collection_finish(session):
     os.environ.pop('PYTEST_COLLECTING_ONLY', None)
 
 
+import logging as _logging
+_diag_logger = _logging.getLogger("pytest.diagnostic")
+
+
+def pytest_runtest_setup(item):
+    """Log a diagnostic message before each test runs to help identify hangs."""
+    _diag_logger.info("[SETUP   ] starting: %s", item.nodeid)
+
+
+def pytest_runtest_teardown(item, nextitem):
+    """Log a diagnostic message after each test completes to help identify hangs."""
+    _diag_logger.info("[TEARDOWN] finished: %s", item.nodeid)
+
+
 # ============================================================================
 # 5. PYTEST FIXTURES
 # ============================================================================

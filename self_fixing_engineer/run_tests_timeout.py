@@ -14,7 +14,7 @@ cmd = [
     "arbiter/knowledge_graph/tests",
     "-v",
     "--timeout=10",  # 10 second timeout per test
-    "--timeout-method=thread",
+    "--timeout-method=signal",
     "-x",  # Stop on first failure
     "--tb=short",
     # Skip the problematic tests for now

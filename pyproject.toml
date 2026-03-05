@@ -77,7 +77,7 @@ asyncio_default_fixture_loop_scope = "function"
 # which can take 60+ seconds. Consider investigating and optimizing
 # slow tests if timeouts become an issue.
 timeout = 300
-timeout_method = "thread"
+timeout_method = "signal"
 timeout_func_only = true
 
 # Directories to ignore during collection
