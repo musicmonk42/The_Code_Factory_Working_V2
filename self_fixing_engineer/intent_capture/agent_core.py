@@ -818,14 +818,15 @@ async def get_or_create_agent(session_token: str) -> CollaborativeAgent:
 # --- Example Usage and Startup Validation ---
 def validate_environment():
     """Checks for essential environment variables at startup."""
+    env = os.environ
     required = [
         "JWT_SECRET",
-        f"{os.getenv('LLM_PROVIDER', 'openai').upper()}_API_KEYS",
+        f"{env.get('LLM_PROVIDER', 'openai').upper()}_API_KEYS",
         "REDIS_URL",
     ]
-    if os.getenv("USE_VECTOR_MEMORY", "false").lower() == "true":
+    if env.get("USE_VECTOR_MEMORY", "false").lower() == "true":
         required.append("PINECONE_API_KEY")
-    missing = [v for v in required if not os.getenv(v)]
+    missing = [v for v in required if not env.get(v)]
     if missing:
         raise ConfigurationError(
             f"Missing required production environment variables: {', '.join(missing)}"
