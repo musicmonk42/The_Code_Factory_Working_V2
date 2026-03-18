@@ -787,7 +787,4 @@ Issues: <enterprise-repo-url>/issues
 SLA: Enterprise 24/7 support
 
 
-License
-Proprietary and Confidential © 2025 Novatrax Labs LLC. All rights reserved.Code Factory and Self-Fixing Engineer™ are proprietary technologies. Unauthorized copying, distribution, reverse engineering, or use is strictly prohibited. For licensing, contact support@novatraxlabs.com.
 
-Unleash the future of software development with Code Factory’s AI-driven, self-sustaining ecosystem.
