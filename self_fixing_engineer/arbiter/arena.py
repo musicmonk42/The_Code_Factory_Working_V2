@@ -198,7 +198,7 @@ if not logger.handlers:
     logger.addHandler(handler)
 
 
-JWT_SECRET_FALLBACK = "your-arena-jwt-secret-fallback-if-config-not-loaded"
+JWT_SECRET_FALLBACK = None  # Removed hardcoded secret — fail-closed when not configured
 
 
 # --- Helper functions for idempotent and thread-safe metric creation ---
@@ -293,11 +293,12 @@ def require_auth(func: Callable) -> Callable:
             if settings is None:
                 settings = ArbiterConfig.initialize()
 
-            jwt_secret_value = (
-                settings.ARENA_JWT_SECRET.get_secret_value()
-                if settings.ARENA_JWT_SECRET
-                else JWT_SECRET_FALLBACK
-            )
+            if not settings.ARENA_JWT_SECRET:
+                raise HTTPException(
+                    status_code=503,
+                    detail="Arena authentication not configured. Set ARENA_JWT_SECRET.",
+                )
+            jwt_secret_value = settings.ARENA_JWT_SECRET.get_secret_value()
             payload = jwt.decode(token, jwt_secret_value, algorithms=["HS256"])
 
             if payload.get("role") not in ["admin", "user"]:
@@ -307,6 +308,8 @@ def require_auth(func: Callable) -> Callable:
             raise HTTPException(
                 status_code=401, detail="Invalid or expired authentication token."
             )
+        except HTTPException:
+            raise
         except Exception as e:
             logger.error(f"Authentication failed: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail="Authentication service error.")
@@ -1490,12 +1493,14 @@ def _extract_sqlite_db_file(db_url: str) -> str:
         return parsed_path
 
 
-async def run_arena_async(settings=None):
+async def run_arena_async(settings=None, *, reset_db: bool = False):
     """
     Async version of run_arena that can be awaited from an existing event loop.
 
     Args:
         settings: Optional ArbiterConfig instance. If None, will be initialized.
+        reset_db: If True, delete the existing database before starting.
+                  Defaults to False (preserve existing data).
     """
     from self_fixing_engineer.arbiter.config import ArbiterConfig as Settings
 
@@ -1514,14 +1519,17 @@ async def run_arena_async(settings=None):
     if db_dir and db_dir != ".":
         os.makedirs(db_dir, exist_ok=True)
 
-    logger.info("Starting Code Guardian Arena test setup...")
+    logger.info("Starting Code Guardian Arena setup...")
     if os.path.exists(db_file):
-        try:
-            os.remove(db_file)
-            logger.info(f"Cleaned up existing DB file: {db_file}")
-        except OSError as e:
-            logger.warning(f"Could not remove existing DB file {db_file}: {e}")
-            arena_errors_total.labels(error_type="db_cleanup_fail").inc()
+        if reset_db:
+            try:
+                os.remove(db_file)
+                logger.info(f"Reset DB: removed existing file {db_file}")
+            except OSError as e:
+                logger.warning(f"Could not remove existing DB file {db_file}: {e}")
+                arena_errors_total.labels(error_type="db_cleanup_fail").inc()
+        else:
+            logger.info(f"Preserving existing DB file: {db_file}")
 
     # Construct the async engine URL correctly
     # SQLite URL format uses 3 slashes after the scheme for relative paths:
@@ -1562,7 +1570,7 @@ async def run_arena_async(settings=None):
         logger.info("Arena shutdown complete.")
 
 
-def run_arena():
+def run_arena(reset_db: bool = False):
     """
     Synchronous entry point for run_arena. Detects if an event loop is already
     running and raises an error directing users to use the async version.
@@ -1609,14 +1617,17 @@ def run_arena():
     if db_dir and db_dir != ".":
         os.makedirs(db_dir, exist_ok=True)
 
-    logger.info("Starting Code Guardian Arena test setup...")
+    logger.info("Starting Code Guardian Arena setup...")
     if os.path.exists(db_file):
-        try:
-            os.remove(db_file)
-            logger.info(f"Cleaned up existing DB file: {db_file}")
-        except OSError as e:
-            logger.warning(f"Could not remove existing DB file {db_file}: {e}")
-            arena_errors_total.labels(error_type="db_cleanup_fail").inc()
+        if reset_db:
+            try:
+                os.remove(db_file)
+                logger.info(f"Reset DB: removed existing file {db_file}")
+            except OSError as e:
+                logger.warning(f"Could not remove existing DB file {db_file}: {e}")
+                arena_errors_total.labels(error_type="db_cleanup_fail").inc()
+        else:
+            logger.info(f"Preserving existing DB file: {db_file}")
 
     # Construct the async engine URL correctly
     # SQLite URL format uses 3 slashes after the scheme for relative paths:

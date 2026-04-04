@@ -546,18 +546,18 @@ def _is_dev_or_test_mode() -> bool:
 # The application will fail to start if critical secrets are not set.
 # Allow tests and development mode to bypass this check
 SECRET_KEY = os.getenv("JWT_SECRET_KEY")
-if (
-    not SECRET_KEY and not _is_dev_or_test_mode() and _FASTAPI_AVAILABLE
-):  # Only raise if not in dev/test mode AND fastapi is available
-    logger.critical(
-        "JWT_SECRET_KEY environment variable not set. This is required for production."
-    )
-    raise ValueError("JWT_SECRET_KEY environment variable not set.")
-elif not SECRET_KEY:
-    # Use a development/test secret key
-    SECRET_KEY = "dev-secret-key-do-not-use-in-production"
-    if _FASTAPI_AVAILABLE:  # Only log warning if we are not using full dummies
-        logger.warning("Using development SECRET_KEY - this is NOT for production use!")
+if not SECRET_KEY and _FASTAPI_AVAILABLE:
+    if _is_dev_or_test_mode():
+        SECRET_KEY = os.urandom(32).hex()
+        logger.warning(
+            "JWT_SECRET_KEY not set — generated ephemeral key for dev/test. "
+            "Sessions will not persist across restarts."
+        )
+    else:
+        logger.critical(
+            "JWT_SECRET_KEY environment variable not set. This is required for production."
+        )
+        raise ValueError("JWT_SECRET_KEY environment variable not set.")
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # JWT token expiration time

@@ -1299,8 +1299,8 @@ class SFEService:
                 "post_fix_lint_count": post_fix_lint_count,
             }
 
-            # Accept the fix when tests pass normally …
-            if proc.returncode == 0 or passed > 0:
+            # Accept the fix only when the full test suite passes
+            if proc.returncode == 0:
                 fix.validation_status = "validated"
                 fix.validation_result = validation_result
                 logger.info(f"[SFE] Fix {fix_id} validated: {passed} tests passed")

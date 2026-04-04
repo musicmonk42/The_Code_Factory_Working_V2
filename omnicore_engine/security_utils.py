@@ -783,9 +783,12 @@ class EnterpriseSecurityUtils:
         secret: _t.Union[str, bytes] | None = None,
         session_ttl_seconds: int = 3600,
     ):
-        self._secret = secret or os.environ.get(
-            "OMNICORE_SECRET", "omnicore-default-secret"
-        )
+        self._secret = secret or os.environ.get("OMNICORE_SECRET")
+        if not self._secret:
+            raise RuntimeError(
+                "OMNICORE_SECRET environment variable or 'secret' parameter is required. "
+                "Cannot initialize EnterpriseSecurityUtils without a secret."
+            )
         self.audit = SecurityAuditLogger()
         self.sessions = SecureSessionManager(
             self._secret, ttl_seconds=session_ttl_seconds
