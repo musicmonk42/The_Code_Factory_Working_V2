@@ -349,3 +349,8 @@ root/
 
 # Analysis reports (generated artifacts)
 reports/sfe_analysis_report.json
+
+# AI Governance (QoreLogic S.H.I.E.L.D.)
+.agent/
+.failsafe/
+.qorelogic/
