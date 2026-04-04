@@ -109,5 +109,30 @@ SHA256(content_hash + previous_hash)
 **Decision**: All 7 security fixes implemented across 3 phases. 17 unit tests created. Backlog items S1, S2, S3, D3 marked complete. Ready for substantiation.
 
 ---
+
+### Entry #5: GATE TRIBUNAL (Decomposition Plan)
+
+**Timestamp**: 2026-04-04T15:45:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-decompose-omnicore-service.md)
+= 854e233cba4425e6097f81c263f4d0c12e95c9d6de92952d898c08d1333f3659
+```
+
+**Previous Hash**: 28dd7110782ede3740219ea474d80116bbfdba3d2bcf9061a59ea8a22cf13d29
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= f7de5704ebcf56ec1bbb3f6809ddc2445466cf19e15f8605854c442cb31a5f43
+```
+
+**Decision**: Initial VETO — two violations: (1) generator_pipeline_service.py and clarifier_service.py proposed at 3,500 and 4,000 lines (14x-16x over 250-line limit), (2) `await` in `__init__` is a SyntaxError. Governor remediated: split into pipeline/ (4 sub-services) and clarifier/ (3 sub-modules), all <= 250 lines; services accept ServiceContext as parameter. Re-audit: PASS. 5-phase decomposition of 11,021-line god-module into 18 focused files approved.
+
+---
 *Chain integrity: VALID*
-*Next required action: /qor-substantiate*
+*Next required action: /qor-implement (decomposition Phase 1)*
