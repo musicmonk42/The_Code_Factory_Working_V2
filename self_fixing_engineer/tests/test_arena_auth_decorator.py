@@ -77,7 +77,7 @@ class TestArenaAuthDecorator(unittest.TestCase):
         mock_request.headers = {}
 
         with self.assertRaises(HTTPException) as ctx:
-            self._run_async(endpoint(mock_request, settings=mock_settings))
+            self._run_async(endpoint(mock_request))
         self.assertEqual(ctx.exception.status_code, 401)
 
 
