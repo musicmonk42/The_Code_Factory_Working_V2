@@ -80,13 +80,16 @@ os.environ.setdefault("AUDIT_CRYPTO_ALLOW_INIT_FAILURE", "1")
 os.environ.setdefault("AUDIT_CRYPTO_MODE", "software")
 
 
-# INJECT SIGNING KEY (Required for Production Audit Logging)
-# This prevents the "CRITICAL - FATAL: log_audit_event" crash
-# Using AGENTIC_AUDIT_HMAC_KEY to match documentation in RAILWAY_DEPLOYMENT.md
-os.environ.setdefault(
-    "AGENTIC_AUDIT_HMAC_KEY",
-    "7f8a9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a"
-)
+# AUDIT SIGNING KEY — Required for tamper-evident audit logging
+# Fail-closed: refuse to start without a signing key in production
+if not os.environ.get("AGENTIC_AUDIT_HMAC_KEY"):
+    if _is_test_environment:
+        os.environ["AGENTIC_AUDIT_HMAC_KEY"] = os.urandom(32).hex()
+    else:
+        raise RuntimeError(
+            "AGENTIC_AUDIT_HMAC_KEY environment variable is required for audit log signing. "
+            "Generate with: python -c \"import os; print(os.urandom(32).hex())\""
+        )
 
 # --- OPTIONAL FEATURES CONFIGURATION ---
 # P3/Security Hardening: Require explicit enable flags for powerful subsystems
