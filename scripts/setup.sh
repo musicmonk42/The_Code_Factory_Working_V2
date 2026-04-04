@@ -290,9 +290,9 @@ create_directories() {
 run_health_check() {
     log_header "Running Health Check"
     
-    if [ -f "health_check.py" ]; then
+    if [ -f "scripts/health_check.py" ]; then
         log_info "Running health check script..."
-        python3 health_check.py || {
+        python3 scripts/health_check.py || {
             log_warning "Health check completed with warnings. Review the output above."
         }
     else
