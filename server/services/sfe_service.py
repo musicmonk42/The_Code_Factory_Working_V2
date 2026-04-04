@@ -31,7 +31,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 # Industry Standard: Import centralized utilities to eliminate code duplication
-from server.services.omnicore_service import _load_sfe_analysis_report
+from server.services.helpers.sfe_cache import _load_sfe_analysis_report
 from server.services.sfe_utils import (
     transform_pipeline_issues_to_frontend_errors,
     transform_pipeline_issues_to_bugs,

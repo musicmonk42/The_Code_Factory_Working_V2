@@ -41,7 +41,11 @@ class ServiceContext:
 
     llm_config: Optional[Dict[str, Any]] = None
     agents: Dict[str, Any] = field(default_factory=dict)
+    agents_available: Dict[str, bool] = field(default_factory=dict)
     message_bus: Optional[Any] = None
+    plugin_registry: Optional[Any] = None
+    metrics_client: Optional[Any] = None
+    audit_client: Optional[Any] = None
     omnicore_engine: Optional[Any] = None
     omnicore_components_available: Dict[str, bool] = field(
         default_factory=lambda: {
@@ -53,6 +57,12 @@ class ServiceContext:
     )
     job_output_base: Path = field(default_factory=lambda: Path("./uploads"))
     kafka_producer: Optional[Any] = None
+    llm_status: Dict[str, Any] = field(default_factory=lambda: {
+        "provider": None,
+        "configured": False,
+        "validated": False,
+        "error": None,
+    })
 
 
 async def create_service_context(
