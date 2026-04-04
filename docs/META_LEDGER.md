@@ -134,5 +134,62 @@ SHA256(content_hash + previous_hash)
 **Decision**: Initial VETO — two violations: (1) generator_pipeline_service.py and clarifier_service.py proposed at 3,500 and 4,000 lines (14x-16x over 250-line limit), (2) `await` in `__init__` is a SyntaxError. Governor remediated: split into pipeline/ (4 sub-services) and clarifier/ (3 sub-modules), all <= 250 lines; services accept ServiceContext as parameter. Re-audit: PASS. 5-phase decomposition of 11,021-line god-module into 18 focused files approved.
 
 ---
+
+### Entry #6: IMPLEMENTATION (Decomposition Phases 1-4)
+
+**Timestamp**: 2026-04-04T17:00:00+00:00
+**Phase**: IMPLEMENT
+**Author**: Specialist
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(new service files combined)
+= 996c66ce2c0a187fceb153a46ab75cb69097c3cd58e5fde3af911d4dba9b8951
+```
+
+**Previous Hash**: f7de5704ebcf56ec1bbb3f6809ddc2445466cf19e15f8605854c442cb31a5f43
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 5df10e6132839d172ab6287677a217e845dfb560a5d49a4dd1d896b68790b02e
+```
+
+**Files Created** (24 source):
+- `server/services/service_context.py` — ServiceContext dataclass
+- `server/services/helpers/__init__.py` — helpers package init
+- `server/services/helpers/_templates.py` — template utilities
+- `server/services/helpers/fallback_generators.py` — fallback generation logic
+- `server/services/helpers/file_utils.py` — file operation helpers
+- `server/services/helpers/project_detection.py` — project type detection
+- `server/services/helpers/sfe_cache.py` — SFE caching layer
+- `server/services/helpers/validation.py` — input validation utilities
+- `server/services/admin_service.py` — AdminService delegation stub
+- `server/services/audit_query_service.py` — AuditQueryService delegation stub
+- `server/services/diagnostics_service.py` — DiagnosticsService delegation stub
+- `server/services/message_bus_service.py` — MessageBusService delegation stub
+- `server/services/sfe_dispatch_service.py` — SFEDispatchService delegation stub
+- `server/services/pipeline/__init__.py` — pipeline package init
+- `server/services/pipeline/codegen_service.py` — CodegenService
+- `server/services/pipeline/deploy_service.py` — DeployService
+- `server/services/pipeline/quality_service.py` — QualityService
+- `server/services/pipeline/pipeline_orchestrator.py` — PipelineOrchestrator
+- `server/services/clarifier/__init__.py` — clarifier package init
+- `server/services/clarifier/_prompt_builder.py` — prompt building internals
+- `server/services/clarifier/_response_parser.py` — response parsing internals
+- `server/services/clarifier/question_generator.py` — QuestionGenerator
+- `server/services/clarifier/response_processor.py` — ResponseProcessor
+- `server/services/clarifier/session_manager.py` — SessionManager
+
+**Files Created** (4 test):
+- `server/tests/test_service_context.py` — ServiceContext unit tests
+- `server/tests/test_domain_services.py` — domain service delegation tests
+- `server/tests/test_pipeline_services.py` — pipeline sub-service tests
+- `server/tests/test_clarifier_services.py` — clarifier sub-module tests
+
+**Decision**: Phases 1-4 of god-module decomposition complete. 28 new files created totaling ~5,000 lines. omnicore_service.py reduced from 11,021 to 9,900 lines (-10%). New services are delegation stubs pending router migration (Phase 5) and method inlining (future). 62 tests across 4 test files validate structure.
+
+---
 *Chain integrity: VALID*
-*Next required action: /qor-implement (decomposition Phase 1)*
+*Next required action: /qor-substantiate*

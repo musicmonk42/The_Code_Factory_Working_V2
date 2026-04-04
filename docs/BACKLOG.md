@@ -21,6 +21,16 @@
 - [ ] [B3] Investigate `pytest --collect-only` timeout (>2 minutes) — likely import-time side effects or heavy fixtures
 - [ ] [B4] Section 4 Razor compliance pass — many files exceed 250-line and 40-line function thresholds
 
+### Decomposition Progress
+
+- [x] [DEC-1] Phase 1: ServiceContext + 16 helpers extracted (9 files)
+- [x] [DEC-2] Phase 2: 5 domain services extracted + helpers wired (6 files)
+- [x] [DEC-3] Phase 3: Pipeline sub-services extracted (5 files)
+- [x] [DEC-4] Phase 4: Clarifier sub-modules extracted (6 files)
+- [ ] [DEC-5] Phase 5: Router migration — change Depends() to use new services
+- [ ] [DEC-6] Phase 5: Delete facade — remove delegation stubs, inline methods
+- [ ] [DEC-7] Internal decomposition of oversized methods (>40 lines)
+
 ## Wishlist (Nice to Have)
 
 - [ ] [W1] Pre-commit hook for secret scanning as part of CI genesis
