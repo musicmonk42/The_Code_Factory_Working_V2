@@ -44,7 +44,6 @@ from server.schemas import (
 )
 from server.services import GeneratorService
 from server.services.message_bus_service import get_message_bus_service, MessageBusService
-from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
 from server.routers.generator import _run_pipeline_with_semaphore
 from server.dependencies import require_agents_ready
@@ -192,8 +191,9 @@ class V1GenerationListItem(BaseModel):
 
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
-    omnicore = _get_omnicore_service()
-    return GeneratorService(omnicore_service=omnicore)
+    from server.services.job_router import route_job
+    from server.services.service_context import get_service_context
+    return GeneratorService(route_job_fn=route_job, ctx=get_service_context())
 
 
 @router.post("/generate", response_model=V1GenerateResponse, status_code=202)

@@ -101,3 +101,26 @@ async def create_service_context(
     )
     logger.debug("ServiceContext created (llm_config=%s)", "present" if llm_config else "None")
     return ctx
+
+
+# -- Singleton accessor ---------------------------------------------------
+
+_service_context_instance: Optional[ServiceContext] = None
+
+
+def get_service_context() -> ServiceContext:
+    """Return the shared ServiceContext singleton.
+
+    During app startup, ``create_service_context`` populates this.  If called
+    before startup (e.g. in tests), returns a default empty context.
+    """
+    global _service_context_instance  # noqa: PLW0603
+    if _service_context_instance is None:
+        _service_context_instance = ServiceContext()
+    return _service_context_instance
+
+
+def set_service_context(ctx: ServiceContext) -> None:
+    """Set the shared ServiceContext singleton (called once at app startup)."""
+    global _service_context_instance  # noqa: PLW0603
+    _service_context_instance = ctx

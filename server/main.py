@@ -641,23 +641,24 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        
-        # Get OmniCore service instance (singleton)
-        omnicore_service = get_omnicore_service()
-        
+        from server.services.message_bus_service import get_message_bus_service
+
+        # Get message bus service instance (singleton)
+        bus_service = get_message_bus_service()
+
         # Start message bus dispatcher tasks
-        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
+        if bus_service.is_available():
             logger.info("Starting message bus dispatcher tasks...")
-            await omnicore_service.start_message_bus()
-            
+            await bus_service.start_message_bus()
+
             # Verify startup with retry logic
+            bus = bus_service.get_bus()
             max_retries = 10
             for i in range(max_retries):
-                if (hasattr(omnicore_service._message_bus, 'dispatcher_tasks') and 
-                    omnicore_service._message_bus.dispatcher_tasks and
-                    hasattr(omnicore_service._message_bus, '_dispatchers_started') and
-                    omnicore_service._message_bus._dispatchers_started):
+                if (hasattr(bus, 'dispatcher_tasks') and
+                    bus.dispatcher_tasks and
+                    hasattr(bus, '_dispatchers_started') and
+                    bus._dispatchers_started):
                     logger.info("✓ Message bus verified operational")
                     break
                 
@@ -1499,10 +1500,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        omnicore = get_omnicore_service()
-        if omnicore:
-            await omnicore.start_periodic_audit_flush()
+        from server.services.audit_query_service import get_audit_query_service
+        audit_service = get_audit_query_service()
+        if audit_service:
+            await audit_service.start_periodic_audit_flush()
     except Exception as e:
         logger.warning(f"Failed to initialize periodic audit flush: {e}", exc_info=True)
 
@@ -2245,11 +2246,11 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     
     # Check 5: Kafka bridge connection (if enabled)
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        
-        omnicore_service = get_omnicore_service()
-        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
-            message_bus = omnicore_service._message_bus
+        from server.services.message_bus_service import get_message_bus_service
+
+        bus_service = get_message_bus_service()
+        if bus_service.is_available():
+            message_bus = bus_service.get_bus()
             
             # Check if Kafka is enabled and bridge exists
             if hasattr(message_bus, 'kafka_bridge') and message_bus.kafka_bridge:

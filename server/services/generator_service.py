@@ -63,17 +63,19 @@ class GeneratorService:
             "job_id": job_id,
         }
 
-    def __init__(self, storage_path: Optional[Path] = None, omnicore_service=None):
+    def __init__(self, storage_path: Optional[Path] = None, *, route_job_fn=None, ctx=None):
         """
         Initialize the GeneratorService.
 
         Args:
             storage_path: Path for storing uploaded files. Defaults to ./uploads/
-            omnicore_service: OmniCoreService instance for centralized routing
+            route_job_fn: Async callable matching ``route_job(ctx, job_id, source, target, payload)``
+            ctx: ServiceContext (or compatible) passed as the first arg to *route_job_fn*
         """
         self.storage_path = storage_path or Path("./uploads")
         self.storage_path.mkdir(parents=True, exist_ok=True)
-        self.omnicore_service = omnicore_service
+        self._route_job = route_job_fn
+        self._ctx = ctx
         logger.info(f"GeneratorService initialized with storage: {self.storage_path}")
 
     async def save_upload(
@@ -137,14 +139,14 @@ class GeneratorService:
         )
 
         # Route through OmniCore
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "create_job",
                 "job_id": job_id,
                 "files": files,
                 "metadata": metadata,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -180,12 +182,12 @@ class GeneratorService:
         logger.debug(f"Fetching generator status for job {job_id} via OmniCore")
 
         # Route query through OmniCore
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "get_status",
                 "job_id": job_id,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -259,7 +261,7 @@ class GeneratorService:
         logger.info(f"Running clarifier for job {job_id} via OmniCore (channel: {channel or 'default'})")
 
         # Route through OmniCore if available
-        if self.omnicore_service:
+        if self._route_job:
             try:
                 payload = {
                     "action": "clarify_requirements",
@@ -271,7 +273,7 @@ class GeneratorService:
                 if channel:
                     payload["channel"] = channel
                     
-                result = await self.omnicore_service.route_job(
+                result = await self._route_job(self._ctx,
                     job_id=job_id,
                     source_module="api",
                     target_module="generator",
@@ -326,13 +328,13 @@ class GeneratorService:
         logger.info(f"Fetching clarification feedback for job {job_id} via OmniCore")
 
         # Route through OmniCore
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "get_clarification_feedback",
                 "job_id": job_id,
                 "interaction_id": interaction_id,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -372,14 +374,14 @@ class GeneratorService:
         logger.info(f"Submitting clarification response for job {job_id} via OmniCore")
 
         # Route through OmniCore
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "submit_clarification_response",
                 "job_id": job_id,
                 "question_id": question_id,
                 "response": response,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -464,7 +466,7 @@ class GeneratorService:
         """
         logger.info(f"Running codegen agent for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_codegen",
                 "job_id": job_id,
@@ -472,7 +474,7 @@ class GeneratorService:
                 "language": language,
                 "framework": framework,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -527,7 +529,7 @@ class GeneratorService:
         """
         logger.info(f"Running testgen agent for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_testgen",
                 "job_id": job_id,
@@ -535,7 +537,7 @@ class GeneratorService:
                 "test_type": test_type,
                 "coverage_target": coverage_target,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -590,7 +592,7 @@ class GeneratorService:
         """
         logger.info(f"Running deploy agent for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_deploy",
                 "job_id": job_id,
@@ -598,7 +600,7 @@ class GeneratorService:
                 "platform": platform,
                 "include_ci_cd": include_ci_cd,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -653,7 +655,7 @@ class GeneratorService:
         """
         logger.info(f"Running docgen agent for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_docgen",
                 "job_id": job_id,
@@ -661,7 +663,7 @@ class GeneratorService:
                 "doc_type": doc_type,
                 "format": format,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -716,7 +718,7 @@ class GeneratorService:
         """
         logger.info(f"Running critique agent for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_critique",
                 "job_id": job_id,
@@ -724,7 +726,7 @@ class GeneratorService:
                 "scan_types": scan_types,
                 "auto_fix": auto_fix,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -852,7 +854,7 @@ class GeneratorService:
         """
         logger.info(f"Running full generation pipeline for job {job_id} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "run_full_pipeline",
                 "job_id": job_id,
@@ -874,7 +876,7 @@ class GeneratorService:
             if doc_format:
                 payload["doc_format"] = doc_format
 
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id,
                 source_module="api",
                 target_module="generator",
@@ -941,7 +943,7 @@ class GeneratorService:
                             "total_attempts": self.MAX_RETRY_ATTEMPTS
                         }
                     )
-                    result = await self.omnicore_service.route_job(
+                    result = await self._route_job(self._ctx,
                         job_id=job_id,
                         source_module="api",
                         target_module="generator",
@@ -1061,7 +1063,7 @@ class GeneratorService:
         """
         logger.info(f"Configuring LLM provider {provider} via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "configure_llm",
                 "provider": provider,
@@ -1069,7 +1071,7 @@ class GeneratorService:
                 "model": model,
                 "config": config or {},
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id="llm_config",
                 source_module="api",
                 target_module="generator",
@@ -1092,9 +1094,9 @@ class GeneratorService:
         """
         logger.info("Fetching LLM provider status via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {"action": "get_llm_status"}
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id="llm_status",
                 source_module="api",
                 target_module="generator",
@@ -1134,7 +1136,7 @@ class GeneratorService:
         """
         logger.info("Querying generator audit logs via OmniCore")
 
-        if self.omnicore_service:
+        if self._route_job:
             payload = {
                 "action": "query_audit_logs",
                 "start_time": start_time,
@@ -1143,7 +1145,7 @@ class GeneratorService:
                 "job_id": job_id,
                 "limit": limit,
             }
-            result = await self.omnicore_service.route_job(
+            result = await self._route_job(self._ctx,
                 job_id=job_id or "audit_query",
                 source_module="api",
                 target_module="generator",
@@ -1180,7 +1182,6 @@ def get_generator_service() -> GeneratorService:
         >>> async def handler(service: GeneratorService = Depends(get_generator_service)):
         ...     result = await service.create_generation_job(...)
     """
-    from server.services.omnicore_service import get_omnicore_service
-    
-    omnicore = get_omnicore_service()
-    return GeneratorService(omnicore_service=omnicore)
+    from server.services.job_router import route_job
+    from server.services.service_context import get_service_context
+    return GeneratorService(route_job_fn=route_job, ctx=get_service_context())

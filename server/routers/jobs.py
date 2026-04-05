@@ -152,8 +152,9 @@ def get_omnicore_service():
 
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
-    omnicore = _get_omnicore_service()
-    return GeneratorService(omnicore_service=omnicore)
+    from server.services.job_router import route_job
+    from server.services.service_context import get_service_context
+    return GeneratorService(route_job_fn=route_job, ctx=get_service_context())
 
 
 @router.post("/", response_model=Job, status_code=201)
