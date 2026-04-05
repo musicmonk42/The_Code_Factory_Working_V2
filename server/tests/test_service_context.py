@@ -128,40 +128,40 @@ class TestValidationHelpers(unittest.TestCase):
         from server.services.helpers.validation import _validate_report_structure
 
         report = {"all_defects": [{"id": 1, "msg": "test"}]}
-        result = _validate_report_structure(report)
-        self.assertTrue(result)
+        is_valid, _ = _validate_report_structure(report, Path("test.json"))
+        self.assertTrue(is_valid)
 
     def test_validate_report_structure_with_issues(self):
         from server.services.helpers.validation import _validate_report_structure
 
         report = {"issues": [{"id": 1}]}
-        result = _validate_report_structure(report)
-        self.assertTrue(result)
+        is_valid, _ = _validate_report_structure(report, Path("test.json"))
+        self.assertTrue(is_valid)
 
     def test_validate_report_structure_invalid(self):
         from server.services.helpers.validation import _validate_report_structure
 
-        result = _validate_report_structure({})
-        self.assertFalse(result)
+        is_valid, _ = _validate_report_structure({}, Path("test.json"))
+        self.assertFalse(is_valid)
 
     def test_validate_report_structure_non_dict(self):
         from server.services.helpers.validation import _validate_report_structure
 
-        result = _validate_report_structure("not a dict")
-        self.assertFalse(result)
+        is_valid, _ = _validate_report_structure("not a dict", Path("test.json"))
+        self.assertFalse(is_valid)
 
     def test_validate_helm_chart_valid(self):
         from server.services.helpers.validation import _validate_helm_chart_structure
 
         chart = {"apiVersion": "v2", "name": "my-chart", "version": "1.0.0"}
-        result = _validate_helm_chart_structure(chart)
-        self.assertTrue(result)
+        is_valid, _ = _validate_helm_chart_structure(chart)
+        self.assertTrue(is_valid)
 
     def test_validate_helm_chart_missing_fields(self):
         from server.services.helpers.validation import _validate_helm_chart_structure
 
-        result = _validate_helm_chart_structure({"name": "only-name"})
-        self.assertFalse(result)
+        is_valid, _ = _validate_helm_chart_structure({"name": "only-name"})
+        self.assertFalse(is_valid)
 
 
 class TestProjectDetectionHelpers(unittest.TestCase):
@@ -173,26 +173,26 @@ class TestProjectDetectionHelpers(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             (Path(tmpdir) / "main.py").write_text("print('hello')")
             (Path(tmpdir) / "utils.py").write_text("pass")
-            result = _detect_project_language(tmpdir)
+            result = _detect_project_language(Path(tmpdir))
             self.assertEqual(result, "python")
 
     def test_detect_language_nonexistent_defaults_python(self):
         from server.services.helpers.project_detection import _detect_project_language
 
-        result = _detect_project_language("/nonexistent/path")
+        result = _detect_project_language(Path("/nonexistent/path"))
         self.assertEqual(result, "python")
 
     def test_is_test_file_positive(self):
         from server.services.helpers.project_detection import _is_test_file
 
-        self.assertTrue(_is_test_file("test_foo.py"))
-        self.assertTrue(_is_test_file("bar_test.py"))
+        self.assertTrue(_is_test_file(Path("test_foo.py"), "python"))
+        self.assertTrue(_is_test_file(Path("bar_test.py"), "python"))
 
     def test_is_test_file_negative(self):
         from server.services.helpers.project_detection import _is_test_file
 
-        self.assertFalse(_is_test_file("foo.py"))
-        self.assertFalse(_is_test_file("main.py"))
+        self.assertFalse(_is_test_file(Path("foo.py"), "python"))
+        self.assertFalse(_is_test_file(Path("main.py"), "python"))
 
 
 class TestAsyncFactory(unittest.TestCase):

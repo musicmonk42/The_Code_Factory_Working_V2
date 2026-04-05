@@ -90,15 +90,15 @@ class TestSingletonAccessors(unittest.TestCase):
     def test_admin_get_service_callable(self):
         from server.services import admin_service
         self.assertTrue(
-            callable(getattr(admin_service, "get_service", None)),
-            "admin_service must expose a callable get_service()",
+            callable(getattr(admin_service, "get_admin_service", None)),
+            "admin_service must expose a callable get_admin_service()",
         )
 
     def test_message_bus_get_service_callable(self):
         from server.services import message_bus_service
         self.assertTrue(
-            callable(getattr(message_bus_service, "get_service", None)),
-            "message_bus_service must expose a callable get_service()",
+            callable(getattr(message_bus_service, "get_message_bus_service", None)),
+            "message_bus_service must expose a callable get_message_bus_service()",
         )
 
 

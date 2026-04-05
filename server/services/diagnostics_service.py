@@ -31,7 +31,10 @@ class DiagnosticsService:
                 f"{agent_name.capitalize()} agent is not available. "
                 "Check that dependencies are installed"
             )
-            if not self._ctx.llm_config or not self._ctx.llm_config.get_available_providers():
+            if not self._ctx.llm_config or not (
+                hasattr(self._ctx.llm_config, "get_available_providers")
+                and self._ctx.llm_config.get_available_providers()
+            ):
                 error_msg += " and LLM provider is configured (set API keys in .env)"
             return False, error_msg
         return True, None
@@ -49,6 +52,7 @@ class DiagnosticsService:
             "available_providers": (
                 self._ctx.llm_config.get_available_providers()
                 if self._ctx.llm_config
+                and hasattr(self._ctx.llm_config, "get_available_providers")
                 else []
             ),
         }

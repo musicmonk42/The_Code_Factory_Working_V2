@@ -82,7 +82,7 @@ class TestSessionManagerMethods(unittest.TestCase):
         self.svc = SessionManager(_ctx())
 
     def test_methods(self):
-        for name in ("run_clarifier", "cleanup_expired_sessions"):
+        for name in ("run_clarifier", "cleanup_expired_clarification_sessions"):
             with self.subTest(method=name):
                 self.assertTrue(hasattr(self.svc, name),
                                 f"SessionManager missing: {name}")
@@ -94,7 +94,7 @@ class TestResponseProcessorMethods(unittest.TestCase):
         self.svc = ResponseProcessor(_ctx())
 
     def test_methods(self):
-        for name in ("submit_response", "generate_clarified_requirements",
+        for name in ("submit_clarification_response", "generate_clarified_requirements",
                       "categorize_answer"):
             with self.subTest(method=name):
                 self.assertTrue(hasattr(self.svc, name),
@@ -107,7 +107,7 @@ class TestQuestionGeneratorMethods(unittest.TestCase):
         self.svc = QuestionGenerator(_ctx())
 
     def test_methods(self):
-        for name in ("generate_questions",):
+        for name in ("generate_clarification_questions",):
             with self.subTest(method=name):
                 self.assertTrue(hasattr(self.svc, name),
                                 f"QuestionGenerator missing: {name}")
@@ -119,9 +119,10 @@ class TestClarifierServiceMethods(unittest.TestCase):
         self.svc = ClarifierService(_ctx())
 
     def test_delegates_exist(self):
-        for name in ("run_clarifier", "submit_response", "generate_questions",
+        for name in ("run_clarifier", "submit_clarification_response",
+                      "generate_clarification_questions",
                       "generate_clarified_requirements",
-                      "cleanup_expired_sessions"):
+                      "cleanup_expired_clarification_sessions"):
             with self.subTest(method=name):
                 self.assertTrue(hasattr(self.svc, name),
                                 f"ClarifierService missing: {name}")
