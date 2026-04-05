@@ -42,7 +42,8 @@ from server.schemas import (
     CodegenRequest,
     GenerationLanguage,
 )
-from server.services import GeneratorService, OmniCoreService
+from server.services import GeneratorService
+from server.services.message_bus_service import get_message_bus_service, MessageBusService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
 from server.routers.generator import _run_pipeline_with_semaphore
@@ -70,25 +71,25 @@ SUPPORTED_LANGUAGES = {"python", "javascript", "typescript", "go", "java", "rust
 
 
 async def _emit_event_fire_and_forget(
-    omnicore_service: OmniCoreService,
+    bus_service: MessageBusService,
     topic: str,
     payload: Dict[str, Any],
     priority: int = 5,
 ) -> None:
     """
     Fire-and-forget wrapper for emitting OmniCore events.
-    
+
     This function runs in the background without blocking the response.
     Errors are logged but do not propagate to the caller.
-    
+
     Args:
-        omnicore_service: OmniCore service instance
+        bus_service: MessageBusService instance
         topic: Event topic
         payload: Event payload
         priority: Event priority (default: 5)
     """
     try:
-        await omnicore_service.emit_event(
+        await bus_service.emit_event(
             topic=topic,
             payload=payload,
             priority=priority,
@@ -195,17 +196,12 @@ def get_generator_service() -> GeneratorService:
     return GeneratorService(omnicore_service=omnicore)
 
 
-def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService (uses singleton)."""
-    return _get_omnicore_service()
-
-
 @router.post("/generate", response_model=V1GenerateResponse, status_code=202)
 async def create_generation(
     request: V1GenerateRequest,
     background_tasks: BackgroundTasks,
     generator_service: GeneratorService = Depends(get_generator_service),
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
     _: None = Depends(require_agents_ready),
 ) -> V1GenerateResponse:
     """
@@ -261,7 +257,7 @@ async def create_generation(
     if not os.environ.get("SKIP_BACKGROUND_TASKS"):
         asyncio.create_task(
             _emit_event_fire_and_forget(
-                omnicore_service=omnicore_service,
+                bus_service=bus_service,
                 topic="job.created",
                 payload={
                     "job_id": job_id,

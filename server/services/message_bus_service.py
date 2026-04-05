@@ -22,6 +22,23 @@ class MessageBusService:
     def __init__(self, ctx: ServiceContext) -> None:
         self._ctx = ctx
 
+    # -- Introspection -------------------------------------------------------
+
+    def is_available(self) -> bool:
+        """Return ``True`` if the message bus is operational."""
+        bus = self._ctx.message_bus
+        if not bus:
+            return False
+        if not getattr(bus, "_dispatchers_started", False):
+            return False
+        if not self._ctx.omnicore_components_available.get("message_bus", False):
+            return False
+        return True
+
+    def get_bus(self) -> Any:
+        """Return the underlying message bus instance (or ``None``)."""
+        return self._ctx.message_bus
+
     # -- Lifecycle -----------------------------------------------------------
 
     async def start_message_bus(self) -> bool:

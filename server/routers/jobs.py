@@ -34,7 +34,8 @@ from server.schemas import (
     StageProgress,
     SuccessResponse,
 )
-from server.services import GeneratorService, OmniCoreService
+from server.services import GeneratorService
+from server.services.message_bus_service import get_message_bus_service, MessageBusService
 from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import jobs_db, add_job
 from server.persistence import save_job_to_database, load_job_from_database, delete_job_from_database
@@ -45,7 +46,7 @@ router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
 async def _emit_event_fire_and_forget(
-    omnicore_service: OmniCoreService,
+    bus_service: MessageBusService,
     topic: str,
     payload: Dict[str, Any],
     priority: int = 5,
@@ -57,13 +58,13 @@ async def _emit_event_fire_and_forget(
     FIX Issue 4: Errors are logged prominently and should be monitored.
 
     Args:
-        omnicore_service: OmniCore service instance
+        bus_service: MessageBusService instance
         topic: Event topic
         payload: Event payload
         priority: Event priority (default: 5)
     """
     try:
-        await omnicore_service.emit_event(
+        await bus_service.emit_event(
             topic=topic,
             payload=payload,
             priority=priority,
@@ -140,22 +141,26 @@ def _is_path_safe(file_path: Path, base_dir: Path) -> bool:
             return False
 
 
+def get_omnicore_service():
+    """Return the OmniCoreService singleton.
+
+    Kept as a public helper because other routers (generator, sfe) import
+    this function to construct their own service instances.
+    """
+    return _get_omnicore_service()
+
+
 def get_generator_service() -> GeneratorService:
     """Dependency for GeneratorService."""
     omnicore = _get_omnicore_service()
     return GeneratorService(omnicore_service=omnicore)
 
 
-def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService (uses singleton)."""
-    return _get_omnicore_service()
-
-
 @router.post("/", response_model=Job, status_code=201)
 async def create_job(
     request: JobCreateRequest,
     generator_service: GeneratorService = Depends(get_generator_service),
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
     _: None = Depends(require_agents_ready),
 ) -> Job:
     """
@@ -220,7 +225,7 @@ async def create_job(
     if not os.environ.get("SKIP_BACKGROUND_TASKS"):
         task = asyncio.create_task(
             _emit_event_fire_and_forget(
-                omnicore_service=omnicore_service,
+                bus_service=bus_service,
                 topic="job.created",
                 payload={
                     "job_id": job_id,
@@ -305,7 +310,6 @@ async def get_job(job_id: str) -> Job:
 async def get_job_progress(
     job_id: str,
     generator_service: GeneratorService = Depends(get_generator_service),
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> JobProgress:
     """
     Get detailed progress information for a job across all pipeline stages.

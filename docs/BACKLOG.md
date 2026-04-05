@@ -27,8 +27,8 @@
 - [x] [DEC-2] Phase 2: 5 domain services extracted + helpers wired (6 files)
 - [x] [DEC-3] Phase 3: Pipeline sub-services extracted (5 files)
 - [x] [DEC-4] Phase 4: Clarifier sub-modules extracted (6 files)
-- [ ] [DEC-5] Phase 5: Router migration — change Depends() to use new services
-- [ ] [DEC-6] Phase 5: Delete facade — remove delegation stubs, inline methods
+- [x] [DEC-5] Phase 5: Router migration — 8 routers migrated to domain services, job_router.py created
+- [ ] [DEC-6] Phase 5: Delete facade — blocked by main.py startup/shutdown coupling + GeneratorService constructor dependency
 - [ ] [DEC-7] Internal decomposition of oversized methods (>40 lines)
 
 ## Wishlist (Nice to Have)

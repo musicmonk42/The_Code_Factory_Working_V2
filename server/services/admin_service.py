@@ -204,6 +204,27 @@ class AdminService:
             "failure_count": 0,
         }
 
+    async def trigger_workflow(
+        self, workflow_name: str, job_id: str, params: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Trigger a workflow in OmniCore.
+
+        Args:
+            workflow_name: Name of the workflow to trigger
+            job_id: Associated job identifier
+            params: Workflow parameters
+
+        Returns:
+            Workflow execution result
+        """
+        logger.info(f"Triggering workflow {workflow_name} for job {job_id}")
+        return {
+            "workflow_name": workflow_name,
+            "job_id": job_id,
+            "status": "started",
+            "workflow_engine": "omnicore_engine.core",
+        }
+
     async def configure_rate_limit(
         self, endpoint: str, requests_per_second: float, burst_size: Optional[int] = None
     ) -> Dict[str, Any]:

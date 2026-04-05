@@ -11,11 +11,9 @@ import logging
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from server.schemas import Fix, FixStatus
-from server.services import OmniCoreService
-from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
 from server.storage import fixes_db
 
 logger = logging.getLogger(__name__)
@@ -23,16 +21,10 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/fixes", tags=["Fixes"])
 
 
-def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService (uses singleton)."""
-    return _get_omnicore_service()
-
-
 @router.get("/", response_model=List[Fix])
 async def list_fixes(
     job_id: Optional[str] = Query(None, description="Filter by job ID"),
     status: Optional[FixStatus] = Query(None, description="Filter by status"),
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> List[Fix]:
     """
     List all fixes with optional filtering.
@@ -70,7 +62,6 @@ async def list_fixes(
 @router.get("/{fix_id}", response_model=Fix)
 async def get_fix_detail(
     fix_id: str,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
 ) -> Fix:
     """
     Get detailed information about a specific fix.

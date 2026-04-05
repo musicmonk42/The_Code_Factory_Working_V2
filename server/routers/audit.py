@@ -27,6 +27,7 @@ import aiofiles
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from server.services.audit_query_service import get_audit_query_service, AuditQueryService
 from server.services.omnicore_service import OmniCoreService, get_omnicore_service
 
 logger = logging.getLogger(__name__)
@@ -140,6 +141,7 @@ async def query_all_audit_logs(
     end_time: Optional[str] = Query(None, description="ISO 8601 end timestamp"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum results per module; global cap is limit × number of modules queried"),
     omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    audit_service: AuditQueryService = Depends(get_audit_query_service),
 ) -> Dict[str, Any]:
     """
     Query audit logs from all platform modules via the OmniCore orchestrator.
@@ -235,7 +237,7 @@ async def query_all_audit_logs(
                     job_ids = ["system"]
 
             for jid in job_ids:
-                omnicore_logs = await omnicore_service.get_audit_trail(job_id=jid, limit=limit)
+                omnicore_logs = await audit_service.get_audit_trail(job_id=jid, limit=limit)
                 for log in omnicore_logs:
                     log["module"] = "omnicore"
                     omnicore_trail_logs.append(log)

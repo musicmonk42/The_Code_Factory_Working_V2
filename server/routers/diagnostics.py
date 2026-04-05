@@ -395,11 +395,11 @@ async def get_system_status() -> Dict[str, Any]:
     ```
     """
     try:
-        from server.services.omnicore_service import OmniCoreService
-        
-        service = OmniCoreService()
+        from server.services.diagnostics_service import get_diagnostics_service
+
+        service = get_diagnostics_service()
         return service.get_system_status()
-        
+
     except Exception as e:
         logger.error(f"Error getting system status: {e}", exc_info=True)
         raise HTTPException(
@@ -434,11 +434,11 @@ async def get_llm_status() -> Dict[str, Any]:
     ```
     """
     try:
-        from server.services.omnicore_service import OmniCoreService
-        
-        service = OmniCoreService()
+        from server.services.diagnostics_service import get_diagnostics_service
+
+        service = get_diagnostics_service()
         return service.get_llm_status()
-        
+
     except Exception as e:
         logger.error(f"Error getting LLM status: {e}", exc_info=True)
         raise HTTPException(
