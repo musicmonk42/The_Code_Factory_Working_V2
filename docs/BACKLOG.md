@@ -31,6 +31,10 @@
 - [x] [DEC-6] Phase 5: Decouple main.py, GeneratorService, __init__.py from OmniCoreService (facade kept as compat shim)
 - [ ] [DEC-7] Internal decomposition of oversized methods (>40 lines)
 
+### Documentation
+
+- [ ] [DOC-1] **HIGH**: Executive-level README.md upgrade — badges, internal/external links, professional presentation. Use /qor-document and /technical-writing-narrative patterns for maximum impact.
+
 ## Wishlist (Nice to Have)
 
 - [ ] [W1] Pre-commit hook for secret scanning as part of CI genesis
