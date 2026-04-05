@@ -35,7 +35,7 @@ from self_fixing_engineer.arbiter.arbiter_plugin_registry import PlugInKind, reg
 
 
 # Regex for validating JSON query keys to prevent SQL injection via json_extract paths.
-_SAFE_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
+_SAFE_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)*$")
 
 # Lazy-loaded registry to avoid import-time initialization
 def _get_arbiter_registry():
@@ -340,6 +340,8 @@ class SQLiteClient:
                         continue
                     where_clauses.append(f"json_extract(data, '$.{k}') = ?")
                     params.append(v)
+                if not where_clauses:
+                    raise ValueError("No valid filter criteria in query")
                 where_sql = " AND ".join(where_clauses)
                 cursor = await db.execute(
                     f"SELECT data FROM feedback WHERE {where_sql} ORDER BY timestamp ASC",
@@ -366,6 +368,8 @@ class SQLiteClient:
                     continue
                 where_clauses.append(f"json_extract(data, '$.{k}') = ?")
                 params.append(v)
+            if not where_clauses:
+                raise ValueError("No valid filter criteria in query")
             where_sql = " AND ".join(where_clauses)
 
             # Use json_patch or a similar approach for atomic updates if possible.

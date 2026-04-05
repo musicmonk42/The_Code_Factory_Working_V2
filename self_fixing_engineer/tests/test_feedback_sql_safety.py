@@ -1,9 +1,7 @@
 """Tests for SQL injection prevention in feedback query keys."""
-import re
 import unittest
 
-# Copy the regex pattern to test independently of module imports
-_SAFE_KEY_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_.]*$")
+from self_fixing_engineer.arbiter.feedback import _SAFE_KEY_PATTERN
 
 
 class TestFeedbackKeySafety(unittest.TestCase):
