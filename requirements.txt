@@ -88,14 +88,6 @@ elasticsearch==9.2.0
 en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl#sha256=1932429db727d4bff3deed6b34cfc05df17794f4a52eeb26cf8928f7c1a0fb85
 environs==14.3.0
 etcd3-py==0.1.6
-eth-account==0.13.7
-eth-hash==0.7.1
-eth-keyfile==0.8.1
-eth-keys==0.7.0
-eth-rlp==2.2.0
-eth-typing==5.2.1
-eth-utils==5.3.1
-eth_abi==5.2.0
 exceptiongroup==1.3.0
 Faker==37.6.0
 Farama-Notifications==0.0.4
@@ -106,11 +98,7 @@ feast==0.54.1
 ffmpeg==1.4
 filelock==3.19.1
 flake8==7.3.0
-Flask==3.1.2
-flask-cors==6.0.1
-Flask-JWT-Extended==4.7.1
-Flask-Limiter==4.0.0
-flask-swagger-ui==5.21.0
+# Flask removed — FastAPI is the production web framework. Flask was test-only.
 flatbuffers==25.9.23
 fonttools==4.59.2
 freezegun==1.5.5
@@ -145,7 +133,6 @@ grpcio-health-checking==1.69.0
 grpcio-status==1.69.0
 grpcio-tools==1.69.0
 gunicorn==23.0.0
-gymnasium==1.2.0
 h11==0.16.0
 h2==4.3.0
 hexbytes==1.3.1
@@ -181,7 +168,7 @@ jsonpointer==3.0.0
 jsonschema==4.25.1
 jsonschema-specifications==2025.4.1
 kafka-python==2.3.0
-confluent-kafka==2.3.0
+# confluent-kafka removed — aiokafka is the primary async Kafka client (15 files).
 kiwisolver==1.4.9
 kubernetes==33.1.0
 langchain==0.3.27
@@ -338,7 +325,6 @@ requests-file==3.0.1
 requests-oauthlib==2.0.0
 requests-toolbelt==1.0.0
 rich==14.2.0
-rlp==4.1.0
 rpds-py==0.28.0
 rsa==4.9.1
 ruamel.yaml==0.18.16
@@ -347,11 +333,9 @@ ruff==0.8.5
 s3transfer>=0.10.0,<0.11.0
 safetensors==0.7.0
 sarif-om==1.0.4
-scikit-learn==1.7.2
 scipy==1.13.1
 semantic-version==2.10.0
 sentry-sdk>=2.0.0,<3.0.0
-sentence-transformers==5.1.2
 setproctitle==1.3.7
 shellingham==1.5.4
 six==1.17.0
@@ -367,7 +351,6 @@ spacy-loggers==1.0.5
 SQLAlchemy==2.0.44
 srsly==2.5.1
 sse-starlette==2.1.3
-stable-baselines3>=2.0.0
 starlette==0.47.3
 stevedore==5.5.0
 structlog==25.5.0
@@ -384,11 +367,7 @@ tokenizers==0.22.1
 toml==0.10.2
 tomli==2.3.0
 toolz==1.1.0
-torch==2.9.1
-torchaudio==2.9.1
-torchvision==0.24.1
 tqdm==4.67.1
-transformers==4.57.3
 typeguard==4.4.4
 typer==0.20.0
 typer-slim==0.20.0
@@ -409,7 +388,6 @@ watchdog==6.0.0
 watchfiles==1.1.1
 wcwidth==0.2.14
 weasel==0.4.3
-web3==7.14.0
 webencodings==0.5.1
 websocket-client==1.9.0
 websockets==15.0.1
@@ -426,11 +404,10 @@ ujson>=5.0.0
 nest-asyncio==1.6.0
 xattr==1.1.0
 python-pkcs11==0.7.0
-libvirt-python>=10.0.0  # Requires system packages (libvirt-dev, pkg-config) - now installed in Dockerfile
+# libvirt-python moved to requirements-optional.txt
 paramiko==3.5.0
 fastavro==1.11.1
 avro>=1.11.0  # Provides 'avro' module for Avro file support (official Apache Avro Python package)
-faiss-cpu==1.9.0.post1
 SpeechRecognition>=3.10.0  # Voice input support for VoicePrompt class
 
 # Additional optional dependencies for complete feature support
