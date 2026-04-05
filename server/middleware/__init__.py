@@ -11,9 +11,12 @@ from .arbiter_policy import (
     arbiter_policy_check,
     optional_arbiter_policy_check,
 )
+from .api_key_auth import require_api_key, reset_key_cache
 
 __all__ = [
     "ArbiterPolicyMiddleware",
     "arbiter_policy_check",
     "optional_arbiter_policy_check",
+    "require_api_key",
+    "reset_key_cache",
 ]

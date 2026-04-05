@@ -10,13 +10,13 @@
 
 ### Development Blockers
 
-- [ ] [D1] **MEDIUM**: Broken retry-pipeline regression tests — `tests/test_sfe_retry_pipeline.py:81` and `:116` instantiate `ArbiterArena` without the now-required `settings` argument (`arena.py:320`). The SFE retry feature is effectively unprotected by tests. **Remediation**: Update test fixtures to pass required `settings` argument.
+- [x] [D1] **MEDIUM**: Broken retry-pipeline regression tests (Complete — mock_settings added to all 4 ArbiterArena calls)
 - [ ] [D2] **MEDIUM**: Case-insensitive filename collision on Windows — repo tracks both `prompt_templates/README_default.jinja` and `prompt_templates/readme_default.jinja`. Git warns about the collision on case-insensitive filesystems, worktree comes up dirty, and the lowercase file is a one-line stub risking template resolution bugs. **Remediation**: Remove the lowercase stub; canonicalize to one casing.
 - [x] [D3] **MEDIUM**: Auth decorator swallows 401/403 as 500 (Complete — `except HTTPException: raise` added before broad handler)
 
 ## Backlog (Planned Work)
 
-- [ ] [B1] Update README clone URL from old `The_Code_Factory_Working_V2` repo to current `MythologIQ/A.S.E.`
+- [x] [B1] Update README clone URL (Complete — executive README rewrite)
 - [ ] [B2] Reconcile Python version requirement: README says 3.11+, `pyproject.toml:12` declares `>=3.10`
 - [ ] [B3] Investigate `pytest --collect-only` timeout (>2 minutes) — likely import-time side effects or heavy fixtures
 - [ ] [B4] Section 4 Razor compliance pass — many files exceed 250-line and 40-line function thresholds
@@ -33,7 +33,7 @@
 
 ### Documentation
 
-- [ ] [DOC-1] **HIGH**: Executive-level README.md upgrade — badges, internal/external links, professional presentation. Use /qor-document and /technical-writing-narrative patterns for maximum impact.
+- [x] [DOC-1] **HIGH**: Executive-level README.md upgrade (Complete — badges, TOC, architecture diagram, tiered install, 14 verified links)
 
 ## Wishlist (Nice to Have)
 

@@ -42,9 +42,10 @@ _is_test_environment = (
     os.getenv("APP_ENV") == "test"
 )
 
-# Only force production mode if NOT in a test environment
-if not _is_test_environment:
-    # Force Production Mode
+# Set production defaults only if APP_ENV is not already configured
+# This respects user-configured environments (dev, staging) instead of
+# silently overriding them. Tests and CI are auto-detected above.
+if not _is_test_environment and not os.environ.get("APP_ENV"):
     os.environ["APP_ENV"] = "production"
     os.environ["DEV_MODE"] = "0"
     
@@ -194,7 +195,7 @@ def _verify_critical_import(module_name: str, package_name: str, description: st
 # CRITICAL: Verify FastAPI and core dependencies BEFORE any other imports
 # This ensures clear, actionable error messages for operators
 try:
-    from fastapi import FastAPI, Request, Response
+    from fastapi import Depends, FastAPI, Request, Response
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
     from fastapi.staticfiles import StaticFiles
@@ -1763,8 +1764,12 @@ signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
 
 # Create FastAPI application
+# API key authentication — enforced when REQUIRE_API_KEY=1
+from server.middleware.api_key_auth import require_api_key  # noqa: E402
+
 app = FastAPI(
     title="Code Factory Platform API",
+    dependencies=[Depends(require_api_key)],
     description="""
     **The Code Factory Platform** - Enterprise-grade HTTP API for automated 
     software development and maintenance.
