@@ -216,5 +216,30 @@ SHA256(content_hash + previous_hash)
 **Decision**: Initial VETO — `route_job` is 235 lines (6x over 40-line limit). Governor remediated: decomposed into `_make_route_result` (~10 lines), `_dispatch_and_wrap` (~15 lines), `_route_via_message_bus` (~30 lines), `route_job` (~25 lines). Eliminates 8 duplicated response dicts. Re-audit: PASS. Router migration + facade removal approved.
 
 ---
+
+### Entry #8: GATE TRIBUNAL (DEC-6 Unblock)
+
+**Timestamp**: 2026-04-04T19:00:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-dec6-unblock-facade-removal.md)
+= f4993eca272846c55fab46eb07d8a1ceebe19454db5cdbc75143877e0d733556
+```
+
+**Previous Hash**: 0319d1d8887b853949fba9b178d8c40995cb35df9ea5cbb33db096d94522d766
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 175afe4ecc34b552c647fa382c4e615c65d82ece924e7aa027f58b5cadf50bd7
+```
+
+**Decision**: Initial VETO — two incomplete specs: (1) main.py:1502 `start_periodic_audit_flush` listed as open question but fix is known (AuditQueryService), (2) generator_service.py:1183 internal factory not included in Phase 1. Governor remediated both. Re-audit: PASS.
+
+---
 *Chain integrity: VALID*
-*Next required action: /qor-implement (DEC-5 + DEC-6)*
+*Next required action: /qor-implement (DEC-6)*

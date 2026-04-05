@@ -2,7 +2,7 @@
 
 ## Open Questions
 
-- **`main.py` line 1502**: `get_omnicore_service()` is called during agent loading. Need to verify what it's used for — if it's just passing the service to something, the fix is the same pattern. If it's calling methods, those need mapping to the right domain service.
+None — all coupling points verified.
 
 ## Phase 1: Decouple GeneratorService from OmniCoreService
 
@@ -11,7 +11,7 @@
 ### Affected Files
 
 - `server/tests/test_generator_service_decoupled.py` — verify GeneratorService works with route_job (new)
-- `server/services/generator_service.py` — replace omnicore_service param with route_job + ServiceContext
+- `server/services/generator_service.py` — replace omnicore_service param with route_job + ServiceContext; also update internal `get_generator_service()` factory at line 1183
 - `server/routers/jobs.py` — update GeneratorService construction
 - `server/routers/v1_compat.py` — update GeneratorService construction
 - `server/routers/generator.py` — update GeneratorService construction
@@ -98,8 +98,18 @@ if bus_service.is_available():
         await asyncio.sleep(1)
 ```
 
-**Agent loading (line 1502-1503)**:
-Verify usage and replace with appropriate domain service.
+**Periodic audit flush (lines 1502-1505)**:
+```python
+# BEFORE
+from server.services.omnicore_service import get_omnicore_service
+omnicore = get_omnicore_service()
+await omnicore.start_periodic_audit_flush()
+
+# AFTER
+from server.services.audit_query_service import get_audit_query_service
+audit_service = get_audit_query_service()
+await audit_service.start_periodic_audit_flush()
+```
 
 **Shutdown (lines 2248-2252)**:
 ```python
