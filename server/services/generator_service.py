@@ -1166,22 +1166,16 @@ class GeneratorService:
         }
 
 
+_generator_service_instance = None
+
+
 def get_generator_service() -> GeneratorService:
-    """
-    Dependency injection function for GeneratorService.
-    
-    Creates a GeneratorService instance with OmniCoreService for
-    centralized routing of generator operations.
-    
-    Returns:
-        GeneratorService: Configured generator service instance
-        
-    Example:
-        >>> from fastapi import Depends
-        >>> @router.post("/endpoint")
-        >>> async def handler(service: GeneratorService = Depends(get_generator_service)):
-        ...     result = await service.create_generation_job(...)
-    """
-    from server.services.job_router import route_job
-    from server.services.service_context import get_service_context
-    return GeneratorService(route_job_fn=route_job, ctx=get_service_context())
+    """Dependency injection — returns cached GeneratorService singleton."""
+    global _generator_service_instance  # noqa: PLW0603
+    if _generator_service_instance is None:
+        from server.services.job_router import route_job
+        from server.services.service_context import get_service_context
+        _generator_service_instance = GeneratorService(
+            route_job_fn=route_job, ctx=get_service_context()
+        )
+    return _generator_service_instance

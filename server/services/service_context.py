@@ -12,6 +12,7 @@ factory that wires up sensible defaults.
 from __future__ import annotations
 
 import logging
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -105,18 +106,29 @@ async def create_service_context(
 
 # -- Singleton accessor ---------------------------------------------------
 
+import threading
+
 _service_context_instance: Optional[ServiceContext] = None
+_context_lock = threading.Lock()
 
 
 def get_service_context() -> ServiceContext:
     """Return the shared ServiceContext singleton.
 
-    During app startup, ``create_service_context`` populates this.  If called
-    before startup (e.g. in tests), returns a default empty context.
+    Raises RuntimeError if called before ``set_service_context()``,
+    except in test environments where a default empty context is returned.
     """
     global _service_context_instance  # noqa: PLW0603
     if _service_context_instance is None:
-        _service_context_instance = ServiceContext()
+        with _context_lock:
+            if _service_context_instance is None:
+                import os
+                if os.getenv("TESTING") == "1" or "pytest" in sys.modules:
+                    _service_context_instance = ServiceContext()
+                else:
+                    raise RuntimeError(
+                        "ServiceContext not initialized. Call set_service_context() at startup."
+                    )
     return _service_context_instance
 
 
