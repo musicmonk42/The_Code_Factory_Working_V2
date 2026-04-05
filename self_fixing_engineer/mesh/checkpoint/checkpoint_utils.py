@@ -849,7 +849,7 @@ def decompress_data(data: bytes, algorithm: Optional[str] = None) -> bytes:
                             )
 
                         return decompressed
-                    except:
+                    except Exception:
                         continue
 
                 # If all fail, raise error
@@ -999,7 +999,7 @@ def scrub_data(
                 text = obj.decode("utf-8", errors="ignore")
                 scrubbed_text = _scrub_string(text)
                 return scrubbed_text.encode("utf-8")
-            except:
+            except (UnicodeDecodeError, ValueError, TypeError):
                 return obj
 
         else:
@@ -1254,7 +1254,7 @@ def validate_checkpoint_data(
         try:
             # Validate timestamp format
             datetime.fromisoformat(metadata["timestamp"])
-        except:
+        except (ValueError, KeyError, TypeError):
             raise ValueError("Invalid timestamp format")
 
     # Schema validation if provided

@@ -580,7 +580,7 @@ def _create_pydantic_classes():
     try:
         from pydantic import VERSION
         PYDANTIC_V2 = int(VERSION.split('.')[0]) >= 2
-    except:
+    except (ImportError, ValueError, IndexError):
         PYDANTIC_V2 = False
     
     if PYDANTIC_V2:

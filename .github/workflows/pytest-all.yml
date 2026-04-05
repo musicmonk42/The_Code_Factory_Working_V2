@@ -50,6 +50,7 @@ jobs:
           - generator
           - self_fixing_engineer
           - server
+          - tests
 
     services:
       redis:
