@@ -191,5 +191,30 @@ SHA256(content_hash + previous_hash)
 **Decision**: Phases 1-4 of god-module decomposition complete. 28 new files created totaling ~5,000 lines. omnicore_service.py reduced from 11,021 to 9,900 lines (-10%). New services are delegation stubs pending router migration (Phase 5) and method inlining (future). 62 tests across 4 test files validate structure.
 
 ---
+
+### Entry #7: GATE TRIBUNAL (Router Migration + Facade Removal)
+
+**Timestamp**: 2026-04-04T18:15:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-router-migration-facade-removal.md)
+= 5a2eca5afb6ac85d0d3972bab1192e636de01a217d526c395464672114d20701
+```
+
+**Previous Hash**: 5df10e6132839d172ab6287677a217e845dfb560a5d49a4dd1d896b68790b02e
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 0319d1d8887b853949fba9b178d8c40995cb35df9ea5cbb33db096d94522d766
+```
+
+**Decision**: Initial VETO — `route_job` is 235 lines (6x over 40-line limit). Governor remediated: decomposed into `_make_route_result` (~10 lines), `_dispatch_and_wrap` (~15 lines), `_route_via_message_bus` (~30 lines), `route_job` (~25 lines). Eliminates 8 duplicated response dicts. Re-audit: PASS. Router migration + facade removal approved.
+
+---
 *Chain integrity: VALID*
-*Next required action: /qor-substantiate*
+*Next required action: /qor-implement (DEC-5 + DEC-6)*
