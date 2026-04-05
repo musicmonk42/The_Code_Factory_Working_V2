@@ -109,5 +109,176 @@ SHA256(content_hash + previous_hash)
 **Decision**: All 7 security fixes implemented across 3 phases. 17 unit tests created. Backlog items S1, S2, S3, D3 marked complete. Ready for substantiation.
 
 ---
+
+### Entry #5: GATE TRIBUNAL (Decomposition Plan)
+
+**Timestamp**: 2026-04-04T15:45:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-decompose-omnicore-service.md)
+= 854e233cba4425e6097f81c263f4d0c12e95c9d6de92952d898c08d1333f3659
+```
+
+**Previous Hash**: 28dd7110782ede3740219ea474d80116bbfdba3d2bcf9061a59ea8a22cf13d29
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= f7de5704ebcf56ec1bbb3f6809ddc2445466cf19e15f8605854c442cb31a5f43
+```
+
+**Decision**: Initial VETO — two violations: (1) generator_pipeline_service.py and clarifier_service.py proposed at 3,500 and 4,000 lines (14x-16x over 250-line limit), (2) `await` in `__init__` is a SyntaxError. Governor remediated: split into pipeline/ (4 sub-services) and clarifier/ (3 sub-modules), all <= 250 lines; services accept ServiceContext as parameter. Re-audit: PASS. 5-phase decomposition of 11,021-line god-module into 18 focused files approved.
+
+---
+
+### Entry #6: IMPLEMENTATION (Decomposition Phases 1-4)
+
+**Timestamp**: 2026-04-04T17:00:00+00:00
+**Phase**: IMPLEMENT
+**Author**: Specialist
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(new service files combined)
+= 996c66ce2c0a187fceb153a46ab75cb69097c3cd58e5fde3af911d4dba9b8951
+```
+
+**Previous Hash**: f7de5704ebcf56ec1bbb3f6809ddc2445466cf19e15f8605854c442cb31a5f43
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 5df10e6132839d172ab6287677a217e845dfb560a5d49a4dd1d896b68790b02e
+```
+
+**Files Created** (24 source):
+- `server/services/service_context.py` — ServiceContext dataclass
+- `server/services/helpers/__init__.py` — helpers package init
+- `server/services/helpers/_templates.py` — template utilities
+- `server/services/helpers/fallback_generators.py` — fallback generation logic
+- `server/services/helpers/file_utils.py` — file operation helpers
+- `server/services/helpers/project_detection.py` — project type detection
+- `server/services/helpers/sfe_cache.py` — SFE caching layer
+- `server/services/helpers/validation.py` — input validation utilities
+- `server/services/admin_service.py` — AdminService delegation stub
+- `server/services/audit_query_service.py` — AuditQueryService delegation stub
+- `server/services/diagnostics_service.py` — DiagnosticsService delegation stub
+- `server/services/message_bus_service.py` — MessageBusService delegation stub
+- `server/services/sfe_dispatch_service.py` — SFEDispatchService delegation stub
+- `server/services/pipeline/__init__.py` — pipeline package init
+- `server/services/pipeline/codegen_service.py` — CodegenService
+- `server/services/pipeline/deploy_service.py` — DeployService
+- `server/services/pipeline/quality_service.py` — QualityService
+- `server/services/pipeline/pipeline_orchestrator.py` — PipelineOrchestrator
+- `server/services/clarifier/__init__.py` — clarifier package init
+- `server/services/clarifier/_prompt_builder.py` — prompt building internals
+- `server/services/clarifier/_response_parser.py` — response parsing internals
+- `server/services/clarifier/question_generator.py` — QuestionGenerator
+- `server/services/clarifier/response_processor.py` — ResponseProcessor
+- `server/services/clarifier/session_manager.py` — SessionManager
+
+**Files Created** (4 test):
+- `server/tests/test_service_context.py` — ServiceContext unit tests
+- `server/tests/test_domain_services.py` — domain service delegation tests
+- `server/tests/test_pipeline_services.py` — pipeline sub-service tests
+- `server/tests/test_clarifier_services.py` — clarifier sub-module tests
+
+**Decision**: Phases 1-4 of god-module decomposition complete. 28 new files created totaling ~5,000 lines. omnicore_service.py reduced from 11,021 to 9,900 lines (-10%). New services are delegation stubs pending router migration (Phase 5) and method inlining (future). 62 tests across 4 test files validate structure.
+
+---
+
+### Entry #7: GATE TRIBUNAL (Router Migration + Facade Removal)
+
+**Timestamp**: 2026-04-04T18:15:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-router-migration-facade-removal.md)
+= 5a2eca5afb6ac85d0d3972bab1192e636de01a217d526c395464672114d20701
+```
+
+**Previous Hash**: 5df10e6132839d172ab6287677a217e845dfb560a5d49a4dd1d896b68790b02e
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 0319d1d8887b853949fba9b178d8c40995cb35df9ea5cbb33db096d94522d766
+```
+
+**Decision**: Initial VETO — `route_job` is 235 lines (6x over 40-line limit). Governor remediated: decomposed into `_make_route_result` (~10 lines), `_dispatch_and_wrap` (~15 lines), `_route_via_message_bus` (~30 lines), `route_job` (~25 lines). Eliminates 8 duplicated response dicts. Re-audit: PASS. Router migration + facade removal approved.
+
+---
+
+### Entry #8: GATE TRIBUNAL (DEC-6 Unblock)
+
+**Timestamp**: 2026-04-04T19:00:00+00:00
+**Phase**: GATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Content Hash**:
+```
+SHA256(plan-dec6-unblock-facade-removal.md)
+= f4993eca272846c55fab46eb07d8a1ceebe19454db5cdbc75143877e0d733556
+```
+
+**Previous Hash**: 0319d1d8887b853949fba9b178d8c40995cb35df9ea5cbb33db096d94522d766
+
+**Chain Hash**:
+```
+SHA256(content_hash + previous_hash)
+= 175afe4ecc34b552c647fa382c4e615c65d82ece924e7aa027f58b5cadf50bd7
+```
+
+**Decision**: Initial VETO — two incomplete specs: (1) main.py:1502 `start_periodic_audit_flush` listed as open question but fix is known (AuditQueryService), (2) generator_service.py:1183 internal factory not included in Phase 1. Governor remediated both. Re-audit: PASS.
+
+---
+
+### Entry #9: SESSION SEAL
+
+**Timestamp**: 2026-04-04T20:00:00+00:00
+**Phase**: SUBSTANTIATE
+**Author**: Judge
+**Risk Grade**: L3
+
+**Session Seal**:
+```
+SHA256(all 19 commit hashes)
+= a0241cf3ace85b031b1dc2222884db1c6ed9b4891ce089a00d931cfdc29b49d0
+```
+
+**Previous Hash**: 175afe4ecc34b552c647fa382c4e615c65d82ece924e7aa027f58b5cadf50bd7
+
+**Session Summary**:
+- 19 commits, 68 files changed, +7,429 / -1,511 lines
+- 7 security fixes (2 CRITICAL, 3 HIGH, 2 MEDIUM) — S1, S2, S3, S4, S5, D3, HMAC
+- God-module decomposition: DEC-1 through DEC-6 complete
+  - 30+ new service modules, all <= 250 lines
+  - 8 new test files, 80+ test cases
+  - 8 routers migrated to domain services
+  - GeneratorService decoupled from OmniCoreService
+  - main.py decoupled from OmniCoreService
+- 10 upstream issues filed (#1786-#1793, #1795, #1796)
+- 2 upstream PRs (#1794 merged, #1797 open)
+- 5 VETO → PASS audit cycles
+- 11 bugs found by debugger, all fixed
+- Workspace organized (config/, scripts/, docs/plans/)
+
+**Remaining Work**:
+- DEC-7: Internal decomposition of oversized methods (>40 lines)
+- Residual OmniCoreService references in audit.py, generator.py, jobs.py (backward compat)
+- omnicore_service.py still 9,900 lines (class exists but zero direct consumers)
+
+**Verdict**: Reality matches Promise. Session sealed.
+
+---
 *Chain integrity: VALID*
-*Next required action: /qor-substantiate*
+*Session: SEALED*

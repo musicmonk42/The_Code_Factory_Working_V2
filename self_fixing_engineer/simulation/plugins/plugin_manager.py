@@ -857,6 +857,12 @@ class PluginManager:
                 load_info = {"kind": "file", "path": str(plugin_path)}
                 return module, load_info
             else:
+                if sandbox_enabled:
+                    logger.error(
+                        f"Refusing to load plugin {plugin_name} without sandbox. "
+                        "Install restricted_python or enable sandboxing."
+                    )
+                    raise RuntimeError(f"Unsandboxed plugin execution refused: {plugin_name}")
                 spec = importlib.util.spec_from_file_location(plugin_name, plugin_path)
                 module = importlib.util.module_from_spec(spec)
                 sys.modules[plugin_name] = module
@@ -884,6 +890,12 @@ class PluginManager:
             load_info = {"kind": "file", "path": str(target)}
             return module, load_info
         else:
+            if sandbox_enabled:
+                logger.error(
+                    f"Refusing to load plugin {plugin_name} without sandbox. "
+                    "Install restricted_python or enable sandboxing."
+                )
+                raise RuntimeError(f"Unsandboxed plugin execution refused: {plugin_name}")
             spec = importlib.util.spec_from_file_location(plugin_name, target)
             module = importlib.util.module_from_spec(spec)
             sys.modules[plugin_name] = module

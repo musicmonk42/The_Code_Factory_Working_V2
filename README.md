@@ -1,254 +1,215 @@
-<!-- Copyright © 2025 Novatrax Labs LLC. All Rights Reserved. -->
+<!-- Copyright 2025 Novatrax Labs LLC. All Rights Reserved. -->
 
-#Autonomous Software Engineer (ASE) 🚀
-ASE v1.0.0 – The "Self-Sustaining Code" 
-Transform natural language into production-ready applications with automated, self-healing maintenance powered by AI, DLT, and multi-agent orchestration.
-Crafted with precision in by Brian D Anderson in Fairhope, Alabama, USA.
-ASE is an enterprise-grade, AI-driven ecosystem that automates the entire software development and maintenance lifecycle. It turns high-level requirements (e.g., README files) into fully functional applications, including code, tests, deployment configurations, and documentation, while continuously maintaining and enhancing them through self-healing, compliance, and optimization. Comprising the README-to-App Code Generator (RCG), OmniCore Omega Pro Engine (OmniCore), and Self-Fixing Engineer (SFE, powered by Arbiter AI), it delivers unparalleled automation, security, and scalability for developers, DevOps, and enterprises in regulated industries.
+# Autonomous Software Engineer (ASE)
 
-Table of Contents
+![CI](https://github.com/musicmonk42/The_Code_Factory_Working_V2/actions/workflows/pytest-all.yml/badge.svg)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue?logo=python&logoColor=white)
+![License](https://img.shields.io/badge/license-Proprietary-red)
+![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)
+![Docker](https://img.shields.io/badge/docker-supported-blue?logo=docker&logoColor=white)
 
-**Quick Links**
-- [QUICKSTART.md](./docs/QUICKSTART.md) - Get started in 5 minutes
-- [DEPLOYMENT.md](./docs/DEPLOYMENT.md) - Production deployment guide
-- [SPEC_BLOCK_FORMAT.md](./docs/SPEC_BLOCK_FORMAT.md) - **NEW:** Structured YAML spec blocks for deterministic generation
-- [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md) - Comprehensive scalability guide
-- [Manual SFE Dispatch](./docs/MANUAL_SFE_DISPATCH.md) - Control when jobs are sent to Self-Fixing Engineer
-- [CI-troubleshooting.md](./docs/CI-troubleshooting.md) - CI secrets, exit code 143, and best practices
-- [Makefile Commands](#makefile-commands) - Common development commands
+> **ASE v1.0.0** -- Transform natural language requirements into production-ready applications with automated, self-healing maintenance powered by AI, DLT, and multi-agent orchestration.
 
-Features
-Architecture
-Getting Started
-Prerequisites
-Installation
-Quick Start (Recommended)
-Manual Installation
-Configuration
-Environment Variables
-Kafka Infrastructure
+*Created by Brian D Anderson, Novatrax Labs LLC*
 
+---
 
-Usage
-CLI Usage
-API Usage
-Demo Workflow
+## Table of Contents
 
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Usage](#usage)
+- [Key Components](#key-components)
+- [Testing](#testing)
+- [Deployment](#deployment)
+- [Documentation](#documentation)
+- [Contributing](#contributing)
+- [License](#license)
 
-Makefile Commands
-Extending Code Factory
-Custom Plugins
-Custom Agents
-DLT and SIEM Integrations
+---
 
+## Overview
 
-Key Components
-Tests
-Troubleshooting
-Best Practices
-CI/CD Pipeline
-Contribution Guidelines
-Roadmap
-Support
-License
+The Autonomous Software Engineer (ASE) is an enterprise-grade platform that automates the full software development and maintenance lifecycle. Given high-level requirements (a README, a prompt, or structured YAML spec blocks), ASE generates production-ready code, tests, deployment configurations, and documentation -- then continuously maintains and improves them.
 
+**Core capabilities:**
 
-Features
+| Capability | Description |
+|---|---|
+| Automated Code Generation | Converts requirements into code, tests, Dockerfiles, Helm charts, and docs |
+| Self-Healing Maintenance | Arbiter AI detects and remediates bugs, drift, and degradation automatically |
+| Compliance and Security | Enforces NIST/ISO standards, PII redaction, tamper-evident audit logging |
+| Distributed Ledger | Immutable checkpoint provenance via Hyperledger Fabric and EVM contracts |
+| Observability | Prometheus metrics, OpenTelemetry tracing, SIEM integration |
+| Multi-Agent Orchestration | AI, human, and plugin agents coordinated with RBAC and event-driven scaling |
+| Self-Evolution | Reinforcement learning and genetic algorithms optimize system health over time |
 
-Automated Code Generation: Converts READMEs or prompts into production-ready code, tests, deployment configs (Dockerfiles, Helm), and docs using AI agents (codegen_agent, testgen_agent, deploy_agent, docgen_agent, clarifier).
-Self-Healing Maintenance: SFE’s Arbiter AI (arbiter.py) fixes, updates, and optimizes code via codebase_analyzer.py, bug_manager.py, and meta_learning_orchestrator.py.
-Compliance and Security: Enforces NIST/ISO standards (guardrails/compliance_mapper.py), PII redaction (security_utils.py), and tamper-evident logging (audit_log.py).
-Distributed Ledger Integration: Stores checkpoints on Hyperledger Fabric (checkpoint_chaincode.go) and EVM (CheckpointContract.sol) for immutable provenance.
-Observability: Prometheus metrics (metrics.py), OpenTelemetry tracing (observability_utils.py), and SIEM integration (siem_factory.py).
-Multi-Agent Orchestration: Manages AI, human, and plugin agents (crew_manager.py) with RBAC and scaling (mesh/event_bus.py).
-Self-Evolution: Reinforcement learning (envs/code_health_env.py) and genetic algorithms (evolution.py) optimize system health.
-Multi-Modal Support: Processes PDFs, images, and text inputs (input_utils.py).
-Sandboxing: Secure execution with AppArmor/seccomp (simulation/sandbox.py).
+---
 
+## Architecture
 
-Architecture
-**Note:** The Code Factory is a **unified platform** where the three primary modules (Generator, OmniCore Engine, and Self-Fixing Engineer) are tightly integrated and deployed together. They share the same dependencies, Docker image, and CI/CD pipeline as a single cohesive system.
+ASE is a unified platform composed of three tightly integrated modules that share dependencies, a single Docker image, and a common CI/CD pipeline.
 
-The Code Factory is a modular, decoupled ecosystem:
-
-README-to-App Code Generator (RCG, generator/):
-
-Generates code, tests, configs, and docs using agents (codegen_agent.py, testgen_agent.py, etc.).
-Includes bug/compliance management (critique_agent, security_utils.py).
-Part of the unified platform, integrates with OmniCore.
-
-
-OmniCore Omega Pro Engine (OmniCore, omnicore_engine/):
-
-Coordinates RCG and SFE via sharded_message_bus.py.
-Manages plugins (plugin_registry.py), persistence (database.py), and auditing (audit.py).
-Supports CLI (cli.py) and API (fastapi_app.py).
-Part of the unified platform.
-
-
-Self-Fixing Engineer (SFE, self_fixing_engineer/):
-
-Powered by Arbiter AI (arbiter.py), it handles maintenance via codebase_analyzer.py, bug_manager.py, intent_capture/agent_core.py, and mesh/checkpoint_manager.py.
-Includes DLT (checkpoint_chaincode.go, CheckpointContract.sol), SIEM (siem_factory.py), and self-evolution (evolution.py).
-Part of the unified platform.
-
-
-
-Workflow:
-
-RCG generates artifacts from a README (main.py).
-OmniCore serializes outputs and routes them to SFE via message bus (start_workflow → sfe_workflow).
-SFE analyzes, fixes, and optimizes code, storing checkpoints (CheckpointContract.sol).
-
-
-**Scalability & Performance**:
-For detailed information about the platform's enterprise-scale architecture, including horizontal scaling, message queuing, auto-scaling, and performance optimization, see [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md).
-
-Getting Started
-
-⚡ **Quick Start**: See [QUICKSTART.md](./docs/QUICKSTART.md) for a 5-minute setup guide.
-📦 **Deployment**: See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment instructions.
-
-Prerequisites
-
-- **OS**: Linux, macOS, or Windows 10/11
-- **Python**: 3.11+ (required - Python 3.10 and below are not supported)
-- **Docker & Docker Compose**: For containerized deployment (recommended)
-- **Make**: For simplified commands (optional but recommended)
-- **Git**: For version control
-
-Dependencies: Install via requirements.txt for each component:
 ```
-pip install -r requirements.txt
++------------------------------------------------------------------+
+|                        ASE Unified Platform                      |
+|                                                                  |
+|  +------------------+  +------------------+  +-----------------+ |
+|  |    Generator      |  |    OmniCore      |  |      SFE        | |
+|  |    (RCG)          |  |    Engine         |  |  (Arbiter AI)   | |
+|  |                   |  |                   |  |                 | |
+|  | codegen_agent     |  | sharded_msg_bus   |  | arbiter.py      | |
+|  | testgen_agent     |  | plugin_registry   |  | bug_manager     | |
+|  | deploy_agent      |  | database (SQLAlchemy) | codebase_analyzer| |
+|  | docgen_agent      |  | cli / fastapi_app |  | evolution.py    | |
+|  | security_utils    |  | audit.py          |  | checkpoint_mgr  | |
+|  +--------+---------+  +--------+---------+  +--------+--------+ |
+|           |                      |                     |          |
+|           +----------+-----------+----------+----------+          |
+|                      |                      |                     |
+|              +-------v-------+    +---------v---------+           |
+|              |  Message Bus  |    | DLT (Fabric/EVM)  |           |
+|              +-------+-------+    +---------+---------+           |
+|                      |                      |                     |
+|              +-------v----------------------v---------+           |
+|              |  Observability (Prometheus / OTel / SIEM)          |
+|              +------------------------------------------------+   |
++------------------------------------------------------------------+
 ```
 
-> **Note**: Python 3.11+ is required. Earlier versions are not supported due to dependency requirements.
+**Workflow:** Generator produces artifacts from requirements. OmniCore serializes and routes them to SFE via the message bus. SFE analyzes, fixes, and optimizes code, storing immutable checkpoints on-chain.
 
+For a deep dive into scalability, see [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md).
 
-API Keys: At least one LLM provider:
+---
 
-xAI Grok (recommended)
-OpenAI
-Google Gemini
-Anthropic Claude
-Local LLM (Ollama)
+## Quick Start
 
+The fastest path from clone to running services:
 
-Optional: Redis, Kafka, PostgreSQL, Fabric/EVM nodes, SIEM integration.
-Hardware: 8GB RAM, 4-core CPU minimum (16GB/8-core recommended for SFE simulations).
-
-Installation
-Quick Start (Recommended)
-The fastest way to get started using Make and Docker:
-
-# Clone repository
+```bash
+# Clone the repository
 git clone https://github.com/musicmonk42/The_Code_Factory_Working_V2.git
 cd The_Code_Factory_Working_V2
 
-# Initial setup (creates .env file)
+# Run initial setup (creates .env from template)
 make setup
 
-# Edit .env with your API keys
-nano .env  # or use your favorite editor
+# Add at least one LLM API key to .env
+nano .env
 
-# Start all services with Docker
+# Start all services via Docker
 make docker-up
+```
 
-# Access services:
-# - Generator API: http://localhost:8000
-# - OmniCore API: http://localhost:8001
-# - Grafana: http://localhost:3000
-# - Prometheus: http://localhost:9090
+Once running, access:
 
+| Service | URL |
+|---|---|
+| Generator API | http://localhost:8000 |
+| OmniCore API | http://localhost:8001 |
+| Grafana | http://localhost:3000 |
+| Prometheus | http://localhost:9090 |
 
-See [QUICKSTART.md](./docs/QUICKSTART.md) for detailed instructions.
-Manual Installation
-For development without Docker:
+For the full walkthrough, see [QUICKSTART.md](./docs/QUICKSTART.md).
 
-Clone Repository:
+---
+
+## Installation
+
+### Prerequisites
+
+- **Python** 3.10 or higher
+- **Docker and Docker Compose** (recommended for production)
+- **Make** (optional but recommended)
+- **Git**
+- **OS:** Linux, macOS, or Windows 10/11
+- **Hardware:** 8 GB RAM / 4-core CPU minimum (16 GB / 8-core recommended)
+
+### Tiered Dependencies
+
+ASE uses tiered requirements files so you install only what you need:
+
+| File | Scope |
+|---|---|
+| `requirements.txt` | Core platform dependencies |
+| `requirements-ml.txt` | Machine learning extensions |
+| `requirements-blockchain.txt` | DLT and blockchain integrations |
+| `requirements-ai.txt` | Additional AI provider libraries |
+| `requirements-pqc.txt` | Post-quantum cryptography |
+| `requirements-optional.txt` | Optional utilities |
+
+```bash
+# Core only
+pip install -r requirements.txt
+
+# Add ML capabilities
+pip install -r requirements-ml.txt
+
+# Add blockchain support
+pip install -r requirements-blockchain.txt
+```
+
+### Manual Installation (without Docker)
+
+```bash
 git clone https://github.com/musicmonk42/The_Code_Factory_Working_V2.git
 cd The_Code_Factory_Working_V2
 
-
-Create Environment Configuration:
 cp .env.example .env
-# Edit .env and add your API keys
+# Edit .env -- add at least one LLM API key
 
-
-Install Dependencies:
-# Install all dependencies for the unified platform
+# Install dependencies
 make install-dev
+# Or: pip install --upgrade pip && pip install -r requirements.txt
 
-# Or manually:
-pip install --upgrade pip
-pip install -r requirements.txt
-
-
-Start Redis (required):
-# Using Docker
+# Start Redis (required)
 docker run -d -p 6379:6379 redis:7-alpine
 
-# Or install locally
-# macOS: brew install redis && brew services start redis
-# Ubuntu: sudo apt-get install redis-server
+# Run services
+make run-generator   # Terminal 1
+make run-omnicore    # Terminal 2
+```
 
+### Kafka (optional, recommended for production)
 
-Setup Kafka (optional, but recommended for production):
-# Kafka is used for event streaming and message bus functionality
-# For development, you can run without Kafka (graceful degradation)
-
-# Quick setup with automated script (recommended)
+```bash
+# Automated setup
 ./scripts/kafka-setup.sh
 
-# Or start manually
-docker-compose -f docker-compose.kafka.yml up -d
-
-# To run without Kafka (development only)
+# Or run without Kafka in development
 export KAFKA_DEV_DRY_RUN=true
+```
 
-# See docs/KAFKA_SETUP.md for detailed configuration
+See [KAFKA_SETUP.md](./docs/KAFKA_SETUP.md) for full configuration.
 
+---
 
-Run Services:
-# Terminal 1 - Generator
-make run-generator
+## Configuration
 
-# Terminal 2 - OmniCore
-make run-omnicore
+### Environment Variables
 
+Copy the template and fill in your keys:
 
-Setup DLT (optional, for checkpoint_chaincode.go, CheckpointContract.sol):
-
-> ⚠️ **Note:** Hyperledger Fabric integration is experimental and not yet fully production-ready.
-> The `fabric_sdk_py` library is not bundled with this build. Attempting to connect to a Fabric
-> network will log a warning and fall back to no-op mode rather than raising an error.
-> Use EVM/Ethereum for a stable DLT backend.
-
-Deploy Hyperledger Fabric test network:
-./network.sh up  # From Fabric samples
-
-
-Deploy EVM contract on Ethereum/Polygon:
-npx hardhat deploy --network <network>
-
-
-
-
-
-Configuration
-
-Environment Variables: Copy .env.example to .env and configure:
+```bash
 cp .env.example .env
+```
 
+Key variables:
 
-Key variables to configure in .env:
+```bash
 # Application
-APP_ENV=development  # or production
+APP_ENV=development          # or production
 DEBUG=true
 
-# LLM API Keys (add at least one)
-GROK_API_KEY=your-grok-api-key
-OPENAI_API_KEY=your-openai-api-key
+# LLM API Keys (at least one required)
+GROK_API_KEY=your-key        # xAI Grok (recommended)
+OPENAI_API_KEY=your-key
+GOOGLE_API_KEY=your-key
+ANTHROPIC_API_KEY=your-key
 
 # Infrastructure
 REDIS_URL=redis://localhost:6379
@@ -261,529 +222,198 @@ JWT_SECRET_KEY=your-jwt-secret
 # Observability
 LOG_LEVEL=INFO
 OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317
-
-
-Component Configuration:
-
-Generator: Configure generator/config.yaml with LLM providers
-- **Smart Configuration Resolution:** The platform uses intelligent path resolution to find configuration files
-- **Default:** Uses `generator/config.yaml` automatically
-- **Custom Path:** Set `RUNNER_CONFIG_PATH` environment variable for custom locations
-- **Details:** See `CONFIG_PATH_RESOLUTION_FIX.md` and `docs/ENVIRONMENT_VARIABLES.md`
-
-OmniCore: Set omnicore_engine/config.yaml for message bus and database
-SFE: Update self_fixing_engineer/agent_orchestration/crew_config.yaml:
-version: 10.0.0
-id: self_fixing_engineer_crew
-agents:
-  - id: refactor
-    name: Refactor Agent
-    agent_type: ai
-    compliance_controls:
-      - id: AC-6
-        status: enforced
-
-
-
-Environment Variables
-
-See .env.example for all available configuration options.
-
-Core Variables:
-
-APP_ENV: production or development (default: development)
-REDIS_URL: Redis backend for mesh/event_bus.py
-CREW_CONFIG_PATH: Path to crew_config.yaml
-AUDIT_LOG_PATH: Path for audit logs
-CHECKPOINT_BACKEND_TYPE: fs, s3, or fabric for checkpoints
-
-API Keys:
-
-⚠️ **Provider Availability**: At least one LLM provider API key is required for the system to function. If multiple keys are provided, the system will use the configured default provider. Missing API keys for a provider will cause that provider to fail to load, but the system will continue with available providers.
-
-GROK_API_KEY: xAI Grok API key
-OPENAI_API_KEY: OpenAI API key (recommended for best compatibility)
-GOOGLE_API_KEY: Google Gemini API key
-ANTHROPIC_API_KEY: Anthropic Claude API key
-
-Example startup messages:
-- ✓ Success: "LLMClient initialization complete. Available providers: openai, claude"
-- ⚠ Warning: "LLMClient initialization complete but NO providers are available. Please check API key configuration"
-
-Observability:
-
-PROMETHEUS_MULTIPROC_DIR: Prometheus metrics directory
-OTEL_EXPORTER_OTLP_ENDPOINT: OpenTelemetry collector endpoint
-LOG_LEVEL: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-
-
-Kafka Infrastructure
-
-The Code Factory Platform uses **Apache Kafka** for event streaming, audit logging, and message bus functionality. Kafka is **optional** for development but **recommended for production** deployments.
-
-### Quick Start
-
-```bash
-# Automated setup (recommended)
-./scripts/kafka-setup.sh
-
-# Or start manually
-docker-compose -f docker-compose.kafka.yml up -d
-
-# Check status
-./scripts/kafka-setup.sh status
 ```
 
-### When is Kafka Required?
+For the complete variable reference, see [ENVIRONMENT_VARIABLES.md](./docs/ENVIRONMENT_VARIABLES.md).
+For secrets handling, see [SECRETS_MANAGEMENT.md](./docs/SECRETS_MANAGEMENT.md).
 
-**Development**: Optional - Use dry-run mode to develop without Kafka:
-```bash
-export KAFKA_DEV_DRY_RUN=true
-```
+### Component Configuration
 
-**Production**: Recommended - Kafka provides:
-- Event-driven orchestration for code generation workers
-- Audit event streaming with durability
-- Message bus for inter-service communication
-- Dead letter queue for failed messages
+- **Generator:** `generator/config.yaml` (LLM providers, generation settings)
+- **OmniCore:** `omnicore_engine/config.yaml` (message bus, database)
+- **SFE:** `self_fixing_engineer/agent_orchestration/crew_config.yaml` (agents, compliance)
 
-**Without Kafka**, the system operates with graceful degradation:
-- Events are logged locally instead of streamed
-- Workers run in local/stub mode
-- No distributed event processing
+---
 
-### Configuration
+## Usage
 
-Set these environment variables in `.env`:
+### CLI
 
 ```bash
-# Enable/disable Kafka
-KAFKA_ENABLED=true
-
-# Connection settings
-KAFKA_BOOTSTRAP_SERVERS=kafka:9092  # Docker: kafka:9092, Host: localhost:9093
-
-# Topics
-KAFKA_TOPIC=job-completed
-KAFKA_DLQ_TOPIC=audit-events-dlq
-
-# Behavior
-KAFKA_REQUIRED=true  # Fail-fast if unavailable (production)
-KAFKA_DEV_DRY_RUN=false  # Disable for production
-```
-
-### Fixing DUPLICATE_BROKER_REGISTRATION Error
-
-If you encounter this error, it means stale Kafka metadata exists. Quick fix:
-
-```bash
-# Automated cleanup and restart
-./scripts/kafka-setup.sh setup
-
-# Or manual cleanup
-docker-compose -f docker-compose.kafka.yml down -v
-docker-compose -f docker-compose.kafka.yml up -d
-```
-
-### Available Commands
-
-```bash
-./scripts/kafka-setup.sh setup        # Full setup (cleanup + start + topics)
-./scripts/kafka-setup.sh status       # Check service status
-./scripts/kafka-setup.sh logs         # View Kafka logs
-./scripts/kafka-setup.sh topics       # List all topics
-./scripts/kafka-setup.sh cleanup      # Stop and remove all data
-./scripts/kafka-setup.sh troubleshoot # Show troubleshooting commands
-```
-
-### More Information
-
-For detailed Kafka configuration, troubleshooting, and best practices, see [docs/KAFKA_SETUP.md](./docs/KAFKA_SETUP.md).
-
-### Database and Migrations
-
-The Code Factory platform uses PostgreSQL for persistence with optional Citus extension for distributed SQL capabilities. Database schema is managed using Alembic migrations.
-
-#### Database Setup
-
-**Development (SQLite):**
-```bash
-# SQLite is used by default for development
-# No setup needed - database file created automatically
-```
-
-**Production (PostgreSQL with Citus):**
-```bash
-# Using Docker Compose (recommended)
-docker-compose up -d postgres
-
-# The postgres service now uses citusdata/citus:12.1 image
-# Enable Citus features by setting:
-export ENABLE_CITUS=1
-```
-
-#### Running Migrations
-
-The platform includes Alembic for database schema management:
-
-```bash
-# Run all pending migrations
-make db-migrate
-
-# Create a new migration
-make db-migrate-create
-
-# View migration history
-make db-migrate-history
-
-# Check current version
-make db-migrate-current
-
-# Validate Alembic configuration
-make db-migrate-validate
-```
-
-**Manual Alembic commands:**
-```bash
-alembic upgrade head          # Apply all migrations
-alembic current               # Show current version
-alembic history               # Show migration history
-alembic downgrade -1          # Rollback one migration
-```
-
-#### Citus Distributed SQL
-
-For production scale-out, enable Citus extension:
-
-1. **Docker Compose**: Already configured (uses `citusdata/citus:12.1`)
-2. **Kubernetes**: Set `ENABLE_CITUS=1` in ConfigMap
-3. **Helm**: Configure in values.yaml:
-   ```yaml
-   env:
-     ENABLE_CITUS: "1"
-   ```
-
-The application handles Citus gracefully - it works with or without the extension.
-
-#### Migration Resources
-
-- [Alembic Migrations README](./omnicore_engine/migrations/README.md) - Detailed migration guide
-- [Kubernetes Migrations](./k8s/MIGRATIONS.md) - K8s-specific migration procedures
-- [Helm Chart README](./helm/codefactory/README.md) - Helm deployment with migrations
-- [DIAGNOSTIC_ISSUES_FIX.md](./DIAGNOSTIC_ISSUES_FIX.md) - Recent diagnostic improvements
-
-
-Usage
-CLI Usage
-Trigger a workflow with a README:
 cd omnicore_engine
 python -m omnicore_engine.cli --code-factory-workflow --input-file ../input_readme.md
 
-# Or using the Makefile
+# Or via Make
 make run-cli
+```
 
-Sample Input README:
+**Example input (input_readme.md):**
+
+```markdown
 # Flask To-Do App
-- REST API: `/todo` (POST, {"task": "string"}), `/todos` (GET, JSON array).
-- In-memory storage.
-- Port: 8080.
-- Include Dockerfile, tests, docs.
+- REST API: /todo (POST), /todos (GET)
+- In-memory storage
+- Port 8080
+- Include Dockerfile, tests, docs
+```
 
-Output: app.py, test_app.py, Dockerfile, README.md in omnicore_engine/output.
-API Usage
-Start FastAPI server:
-# Using Make
+**Output:** `app.py`, `test_app.py`, `Dockerfile`, and `README.md` generated in `omnicore_engine/output/`.
+
+### API
+
+```bash
+# Start the server
 make run-omnicore
 
-# Or manually
-cd omnicore_engine
-python -m uvicorn fastapi_app:app --host 0.0.0.0 --port 8000 --reload
-
-Trigger workflow via API:
+# Trigger a workflow
 curl -X POST http://localhost:8000/code-factory-workflow \
--H "Content-Type: application/json" \
--d '{"requirements": "Create a Flask app with /todo endpoint"}'
+  -H "Content-Type: application/json" \
+  -d '{"requirements": "Create a Flask app with /todo endpoint"}'
+```
 
-View API documentation:
-# Generator API docs
-http://localhost:8000/docs
+Interactive API documentation is available at `/docs` on each service endpoint.
 
-# OmniCore API docs
-http://localhost:8001/docs
+### Structured Spec Blocks
 
-Demo Workflow
+For deterministic generation, use YAML spec blocks instead of free-form text.
+See [SPEC_BLOCK_FORMAT.md](./docs/SPEC_BLOCK_FORMAT.md) for the full specification.
 
-Prepare Input: Save a README at input_readme.md in the project root.
-Run CLI: python -m omnicore_engine.cli --code-factory-workflow --input-file input_readme.md
-Check Outputs: Verify output/ for artifacts.
-Monitor SFE: SFE analyzes and fixes code, logs events to audit_trail.log.
+---
 
-Or run the demo:
-cd generator
-python demo_investor.py
+## Key Components
 
+### Generator (RCG) -- `generator/`
 
-Makefile Commands
-The platform includes a comprehensive Makefile for common tasks:
-Development:
-make help              # Show all available commands
-make setup             # Initial setup for new developers
-make install           # Install production dependencies
-make install-dev       # Install with development tools
-make run-generator     # Run Generator service
-make run-omnicore      # Run OmniCore Engine
+Converts requirements into production artifacts using specialized AI agents:
 
-Testing:
-make test              # Run all tests
-make test-generator    # Test Generator only
-make test-omnicore     # Test OmniCore only
-make test-sfe          # Test Self-Fixing Engineer only
-make test-coverage     # Run tests with coverage report
+- `codegen_agent.py` -- Code generation via LLM providers
+- `testgen_agent.py` -- Test generation (pytest, hypothesis)
+- `deploy_agent.py` -- Dockerfile and Helm chart generation
+- `security_utils.py` -- PII redaction and encryption
 
-Code Quality:
-make lint              # Run all linters
-make format            # Format code with Black
-make type-check        # Run type checking
-make security-scan     # Run security scans
-make ci-local          # Run all CI checks locally
+### OmniCore Engine -- `omnicore_engine/`
 
-Docker:
-make docker-build      # Build unified platform Docker image
-make docker-up         # Start all services
-make docker-down       # Stop all services
-make docker-logs       # View logs
-make docker-clean      # Clean Docker resources
-make docker-validate   # Validate Docker build and configuration
+Central orchestration layer:
 
-Database:
-make db-migrate        # Run database migrations
-make db-migrate-create # Create a new migration
-make db-migrate-history # Show migration history
-make db-migrate-current # Show current version
-make db-migrate-validate # Validate Alembic configuration
-make db-reset          # Reset database (WARNING: destroys data)
+- `sharded_message_bus.py` -- Event routing between modules
+- `plugin_registry.py` -- Plugin lifecycle management
+- `database.py` -- SQLAlchemy persistence (SQLite dev, PostgreSQL/Citus prod)
+- `cli.py` / `fastapi_app.py` -- CLI and REST interfaces
 
-Kubernetes:
-make k8s-deploy-dev    # Deploy to Kubernetes (development)
-make k8s-deploy-staging # Deploy to Kubernetes (staging)
-make k8s-deploy-prod   # Deploy to Kubernetes (production)
-make k8s-status        # Show deployment status
-make k8s-logs          # Show pod logs
-make k8s-validate      # Validate manifests
+### Self-Fixing Engineer (SFE) -- `self_fixing_engineer/`
 
-Helm:
-make helm-install      # Install with Helm
-make helm-lint         # Lint Helm chart
-make helm-template     # Show Helm templates
-make helm-status       # Show release status
+Autonomous maintenance powered by Arbiter AI:
 
-Maintenance:
-make clean             # Clean generated files and caches
-make clean-all         # Deep clean (includes Docker and databases)
-make clean-old-docs    # Preview old audit/test docs to be deleted (dry-run)
-make clean-old-docs-force  # Remove audit/test docs older than 2 days
-make health-check      # Check service health
+- `arbiter.py` -- Orchestrates analysis, fix, and optimization cycles
+- `bug_manager.py` -- Automated bug detection and remediation
+- `codebase_analyzer.py` -- Static and dynamic code analysis
+- `evolution.py` -- Genetic algorithms for system health optimization
+- `envs/code_health_env.py` -- Reinforcement learning environment
 
-See Makefile for all available commands.
+---
 
+## Testing
 
-Extending Code Factory
-Custom Plugins
-Add a plugin to D:\Code_Factory\self_fixing_engineer\plugins:
-# my_plugin.py
-from omnicore_engine.plugin_registry import register, PlugInKind
-async def my_task(data: Dict[str, Any]) -> Dict[str, Any]:
-    return {"result": "processed"}
-register(kind=PlugInKind.CORE_SERVICE, name="my_plugin", version="1.0.0")(my_task)
-
-Update core.py to load:
-self.plugin_registry.load_plugins_from_dir(str(Path("D:/Code_Factory/self_fixing_engineer/plugins")))
-
-Custom Agents
-Add an agent to D:\Code_Factory\self_fixing_engineer\agent_orchestration:
-# my_agent.py
-from crew_manager import CrewAgentBase
-class MyAgent(CrewAgentBase):
-    async def run(self, config: Dict[str, Any]) -> Dict[str, Any]:
-        return {"result": "done"}
-CrewManager.register_agent_class(MyAgent)
-
-Update crew_config.yaml:
-agents:
-  - id: my_agent
-    name: My Agent
-    agent_type: ai
-    entrypoint: run
-
-DLT and SIEM Integrations
-
-DLT: Configure checkpoint_chaincode.go or CheckpointContract.sol in configs/config.json:"checkpoint_backend": {"type": "fabric", "url": "fabric://localhost"}
-
-
-SIEM: Add to siem_factory.py:class MySIEMClient(SIEMBase):
-    async def log(self, event: Dict[str, Any]):
-        pass
-SIEMFactory.register("my_siem", MySIEMClient)
-
-
-
-
-Key Components
-
-RCG (D:\Code_Factory\Generator):
-main.py: CLI/GUI entrypoint.
-agents/codegen_agent.py: Code generation with LLMs.
-agents/testgen_agent.py: Test generation with pytest, hypothesis.
-security_utils.py: PII redaction, encryption.
-
-
-OmniCore (D:\Code_Factory\omnicore_engine):
-sharded_message_bus.py: Event routing.
-plugin_registry.py: Plugin management.
-database.py: SQLAlchemy persistence.
-
-
-SFE (D:\Code_Factory\self_fixing_engineer):
-arbiter.py: Orchestrates Arbiter AI.
-bug_manager.py: Bug remediation.
-checkpoint_chaincode.go: Fabric DLT checkpointing.
-envs/code_health_env.py: RL optimization.
-
-
-
-
-Tests
-
-Test Locations:
-
-Generator: generator/tests/
-OmniCore: omnicore_engine/tests/
-SFE: self_fixing_engineer/tests/, test_generation/tests/
-
-
-Run Tests:
+```bash
 # Run all tests
 make test
 
-# Run specific component tests
+# Run by component
 make test-generator
 make test-omnicore
 make test-sfe
 
-# Run with coverage
+# Run with coverage report
 make test-coverage
 
-# Or manually
-pytest -v generator/tests/
-pytest -v omnicore_engine/tests/
-pytest -v self_fixing_engineer/tests/
-
-
-
-
-Troubleshooting
-
-Missing Plugins: Check core.py for correct paths.
-Dependency Errors: Install requirements.txt or use bootstrap_agent_dev.py. For full dependencies, use master_requirements.txt.
-Audit Log Failure: Verify AUDIT_LOG_PATH and audit_log.py.
-AWS KMS Issues: See [AWS KMS Troubleshooting Guide](./docs/AWS_KMS_TROUBLESHOOTING.md) for InvalidCiphertextException errors and rate limiting configuration.
-DLT Issues: Ensure Fabric/EVM nodes are running (network.sh up).
-ArrayBackend Issues: The ArrayBackend module (omnicore_engine/array_backend.py) has a known syntax error (line 1031). The system functions without it by falling back to NumPy for array operations. Advanced array backend features (CuPy, Dask, Quantum) are unavailable until this is resolved.
-
-
-
-Best Practices
-
-Sandboxing: Use SANDBOXED_ENV=1 for SFE simulations.
-Auditing: Enable guardrails/audit_log.py for compliance.
-Monitoring: Set up Prometheus/Grafana (metrics.py).
-Backups: Store configs in S3 (configs/config.json).
-Testing: Achieve 90%+ coverage with pytest-cov.
-Environment: Always use .env for configuration, never commit secrets.
-Development: Use make ci-local before committing to catch issues early.
-
-
-CI/CD Pipeline
-The platform includes a consolidated CI/CD pipeline using GitHub Actions with intelligent path-based filtering:
-
-**Continuous Integration (`.github/workflows/ci.yml`)**:
-
-- **Path-Based Filtering**: Jobs run only when relevant files change, reducing CI time and resource usage
-- **Change Detection**: Automatically detects which components (Generator, OmniCore, SFE) have changed
-- **Linting**: Black, Ruff, and Flake8 with strict error checking (no error suppression)
-- **Component Tests**: Runs tests for Generator, OmniCore, and SFE independently
-- **Integration Tests**: End-to-end platform testing
-- **Docker Builds**: Automated container image builds
-- **Code Coverage**: Comprehensive coverage reporting with Codecov
-
-
-Security Scanning (.github/workflows/security.yml):
-
-Dependency vulnerability scanning (safety, pip-audit)
-Secret scanning (TruffleHog)
-Static analysis (CodeQL, Bandit)
-Docker image scanning (Trivy)
-License compliance checks
-
-
-Continuous Deployment (.github/workflows/cd.yml):
-
-Automated builds on main branch
-Docker image publishing to GHCR
-Staging and production deployments
-Rollback capabilities
-Deployment notifications
-
-
-Dependency Management (.github/workflows/dependency-updates.yml):
-
-Weekly dependency update checks
-Automated pull requests for updates
-Outdated package reporting
-
-
-
-Running CI Checks Locally:
-```bash
-# Run all CI checks (recommended before committing)
+# Run all CI checks locally before committing
 make ci-local
-
-# Individual checks
-make lint              # Black, Ruff, Flake8 (strict - will fail on errors)
-make type-check        # mypy type checking (strict)
-make security-scan     # Bandit, Safety (strict)
-make test              # All component tests (strict)
 ```
 
-> **Important**: All linting and testing commands now enforce strict checking. Errors will cause failures instead of being suppressed, ensuring code quality.
+Test directories: `generator/tests/`, `omnicore_engine/tests/`, `self_fixing_engineer/tests/`.
 
-> ⚠️ **CI Secret Required**: The `LLM_API_KEY` repository secret **must** be set in **Settings → Secrets and variables → Actions** for CI to pass. Missing this secret causes Pydantic config validation errors during test discovery. See [CI-troubleshooting.md](./docs/CI-troubleshooting.md) for details and for an explanation of exit code 143 (SIGTERM/cancellation).
+For testing strategy and guidelines, see [TESTING.md](./docs/TESTING.md).
 
-See [DEPLOYMENT.md](./docs/DEPLOYMENT.md) for production deployment instructions.
+---
 
-Contribution Guidelines
+## Deployment
 
-Code Style: PEP 8, use black, ruff for formatting and linting.
-Tests: Add to tests/ with 90%+ coverage.
-Docs: Update README.md, QUICKSTART.md, and component docs.
-PRs: Use feature/<name> branches, include changelog.
-Pre-commit: Run make ci-local before committing.
-Security: Never commit secrets, use .env files (excluded from git).
+### Docker
 
+```bash
+make docker-build    # Build the unified image
+make docker-up       # Start all services
+make docker-down     # Stop all services
+make docker-logs     # View logs
+```
 
-Roadmap
+### Kubernetes
 
-v1.1.0: Multi-modal UI generation (uizard integration).
-v1.2.0: Grok 3 support (custom_llm_provider_plugin.py).
-v2.0.0: Multi-DLT, ISO 27001 compliance, auto-scaling.
-Future: Quantum-native optimization (quantum.py).
+```bash
+make k8s-deploy-dev       # Development
+make k8s-deploy-staging   # Staging
+make k8s-deploy-prod      # Production
+make k8s-status           # Check deployment status
+```
 
+See [KUBERNETES_DEPLOYMENT.md](./docs/KUBERNETES_DEPLOYMENT.md) for manifests and configuration.
 
-Support
+### Helm
 
-Email: support@novatraxlabs.com
-Issues: <enterprise-repo-url>/issues
-SLA: Enterprise 24/7 support
+```bash
+make helm-install    # Install release
+make helm-lint       # Lint chart
+make helm-template   # Preview rendered templates
+```
 
+See [HELM_DEPLOYMENT.md](./docs/HELM_DEPLOYMENT.md) for values and chart documentation.
 
+### CI/CD
 
+The platform uses GitHub Actions with path-based filtering:
+
+- **CI** -- Linting (Black, Ruff, Flake8), component tests, integration tests, Docker builds
+- **Security** -- Dependency scanning, secret scanning, CodeQL, Trivy
+- **CD** -- Automated builds, GHCR image publishing, staged rollouts
+
+See [CI_CD_GUIDE.md](./docs/CI_CD_GUIDE.md) for pipeline details.
+
+---
+
+## Documentation
+
+| Guide | Description |
+|---|---|
+| [QUICKSTART.md](./docs/QUICKSTART.md) | Get started in 5 minutes |
+| [DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Production deployment guide |
+| [ARCHITECTURE_PLAN.md](./docs/ARCHITECTURE_PLAN.md) | System architecture and design decisions |
+| [SCALABLE_ARCHITECTURE.md](./docs/SCALABLE_ARCHITECTURE.md) | Horizontal scaling, auto-scaling, performance |
+| [SPEC_BLOCK_FORMAT.md](./docs/SPEC_BLOCK_FORMAT.md) | Structured YAML spec blocks for deterministic generation |
+| [MANUAL_SFE_DISPATCH.md](./docs/MANUAL_SFE_DISPATCH.md) | Manual control of SFE job dispatch |
+| [ENVIRONMENT_VARIABLES.md](./docs/ENVIRONMENT_VARIABLES.md) | Complete environment variable reference |
+| [SECRETS_MANAGEMENT.md](./docs/SECRETS_MANAGEMENT.md) | Secret storage and rotation |
+| [TESTING.md](./docs/TESTING.md) | Testing strategy and guidelines |
+| [CI_CD_GUIDE.md](./docs/CI_CD_GUIDE.md) | CI/CD pipeline configuration |
+| [HELM_DEPLOYMENT.md](./docs/HELM_DEPLOYMENT.md) | Helm chart deployment |
+| [KUBERNETES_DEPLOYMENT.md](./docs/KUBERNETES_DEPLOYMENT.md) | Kubernetes deployment guide |
+| [KAFKA_SETUP.md](./docs/KAFKA_SETUP.md) | Kafka infrastructure setup |
+| [TROUBLESHOOTING.md](./docs/TROUBLESHOOTING.md) | Common issues and solutions |
+
+---
+
+## Contributing
+
+1. Create a feature branch: `feature/<name>`
+2. Follow PEP 8; format with `black` and lint with `ruff`
+3. Add tests with 90%+ coverage
+4. Run `make ci-local` before pushing
+5. Never commit secrets -- use `.env` files
+6. Submit a pull request with a changelog entry
+
+---
+
+## License
+
+Proprietary. Copyright 2025 Novatrax Labs LLC. All rights reserved.
+
+For licensing inquiries, contact support@novatraxlabs.com.

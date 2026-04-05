@@ -78,7 +78,8 @@ class TestSfeFixMaxAttempts:
             validations=[rejected] * 3,
         )
 
-        arena = ArbiterArena(name="default-attempts-arena")
+        mock_settings = MagicMock()
+        arena = ArbiterArena(settings=mock_settings, name="default-attempts-arena")
         with patch.dict("sys.modules", _fake_server_modules(mock_sfe)):
             results = await arena._run_sfe_fix_pipeline(
                 [{"id": "err-default", "type": "import_error", "message": "x"}],
@@ -113,7 +114,8 @@ class TestSfeFixMaxAttempts:
             validations=[rejected, rejected],
         )
 
-        arena = ArbiterArena(name="custom-attempts-arena")
+        mock_settings = MagicMock()
+        arena = ArbiterArena(settings=mock_settings, name="custom-attempts-arena")
         with patch.dict("sys.modules", _fake_server_modules(mock_sfe)):
             results = await arena._run_sfe_fix_pipeline(
                 [{"id": "err-custom", "type": "import_error", "message": "x"}],
@@ -181,7 +183,8 @@ class TestArenaRetryPipeline:
         except ImportError as exc:
             pytest.skip(f"ArbiterArena not importable: {exc}")
 
-        arena = ArbiterArena(name="retry-test-arena")
+        mock_settings = MagicMock()
+        arena = ArbiterArena(settings=mock_settings, name="retry-test-arena")
 
         failed_validation = {"status": "rejected", "reason": "tests still fail"}
         passed_validation = {"status": "validated", "reason": "tests pass"}
@@ -260,7 +263,8 @@ class TestArenaRetryPipeline:
         except ImportError as exc:
             pytest.skip(f"ArbiterArena not importable: {exc}")
 
-        arena = ArbiterArena(name="exhaust-test-arena")
+        mock_settings = MagicMock()
+        arena = ArbiterArena(settings=mock_settings, name="exhaust-test-arena")
 
         rejected = {"status": "rejected", "reason": "still broken"}
         mock_sfe = _make_sfe_mock(

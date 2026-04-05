@@ -22,8 +22,10 @@ from server.schemas import (
     PluginReloadRequest,
     RateLimitConfigRequest,
 )
-from server.services import OmniCoreService
-from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
+from server.services.admin_service import get_admin_service, AdminService
+from server.services.message_bus_service import get_message_bus_service, MessageBusService
+from server.services.diagnostics_service import get_diagnostics_service, DiagnosticsService
+from server.services.audit_query_service import get_audit_query_service, AuditQueryService
 from server.storage import jobs_db
 
 logger = logging.getLogger(__name__)
@@ -31,14 +33,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/omnicore", tags=["OmniCore Engine"])
 
 
-def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService (uses singleton)."""
-    return _get_omnicore_service()
-
-
 @router.get("/plugins")
 async def get_plugins(
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Get status of registered plugins.
@@ -49,14 +46,14 @@ async def get_plugins(
     **Returns:**
     - Plugin registry information
     """
-    status = await omnicore_service.get_plugin_status()
+    status = await admin_service.get_plugin_status()
     return status
 
 
 @router.get("/{job_id}/metrics")
 async def get_job_metrics(
     job_id: str,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    diagnostics_service: DiagnosticsService = Depends(get_diagnostics_service),
 ):
     """
     Get OmniCore metrics for a specific job.
@@ -76,7 +73,7 @@ async def get_job_metrics(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    metrics = await omnicore_service.get_job_metrics(job_id)
+    metrics = await diagnostics_service.get_job_metrics(job_id)
     return metrics
 
 
@@ -84,7 +81,7 @@ async def get_job_metrics(
 async def get_audit_trail(
     job_id: str,
     limit: int = 100,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    audit_service: AuditQueryService = Depends(get_audit_query_service),
 ):
     """
     Get audit trail for a job.
@@ -107,13 +104,13 @@ async def get_audit_trail(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    trail = await omnicore_service.get_audit_trail(job_id, limit=limit)
+    trail = await audit_service.get_audit_trail(job_id, limit=limit)
     return {"job_id": job_id, "audit_trail": trail, "count": len(trail)}
 
 
 @router.get("/system-health")
 async def get_system_health(
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    diagnostics_service: DiagnosticsService = Depends(get_diagnostics_service),
 ):
     """
     Get detailed system health from OmniCore perspective.
@@ -129,7 +126,7 @@ async def get_system_health(
     **Returns:**
     - Detailed system health information
     """
-    health = await omnicore_service.get_system_health()
+    health = await diagnostics_service.get_system_health()
     return health
 
 
@@ -137,7 +134,7 @@ async def get_system_health(
 async def trigger_workflow(
     job_id: str,
     workflow_name: str,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
     _: None = Depends(require_agents_ready),
 ):
     """
@@ -159,7 +156,7 @@ async def trigger_workflow(
     if job_id not in jobs_db:
         raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
 
-    result = await omnicore_service.trigger_workflow(
+    result = await admin_service.trigger_workflow(
         workflow_name=workflow_name,
         job_id=job_id,
         params={},
@@ -170,7 +167,7 @@ async def trigger_workflow(
 @router.post("/message-bus/publish")
 async def publish_message(
     request: MessageBusPublishRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     Publish message to message bus.
@@ -186,7 +183,7 @@ async def publish_message(
     **Returns:**
     - Publication confirmation with message ID
     """
-    result = await omnicore_service.publish_message(
+    result = await bus_service.publish_message(
         topic=request.topic,
         payload=request.payload,
         priority=request.priority,
@@ -200,7 +197,7 @@ async def publish_message(
 @router.post("/message-bus/subscribe")
 async def subscribe_to_topic(
     request: MessageBusSubscribeRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     Subscribe to message bus topic.
@@ -215,7 +212,7 @@ async def subscribe_to_topic(
     **Returns:**
     - Subscription confirmation with subscription ID
     """
-    result = await omnicore_service.subscribe_to_topic(
+    result = await bus_service.subscribe_to_topic(
         topic=request.topic,
         callback_url=request.callback_url,
         filters=request.filters,
@@ -227,7 +224,7 @@ async def subscribe_to_topic(
 
 @router.get("/message-bus/topics")
 async def list_topics(
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     List all message bus topics.
@@ -237,7 +234,7 @@ async def list_topics(
     **Returns:**
     - Topics list and statistics
     """
-    result = await omnicore_service.list_topics()
+    result = await bus_service.list_topics()
     return result
 
 
@@ -245,7 +242,7 @@ async def list_topics(
 async def reload_plugin(
     plugin_id: str,
     request: PluginReloadRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Hot-reload a plugin.
@@ -261,7 +258,7 @@ async def reload_plugin(
     **Returns:**
     - Reload result
     """
-    result = await omnicore_service.reload_plugin(
+    result = await admin_service.reload_plugin(
         plugin_id=plugin_id,
         force=request.force,
     )
@@ -276,7 +273,7 @@ async def browse_marketplace(
     search: Optional[str] = None,
     sort: str = "popularity",
     limit: int = 20,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Browse plugin marketplace.
@@ -292,7 +289,7 @@ async def browse_marketplace(
     **Returns:**
     - Plugin listings
     """
-    result = await omnicore_service.browse_marketplace(
+    result = await admin_service.browse_marketplace(
         category=category,
         search=search,
         sort=sort,
@@ -305,7 +302,7 @@ async def browse_marketplace(
 @router.post("/plugins/install")
 async def install_plugin(
     request: PluginInstallRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Install a plugin.
@@ -321,7 +318,7 @@ async def install_plugin(
     **Returns:**
     - Installation result
     """
-    result = await omnicore_service.install_plugin(
+    result = await admin_service.install_plugin(
         plugin_name=request.plugin_name,
         version=request.version,
         source=request.source,
@@ -335,7 +332,7 @@ async def install_plugin(
 @router.post("/database/query")
 async def query_database(
     request: DatabaseQueryRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Query OmniCore database.
@@ -350,7 +347,7 @@ async def query_database(
     **Returns:**
     - Query results
     """
-    result = await omnicore_service.query_database(
+    result = await admin_service.query_database(
         query_type=request.query_type,
         filters=request.filters,
         limit=request.limit,
@@ -362,7 +359,7 @@ async def query_database(
 @router.post("/database/export")
 async def export_database(
     request: DatabaseExportRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Export database state.
@@ -377,7 +374,7 @@ async def export_database(
     **Returns:**
     - Export result with download path
     """
-    result = await omnicore_service.export_database(
+    result = await admin_service.export_database(
         export_type=request.export_type,
         format=request.format,
         include_audit=request.include_audit,
@@ -389,7 +386,7 @@ async def export_database(
 
 @router.get("/circuit-breakers")
 async def get_circuit_breakers(
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Get status of all circuit breakers.
@@ -399,14 +396,14 @@ async def get_circuit_breakers(
     **Returns:**
     - Circuit breaker statuses
     """
-    result = await omnicore_service.get_circuit_breakers()
+    result = await admin_service.get_circuit_breakers()
     return result
 
 
 @router.post("/circuit-breakers/{name}/reset")
 async def reset_circuit_breaker(
     name: str,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Reset a circuit breaker.
@@ -419,7 +416,7 @@ async def reset_circuit_breaker(
     **Returns:**
     - Reset result
     """
-    result = await omnicore_service.reset_circuit_breaker(name)
+    result = await admin_service.reset_circuit_breaker(name)
 
     logger.info(f"Circuit breaker {name} reset")
     return result
@@ -428,7 +425,7 @@ async def reset_circuit_breaker(
 @router.post("/rate-limits/configure")
 async def configure_rate_limit(
     request: RateLimitConfigRequest,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    admin_service: AdminService = Depends(get_admin_service),
 ):
     """
     Configure rate limits.
@@ -443,7 +440,7 @@ async def configure_rate_limit(
     **Returns:**
     - Configuration result
     """
-    result = await omnicore_service.configure_rate_limit(
+    result = await admin_service.configure_rate_limit(
         endpoint=request.endpoint,
         requests_per_second=request.requests_per_second,
         burst_size=request.burst_size,
@@ -459,7 +456,7 @@ async def query_dead_letter_queue(
     end_time: Optional[str] = None,
     topic: Optional[str] = None,
     limit: int = 100,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     Query dead letter queue.
@@ -475,7 +472,7 @@ async def query_dead_letter_queue(
     **Returns:**
     - Failed messages
     """
-    result = await omnicore_service.query_dead_letter_queue(
+    result = await bus_service.query_dead_letter_queue(
         start_time=start_time,
         end_time=end_time,
         topic=topic,
@@ -489,7 +486,7 @@ async def query_dead_letter_queue(
 async def retry_message(
     message_id: str,
     force: bool = False,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     Retry failed message.
@@ -505,7 +502,7 @@ async def retry_message(
     **Returns:**
     - Retry result
     """
-    result = await omnicore_service.retry_message(
+    result = await bus_service.retry_message(
         message_id=message_id,
         force=force,
     )

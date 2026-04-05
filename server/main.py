@@ -42,9 +42,10 @@ _is_test_environment = (
     os.getenv("APP_ENV") == "test"
 )
 
-# Only force production mode if NOT in a test environment
-if not _is_test_environment:
-    # Force Production Mode
+# Set production defaults only if APP_ENV is not already configured
+# This respects user-configured environments (dev, staging) instead of
+# silently overriding them. Tests and CI are auto-detected above.
+if not _is_test_environment and not os.environ.get("APP_ENV"):
     os.environ["APP_ENV"] = "production"
     os.environ["DEV_MODE"] = "0"
     
@@ -194,7 +195,7 @@ def _verify_critical_import(module_name: str, package_name: str, description: st
 # CRITICAL: Verify FastAPI and core dependencies BEFORE any other imports
 # This ensures clear, actionable error messages for operators
 try:
-    from fastapi import FastAPI, Request, Response
+    from fastapi import Depends, FastAPI, Request, Response
     from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import JSONResponse
     from fastapi.staticfiles import StaticFiles
@@ -641,23 +642,24 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     logger.info("=" * 80)
     
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        
-        # Get OmniCore service instance (singleton)
-        omnicore_service = get_omnicore_service()
-        
+        from server.services.message_bus_service import get_message_bus_service
+
+        # Get message bus service instance (singleton)
+        bus_service = get_message_bus_service()
+
         # Start message bus dispatcher tasks
-        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
+        if bus_service.is_available():
             logger.info("Starting message bus dispatcher tasks...")
-            await omnicore_service.start_message_bus()
-            
+            await bus_service.start_message_bus()
+
             # Verify startup with retry logic
+            bus = bus_service.get_bus()
             max_retries = 10
             for i in range(max_retries):
-                if (hasattr(omnicore_service._message_bus, 'dispatcher_tasks') and 
-                    omnicore_service._message_bus.dispatcher_tasks and
-                    hasattr(omnicore_service._message_bus, '_dispatchers_started') and
-                    omnicore_service._message_bus._dispatchers_started):
+                if (hasattr(bus, 'dispatcher_tasks') and
+                    bus.dispatcher_tasks and
+                    hasattr(bus, '_dispatchers_started') and
+                    bus._dispatchers_started):
                     logger.info("✓ Message bus verified operational")
                     break
                 
@@ -1499,10 +1501,10 @@ async def _background_initialization(app_instance: FastAPI, routers_ok: bool):
     
     # HIGH: Start periodic audit flush task now that event loop is running
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        omnicore = get_omnicore_service()
-        if omnicore:
-            await omnicore.start_periodic_audit_flush()
+        from server.services.audit_query_service import get_audit_query_service
+        audit_service = get_audit_query_service()
+        if audit_service:
+            await audit_service.start_periodic_audit_flush()
     except Exception as e:
         logger.warning(f"Failed to initialize periodic audit flush: {e}", exc_info=True)
 
@@ -1762,8 +1764,12 @@ signal.signal(signal.SIGINT, _handle_shutdown_signal)
 
 
 # Create FastAPI application
+# API key authentication — enforced when REQUIRE_API_KEY=1
+from server.middleware.api_key_auth import require_api_key  # noqa: E402
+
 app = FastAPI(
     title="Code Factory Platform API",
+    dependencies=[Depends(require_api_key)],
     description="""
     **The Code Factory Platform** - Enterprise-grade HTTP API for automated 
     software development and maintenance.
@@ -2245,11 +2251,11 @@ async def readiness_check(response: Response) -> ReadinessResponse:
     
     # Check 5: Kafka bridge connection (if enabled)
     try:
-        from server.services.omnicore_service import get_omnicore_service
-        
-        omnicore_service = get_omnicore_service()
-        if hasattr(omnicore_service, '_message_bus') and omnicore_service._message_bus:
-            message_bus = omnicore_service._message_bus
+        from server.services.message_bus_service import get_message_bus_service
+
+        bus_service = get_message_bus_service()
+        if bus_service.is_available():
+            message_bus = bus_service.get_bus()
             
             # Check if Kafka is enabled and bridge exists
             if hasattr(message_bus, 'kafka_bridge') and message_bus.kafka_bridge:

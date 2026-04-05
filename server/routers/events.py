@@ -27,8 +27,7 @@ from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect, HTTPExce
 from sse_starlette.sse import EventSourceResponse
 
 from server.schemas import EventMessage, EventType
-from server.services import OmniCoreService
-from server.services.omnicore_service import get_omnicore_service as _get_omnicore_service
+from server.services.message_bus_service import get_message_bus_service, MessageBusService
 
 logger = logging.getLogger(__name__)
 
@@ -45,45 +44,32 @@ _connection_attempts: Dict[str, list] = defaultdict(list)
 _active_connections_by_ip: Dict[str, int] = defaultdict(int)
 
 
-def get_omnicore_service() -> OmniCoreService:
-    """Dependency for OmniCoreService (uses singleton)."""
-    return _get_omnicore_service()
-
-
-def _is_message_bus_ready(omnicore_service: OmniCoreService) -> bool:
+def _is_message_bus_ready(bus_service: MessageBusService) -> bool:
     """
     Check if message bus is fully operational.
-    
+
     Industry-standard readiness check ensuring:
     - Message bus is initialized
     - Dispatcher tasks are running
     - Component is marked as available
-    
+
     Args:
-        omnicore_service: OmniCoreService instance to check
-        
+        bus_service: MessageBusService instance to check
+
     Returns:
         bool: True if message bus is ready, False otherwise
     """
-    if not hasattr(omnicore_service, '_message_bus'):
+    if not bus_service.is_available():
         return False
-    
-    bus = omnicore_service._message_bus
+
+    bus = bus_service.get_bus()
     if not bus:
         return False
-    
+
     # Check if dispatcher tasks are running
     if not hasattr(bus, 'dispatcher_tasks') or not bus.dispatcher_tasks:
         return False
-    
-    # Check if dispatcher started flag is set
-    if not hasattr(bus, '_dispatchers_started') or not bus._dispatchers_started:
-        return False
-    
-    # Check if message bus is marked as available
-    if not omnicore_service._omnicore_components_available.get("message_bus", False):
-        return False
-    
+
     return True
 
 
@@ -96,15 +82,15 @@ active_connections: list[WebSocket] = []
 def _remove_connection_safely(websocket: WebSocket) -> None:
     """
     Safely remove a WebSocket from active connections.
-    
+
     Industry-standard connection cleanup with proper tracking.
-    
+
     Args:
         websocket: WebSocket connection to remove
     """
     if websocket in active_connections:
         active_connections.remove(websocket)
-        
+
         # Update per-IP tracking
         if websocket.client:
             client_ip = websocket.client.host
@@ -117,36 +103,36 @@ def _remove_connection_safely(websocket: WebSocket) -> None:
 def _check_rate_limit(client_ip: str) -> tuple[bool, str]:
     """
     Check if client is within rate limits.
-    
+
     Industry-standard rate limiting to prevent abuse.
-    
+
     Args:
         client_ip: Client IP address
-        
+
     Returns:
         Tuple of (allowed: bool, reason: str)
     """
     current_time = time.time()
-    
+
     # Clean up old connection attempts (older than rate limit window)
     if client_ip in _connection_attempts:
         _connection_attempts[client_ip] = [
             t for t in _connection_attempts[client_ip]
             if current_time - t < RATE_LIMIT_WINDOW
         ]
-    
+
     # Check per-IP connection limit
     if _active_connections_by_ip.get(client_ip, 0) >= MAX_CONNECTIONS_PER_IP:
         return False, f"Too many active connections from {client_ip} (max {MAX_CONNECTIONS_PER_IP})"
-    
+
     # Check total connection limit
     if len(active_connections) >= MAX_TOTAL_CONNECTIONS:
         return False, f"Server at max capacity ({MAX_TOTAL_CONNECTIONS} connections)"
-    
+
     # Check rate limit (connections per window)
     if len(_connection_attempts[client_ip]) >= MAX_CONNECTIONS_PER_WINDOW:
         return False, f"Rate limit exceeded: max {MAX_CONNECTIONS_PER_WINDOW} connections per {RATE_LIMIT_WINDOW}s"
-    
+
     return True, "OK"
 
 
@@ -154,14 +140,14 @@ def _check_rate_limit(client_ip: str) -> tuple[bool, str]:
 async def websocket_endpoint(websocket: WebSocket):
     """
     WebSocket endpoint for real-time event streaming with industry-standard practices.
-    
+
     Features:
     - Rate limiting per IP
     - Connection management
     - Heartbeat/keepalive
     - Graceful error handling
     - Comprehensive logging
-    
+
     Streams events from OmniCore's message bus including:
     - Job lifecycle events
     - Stage progress updates
@@ -181,7 +167,7 @@ async def websocket_endpoint(websocket: WebSocket):
     client_ip = websocket.client.host if websocket.client else "unknown"
     connection_id = f"{client_ip}_{id(websocket)}"
     connection_start = time.time()
-    
+
     # Rate limiting check
     allowed, reason = _check_rate_limit(client_ip)
     if not allowed:
@@ -202,7 +188,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 extra={"client_ip": client_ip, "error_type": type(e).__name__, "status": "close_failed"}
             )
         return
-    
+
     # Record connection attempt for rate limiting
     _connection_attempts[client_ip].append(connection_start)
     _active_connections_by_ip[client_ip] += 1
@@ -225,7 +211,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "status": "connected"
             }
         )
-        
+
         # Send connection acknowledgment with connection metadata
         welcome_msg = EventMessage(
             event_type=EventType.PLATFORM_STATUS,
@@ -240,7 +226,7 @@ async def websocket_endpoint(websocket: WebSocket):
             severity="info",
         )
         await websocket.send_json(welcome_msg.to_json_dict())
-        
+
     except Exception as accept_error:
         error_type = type(accept_error).__name__
         logger.error(
@@ -260,20 +246,22 @@ async def websocket_endpoint(websocket: WebSocket):
     # Track subscriptions and handlers for cleanup (Bug 2 fix)
     subscribed_topics = []
     event_handler_ref = None
-    omnicore_service_ref = None  # Store service reference for cleanup
-    
+    bus_ref = None  # Store bus reference for cleanup
+
     try:
         event_loop = asyncio.get_event_loop()  # Get loop inside try block
-        
-        # Initialize OmniCore service for this connection
-        omnicore_service = get_omnicore_service()
-        omnicore_service_ref = omnicore_service  # Store for cleanup
-        
+
+        # Initialize MessageBusService for this connection
+        bus_service = get_message_bus_service()
+
         # Check if message bus is ready BEFORE subscribing
-        if _is_message_bus_ready(omnicore_service):
-            
+        if _is_message_bus_ready(bus_service):
+
             logger.info("Message bus is ready, using actual event streaming")
-            
+
+            bus = bus_service.get_bus()
+            bus_ref = bus  # Store for cleanup
+
             # Subscribe to relevant topics
             event_topics = [
                 "job.created",
@@ -286,20 +274,20 @@ async def websocket_endpoint(websocket: WebSocket):
                 "generator.stage_update",
                 "system.health_check",
             ]
-            
+
             # Create event queue for this WebSocket connection
             event_queue = asyncio.Queue(maxsize=100)
-            
+
             # Thread-safe flag to stop processing after disconnect (Bug 2 fix)
             handler_active = threading.Event()
             handler_active.set()  # Initially active
-            
+
             # Define handler for message bus events (Bug 1 fix: thread-safe queueing)
             def event_handler(message):
                 """Handle events from message bus and queue them for WebSocket."""
                 if not handler_active.is_set():
                     return  # Skip processing if connection closed
-                    
+
                 try:
                     # Convert Message object to dict for WebSocket serialization
                     if isinstance(message, dict):
@@ -317,7 +305,7 @@ async def websocket_endpoint(websocket: WebSocket):
                             "trace_id": getattr(message, "trace_id", None),
                             "timestamp": getattr(message, "timestamp", None),
                         }
-                    
+
                     # BUG 1 FIX: Use call_soon_threadsafe for thread-safe queue access
                     # The dispatcher calls this from a ThreadPoolExecutor, so we must
                     # schedule the put on the event loop thread
@@ -327,25 +315,25 @@ async def websocket_endpoint(websocket: WebSocket):
                         logger.warning(f"Event queue full for connection {connection_id}, dropping event")
                 except Exception as e:
                     logger.error(f"Error queuing event: {e}")
-            
+
             # Store handler reference for cleanup
             event_handler_ref = event_handler
-            
+
             # Subscribe to all event topics
             for topic in event_topics:
                 try:
-                    omnicore_service._message_bus.subscribe(topic, event_handler)
+                    bus.subscribe(topic, event_handler)
                     subscribed_topics.append(topic)
                     logger.debug(f"Subscribed to topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Could not subscribe to {topic}: {e}")
-            
+
             # Main event loop: forward events from queue to WebSocket
             while True:
                 try:
                     # Wait for events with timeout
                     event = await asyncio.wait_for(event_queue.get(), timeout=30.0)
-                    
+
                     # Convert to EventMessage format
                     event_msg = EventMessage(
                         event_type=EventType.LOG_MESSAGE,
@@ -354,14 +342,14 @@ async def websocket_endpoint(websocket: WebSocket):
                         data=event,
                         severity="info",
                     )
-                    
+
                     try:
                         await websocket.send_json(event_msg.to_json_dict())
                     except Exception as send_error:
                         error_type = type(send_error).__name__
                         logger.error(f"Failed to send event: {error_type} - {send_error}")
                         break
-                    
+
                 except asyncio.TimeoutError:
                     # Send heartbeat if no events for 30 seconds
                     heartbeat = EventMessage(
@@ -378,7 +366,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Downgrade from ERROR to WARNING to reduce log noise
                         logger.warning(f"Failed to send heartbeat: {type(send_error).__name__} - {send_error}")
                         break
-                    
+
                 except asyncio.CancelledError:
                     logger.info(f"WebSocket event loop cancelled for {connection_id} (shutdown signal)")
                     raise
@@ -389,7 +377,7 @@ async def websocket_endpoint(websocket: WebSocket):
         else:
             # Fallback: Use mock heartbeats
             logger.warning("Message bus not ready, using fallback heartbeat mode")
-            
+
             while True:
                 try:
                     # Placeholder: send heartbeat
@@ -432,18 +420,18 @@ async def websocket_endpoint(websocket: WebSocket):
         _remove_connection_safely(websocket)
     finally:
         # BUG 2 FIX: Unsubscribe from all topics on disconnect
-        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+        if event_handler_ref and subscribed_topics and bus_ref:
             handler_active.clear()  # Thread-safe: stop handler from processing new events
             for topic in subscribed_topics:
                 try:
-                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
+                    bus_ref.unsubscribe(topic, event_handler_ref)
                     logger.debug(f"Unsubscribed from topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Error unsubscribing from {topic}: {e}")
-        
+
         # BUG 3 FIX: Ensure connection cleanup always happens
         _remove_connection_safely(websocket)
-        
+
         connection_duration = time.time() - connection_start
         logger.info(
             f"WebSocket connection closed - connection_id={connection_id}, "
@@ -459,14 +447,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
 async def event_stream(
     job_id: str = None,
-    omnicore_service: OmniCoreService = None,
+    bus_service: MessageBusService = None,
 ) -> AsyncGenerator[str, None]:
     """
     Generate Server-Sent Events stream from OmniCore.
 
     Args:
         job_id: Optional job ID to filter events
-        omnicore_service: OmniCore service instance
+        bus_service: MessageBusService instance
 
     Yields:
         SSE-formatted event strings
@@ -474,27 +462,30 @@ async def event_stream(
     # Track subscriptions for cleanup (Bug 4 fix)
     subscribed_topics = []
     event_handler_ref = None
-    omnicore_service_ref = omnicore_service  # Store reference for cleanup
+    bus_ref = None  # Store bus reference for cleanup
     handler_active = threading.Event()  # Thread-safe flag
     handler_active.set()  # Initially active
-    
+
     try:
         event_loop = asyncio.get_event_loop()  # Get loop inside try block
-        
+
         # Check if message bus is ready
-        if omnicore_service and _is_message_bus_ready(omnicore_service):
-            
+        if bus_service and _is_message_bus_ready(bus_service):
+
             logger.info(f"Message bus ready for SSE events (job_id: {job_id})")
-            
+
+            bus = bus_service.get_bus()
+            bus_ref = bus  # Store for cleanup
+
             # Create event queue for SSE
             event_queue = asyncio.Queue(maxsize=100)
-            
+
             # Define handler for message bus events (Bug 4 fix: thread-safe queueing)
             def event_handler(message):
                 """Handle events from message bus and queue them for SSE."""
                 if not handler_active.is_set():
                     return  # Skip processing if stream closed
-                    
+
                 try:
                     # Convert Message object to dict for SSE serialization
                     if isinstance(message, dict):
@@ -513,11 +504,11 @@ async def event_stream(
                             "timestamp": getattr(message, "timestamp", None),
                             "job_id": payload.get("job_id") if isinstance(payload, dict) else None,
                         }
-                    
+
                     # Filter by job_id if specified
                     if job_id and event_data.get("job_id") != job_id:
                         return
-                    
+
                     # BUG 4 FIX: Use call_soon_threadsafe for thread-safe queue access
                     if not event_queue.full():
                         event_loop.call_soon_threadsafe(event_queue.put_nowait, event_data)
@@ -525,10 +516,10 @@ async def event_stream(
                         logger.warning(f"SSE event queue full (job_id: {job_id}), dropping event")
                 except Exception as e:
                     logger.error(f"Error queuing SSE event: {e}")
-            
+
             # Store handler reference for cleanup
             event_handler_ref = event_handler
-            
+
             # Subscribe to relevant topics
             event_topics = [
                 "job.created",
@@ -538,24 +529,24 @@ async def event_stream(
                 "sfe.analysis_complete",
                 "generator.stage_update",
             ]
-            
+
             for topic in event_topics:
                 try:
-                    omnicore_service._message_bus.subscribe(topic, event_handler)
+                    bus.subscribe(topic, event_handler)
                     subscribed_topics.append(topic)
                     logger.debug(f"SSE subscribed to topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Could not subscribe to {topic}: {e}")
-            
+
             # Stream events from queue
             counter = 0
             while counter < 1000:  # Limit to prevent infinite streams
                 counter += 1
-                
+
                 try:
                     # Wait for event with timeout
                     event_data = await asyncio.wait_for(event_queue.get(), timeout=5.0)
-                    
+
                     event = EventMessage(
                         event_type=EventType.LOG_MESSAGE,
                         timestamp=datetime.now(timezone.utc),
@@ -564,12 +555,12 @@ async def event_stream(
                         data=event_data,
                         severity="info",
                     )
-                    
+
                     yield {
                         "event": event.event_type.value,
                         "data": json.dumps(event.to_json_dict()),
                     }
-                    
+
                 except asyncio.TimeoutError:
                     # Send keepalive
                     event = EventMessage(
@@ -580,16 +571,16 @@ async def event_stream(
                         data={"status": "listening"},
                         severity="info",
                     )
-                    
+
                     yield {
                         "event": "keepalive",
                         "data": json.dumps(event.to_json_dict()),
                     }
-                    
+
         else:
             # Fallback: Send periodic mock updates
             logger.info(f"Using fallback mode for SSE events (job_id: {job_id})")
-            
+
             counter = 0
             while counter < 100:  # Limit for demo
                 counter += 1
@@ -610,11 +601,11 @@ async def event_stream(
                 }
     finally:
         # BUG 4 FIX: Unsubscribe from all topics when stream ends
-        if event_handler_ref and subscribed_topics and omnicore_service_ref:
+        if event_handler_ref and subscribed_topics and bus_ref:
             handler_active.clear()  # Thread-safe: stop handler from processing new events
             for topic in subscribed_topics:
                 try:
-                    omnicore_service_ref._message_bus.unsubscribe(topic, event_handler_ref)
+                    bus_ref.unsubscribe(topic, event_handler_ref)
                     logger.debug(f"SSE unsubscribed from topic: {topic}")
                 except Exception as e:
                     logger.warning(f"Error unsubscribing SSE from {topic}: {e}")
@@ -623,7 +614,7 @@ async def event_stream(
 @router.get("/sse")
 async def sse_endpoint(
     job_id: str = None,
-    omnicore_service: OmniCoreService = Depends(get_omnicore_service),
+    bus_service: MessageBusService = Depends(get_message_bus_service),
 ):
     """
     Server-Sent Events (SSE) endpoint for real-time event streaming.
@@ -646,7 +637,7 @@ async def sse_endpoint(
     ```
     """
     return EventSourceResponse(
-        event_stream(job_id=job_id, omnicore_service=omnicore_service)
+        event_stream(job_id=job_id, bus_service=bus_service)
     )
 
 

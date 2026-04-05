@@ -1,6 +1,7 @@
 # Copyright © 2025 Novatrax Labs LLC. All Rights Reserved.
 
 [run]
+source = generator,omnicore_engine,self_fixing_engineer,server,shared
 parallel = true
 concurrency = multiprocessing
 omit =

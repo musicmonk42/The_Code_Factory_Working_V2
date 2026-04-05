@@ -166,7 +166,7 @@ router = APIRouter(prefix="/v2/jobs", tags=["Jobs v2 WebSocket"])
 
 __all__ = [
     "router",
-    "_get_omnicore_service",
+    "_get_message_bus_service",
     "_build_message",
     "_check_rate_limit",
     "_active_connections_by_ip",
@@ -209,14 +209,14 @@ _GENERIC_TOPICS: frozenset = frozenset({
 _JOB_ID_RE = re.compile(r"^(?=.*[a-zA-Z0-9])[a-zA-Z0-9_-]{1,128}$")
 
 
-def _get_omnicore_service():
-    """Lazily import and return the OmniCoreService instance.
+def _get_message_bus_service():
+    """Lazily import and return the MessageBusService instance.
 
     Extracted into a module-level helper so tests can monkeypatch it without
     having to reach inside a nested function scope.
     """
-    from server.services.omnicore_service import get_omnicore_service  # noqa: PLC0415
-    return get_omnicore_service()
+    from server.services.message_bus_service import get_message_bus_service  # noqa: PLC0415
+    return get_message_bus_service()
 
 
 def _validate_job_id(job_id: str) -> None:
@@ -458,24 +458,20 @@ async def job_status_websocket(websocket: WebSocket, job_id: str) -> None:
         subscribed_topics: List[str] = []
         handler_live = threading.Event()
         handler_live.set()
-        omnicore_service = None
+        bus_service = None
         bus_ready: bool = False
+        _bus = None
         message_handler = None
         event_loop = asyncio.get_event_loop()
 
         try:
-            omnicore_service = _get_omnicore_service()
-            _bus = getattr(omnicore_service, "_message_bus", None)
-            bus_ready = bool(
-                _bus is not None
-                and getattr(_bus, "_dispatchers_started", False)
-                and omnicore_service._omnicore_components_available.get(
-                    "message_bus", False
-                )
-            )
+            bus_service = _get_message_bus_service()
+            bus_ready = bus_service.is_available()
+            if bus_ready:
+                _bus = bus_service.get_bus()
         except Exception as exc:
             logger.debug(
-                "jobs_ws: OmniCore service unavailable, heartbeat-only mode. "
+                "jobs_ws: MessageBusService unavailable, heartbeat-only mode. "
                 "connection_id=%s error=%s",
                 connection_id,
                 exc,
