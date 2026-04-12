@@ -12,12 +12,43 @@ import os
 import unittest
 from unittest.mock import patch
 
+from starlette.requests import Request
+
 from server.middleware.api_key_auth import (
     _get_valid_keys,
     _is_auth_required,
     require_api_key,
     reset_key_cache,
+    reset_rate_limit_state,
 )
+
+
+def _build_request(
+    *,
+    path: str = "/api/test",
+    method: str = "GET",
+    client_host: str = "127.0.0.1",
+    headers: dict[str, str] | None = None,
+) -> Request:
+    """Create a minimal Starlette Request for dependency unit tests."""
+    encoded_headers = [
+        (name.lower().encode("latin-1"), value.encode("latin-1"))
+        for name, value in (headers or {}).items()
+    ]
+    scope = {
+        "type": "http",
+        "http_version": "1.1",
+        "method": method,
+        "scheme": "http",
+        "path": path,
+        "raw_path": path.encode("ascii"),
+        "query_string": b"",
+        "headers": encoded_headers,
+        "client": (client_host, 12345),
+        "server": ("testserver", 80),
+        "root_path": "",
+    }
+    return Request(scope)
 
 
 class TestAuthRequired(unittest.TestCase):
@@ -41,9 +72,11 @@ class TestValidKeys(unittest.TestCase):
 
     def setUp(self):
         reset_key_cache()
+        reset_rate_limit_state()
 
     def tearDown(self):
         reset_key_cache()
+        reset_rate_limit_state()
 
     def test_loads_keys_from_env(self):
         with patch.dict(os.environ, {"SERVER_API_KEYS": "key1,key2,key3"}):
@@ -66,9 +99,11 @@ class TestRequireApiKey(unittest.TestCase):
 
     def setUp(self):
         reset_key_cache()
+        reset_rate_limit_state()
 
     def tearDown(self):
         reset_key_cache()
+        reset_rate_limit_state()
 
     def test_bypassed_when_not_required(self):
         import asyncio
@@ -135,6 +170,98 @@ class TestRequireApiKey(unittest.TestCase):
                     require_api_key(api_key="any-key")
                 )
             self.assertEqual(ctx.exception.status_code, 503)
+
+    def test_rate_limit_rejects_excess_requests(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        request = _build_request(path="/api/jobs")
+
+        with patch.dict(
+            os.environ,
+            {
+                "REQUIRE_API_KEY": "0",
+                "HTTP_RATE_LIMIT_ENABLED": "1",
+                "HTTP_RATE_LIMIT_REQUESTS": "1",
+                "HTTP_RATE_LIMIT_WINDOW_SECONDS": "60",
+            },
+            clear=True,
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                require_api_key(request=request, api_key=None)
+            )
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.get_event_loop().run_until_complete(
+                    require_api_key(request=request, api_key=None)
+                )
+            self.assertEqual(ctx.exception.status_code, 429)
+            self.assertEqual(ctx.exception.headers["Retry-After"], "60")
+
+    def test_rate_limit_exempts_health_path(self):
+        import asyncio
+
+        request = _build_request(path="/health")
+
+        with patch.dict(
+            os.environ,
+            {
+                "REQUIRE_API_KEY": "0",
+                "HTTP_RATE_LIMIT_ENABLED": "1",
+                "HTTP_RATE_LIMIT_REQUESTS": "1",
+                "HTTP_RATE_LIMIT_WINDOW_SECONDS": "60",
+            },
+            clear=True,
+        ):
+            asyncio.get_event_loop().run_until_complete(
+                require_api_key(request=request, api_key=None)
+            )
+            result = asyncio.get_event_loop().run_until_complete(
+                require_api_key(request=request, api_key=None)
+            )
+            self.assertIsNone(result)
+
+    def test_request_body_limit_rejects_large_content_length(self):
+        import asyncio
+
+        from fastapi import HTTPException
+
+        request = _build_request(
+            method="POST",
+            headers={"Content-Length": "11"},
+        )
+
+        with patch.dict(
+            os.environ,
+            {
+                "REQUIRE_API_KEY": "0",
+                "MAX_REQUEST_BODY_SIZE_BYTES": "10",
+            },
+            clear=True,
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                asyncio.get_event_loop().run_until_complete(
+                    require_api_key(request=request, api_key=None)
+                )
+            self.assertEqual(ctx.exception.status_code, 413)
+
+    def test_request_body_limit_ignores_missing_content_length(self):
+        import asyncio
+
+        request = _build_request(method="POST")
+
+        with patch.dict(
+            os.environ,
+            {
+                "REQUIRE_API_KEY": "0",
+                "MAX_REQUEST_BODY_SIZE_BYTES": "10",
+            },
+            clear=True,
+        ):
+            result = asyncio.get_event_loop().run_until_complete(
+                require_api_key(request=request, api_key=None)
+            )
+            self.assertIsNone(result)
 
 
 if __name__ == "__main__":
